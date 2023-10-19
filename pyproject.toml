@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Tools for open bus data collection, travel time prediction, energy consumption and visualization."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9.6"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
