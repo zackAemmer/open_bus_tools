@@ -1,4 +1,5 @@
 # Additional files
+/obt_venv/*
 /data/*
 /figures/*
 /plots/*
