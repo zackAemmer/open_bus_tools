@@ -1,11 +1,9 @@
 from datetime import datetime, timedelta
+import os
 import pickle
 import requests
-import sys
-sys.path.append("../")
 
 from dotenv import load_dotenv
-load_dotenv()
 import pandas as pd
 
 
@@ -20,8 +18,9 @@ def get_time_info(time_delta=0):
 
 
 if __name__ == "__main__":
+    load_dotenv()
     # Query OBA API for King County Metro
-    endpoint = 'http://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/1.json?key='+secret.OBA_API_KEY
+    endpoint = 'http://api.pugetsound.onebusaway.org/api/where/vehicles-for-agency/1.json?key='+os.getenv("OBA_API_KEY")
     response = requests.get(endpoint)
     # Filter as much as possible
     data = response.json()['data']['list']
@@ -66,5 +65,5 @@ if __name__ == "__main__":
     
     # Save scrape to file
     date_str, current_epoch = get_time_info(-8)
-    with open(f"./scraped_data/kcm/{date_str}_{current_epoch}.pkl", "wb") as f:
+    with open(f"./web_scraper/scraped_data/kcm/{date_str}_{current_epoch}.pkl", "wb") as f:
         pickle.dump(data, f)

@@ -3,12 +3,9 @@ import pickle
 import pytz
 import re
 import requests
-import sys
-sys.path.append("../")
 from xml.etree import ElementTree
 
 from dotenv import load_dotenv
-load_dotenv()
 import pandas as pd
 
 
@@ -55,6 +52,7 @@ def xml_to_dict(element):
 
 
 if __name__ == "__main__":
+    load_dotenv()
     # Limited to 4 requests/minute, otherwise need publish/subscribe
     endpoint = 'https://api.entur.io/realtime/v1/rest/vm'
     # Call Entur SIRI API (returns XML)
@@ -96,5 +94,5 @@ if __name__ == "__main__":
 
     # Save scrape to file
     date_str, current_epoch = get_time_info(1)
-    with open(f"./scraped_data/nwy/{date_str}_{current_epoch}.pkl", "wb") as f:
+    with open(f"./web_scraper/scraped_data/nwy/{date_str}_{current_epoch}.pkl", "wb") as f:
         pickle.dump(data, f)

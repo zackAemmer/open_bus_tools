@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta
 import os
 import pickle
-import sys
-sys.path.append("../")
 
 import boto3
 import pandas as pd
+
 
 def get_time_info(time_delta=0):
     # Get the UTC
@@ -19,7 +18,7 @@ def get_time_info(time_delta=0):
 
 if __name__ == "__main__":
     # Load data
-    scrape_folder = "./scraped_data/nwy/"
+    scrape_folder = "./web_scraper/scraped_data/nwy/"
     scrape_files = os.listdir(scrape_folder)
     all_data = []
     date_str, current_epoch = get_time_info(1)
@@ -35,12 +34,8 @@ if __name__ == "__main__":
         all_data = all_data.drop_duplicates(['trip_id','locationtime']).sort_values(['trip_id','locationtime'])
         # Upload to S3
         date_str, current_epoch = get_time_info(1)
-        cli = boto3.client(
-            's3',
-            aws_access_key_id=secret.ACCESS_KEY,
-            aws_secret_access_key=secret.SECRET_KEY
-        )
-        cli.put_object(
+        s3 = boto3.client('s3')
+        s3.put_object(
             Body=pickle.dumps(all_data),
             Bucket="gtfs-collection-nwy",
             Key=date_str[:10]+".pkl"
