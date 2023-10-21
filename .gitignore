@@ -1,10 +1,11 @@
 # Additional files
 /obt_venv/*
+/pdtest_venv/*
 /data/*
 /figures/*
 /plots/*
 /results/*
-/aws_credentials/*
+/.vscode/*
 secret.py
 .DS_Store
 .env
