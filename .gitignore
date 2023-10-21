@@ -1,6 +1,7 @@
 # Additional files
 /obt_venv/*
 /pdtest_venv/*
+/web_app/*
 /data/*
 /figures/*
 /plots/*
