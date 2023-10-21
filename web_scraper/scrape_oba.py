@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
-import pandas as pd
 import pickle
 import requests
 import sys
 sys.path.append("../")
+
+from dotenv import load_dotenv
+load_dotenv()
+import pandas as pd
 
 
 def get_time_info(time_delta=0):
