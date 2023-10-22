@@ -18,7 +18,7 @@ def get_time_info(time_delta=0):
 
 if __name__ == "__main__":
     # Load data
-    scrape_folder = "./web_scraper/scraped_data/nwy/"
+    scrape_folder = "./open_bus_tools/web_scraper/scraped_data/nwy/"
     scrape_files = os.listdir(scrape_folder)
     all_data = []
     date_str, current_epoch = get_time_info(1)
