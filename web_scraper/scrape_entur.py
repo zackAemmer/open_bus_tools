@@ -94,5 +94,5 @@ if __name__ == "__main__":
 
     # Save scrape to file
     date_str, current_epoch = get_time_info(1)
-    with open(f"./web_scraper/scraped_data/nwy/{date_str}_{current_epoch}.pkl", "wb") as f:
+    with open(f"~/open_bus_tools/web_scraper/scraped_data/nwy/{date_str}_{current_epoch}.pkl", "wb") as f:
         pickle.dump(data, f)
