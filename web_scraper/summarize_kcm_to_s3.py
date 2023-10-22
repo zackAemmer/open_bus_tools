@@ -3,6 +3,7 @@ import os
 import pickle
 
 import boto3
+from dotenv import load_dotenv
 import pandas as pd
 
 
@@ -17,6 +18,7 @@ def get_time_info(time_delta=0):
 
 
 if __name__ == "__main__":
+    load_dotenv()
     # Load data
     scrape_folder = "./open_bus_tools/web_scraper/scraped_data/kcm/"
     scrape_files = os.listdir(scrape_folder)
