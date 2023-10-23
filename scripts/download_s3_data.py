@@ -17,7 +17,7 @@ def download_new_s3_files(data_folder, bucket_name):
     try:
         s3 = boto3.resource('s3')
         bucket = s3.Bucket('gtfs-collection-kcm')
-        objs = list(bucket.objects.filter(Prefix="pandas_2.1.1"))[1:]
+        objs = list(bucket.objects)
         available_files = [o.key[13:] for o in objs]
         print(f"Successfully connected to S3")
         # Get list of files that are not already downloaded
@@ -26,7 +26,7 @@ def download_new_s3_files(data_folder, bucket_name):
         # Download all new files to same data folder
         for i,file in enumerate(new_files):
             print(f"Downloading file {i} out of {len(new_files)}")
-            bucket.download_file(f"pandas_2.1.1/{file}", f"{data_folder}{file}")
+            bucket.download_file(f"{file}", f"{data_folder}{file}")
     except ValueError:
         print(f"Failure to access S3")
     return None
