@@ -42,5 +42,5 @@ if __name__ == "__main__":
             Bucket="gtfs-collection-kcm",
             Key=date_str[:10]+".pkl"
         )
-    except ValueError:
+    except:
         print(f"Either no files found for {date_str}, or failure to access S3")
