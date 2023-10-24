@@ -22,8 +22,8 @@ FEATURE_TYPES = ['object','object','int','float','float','object']
 FEATURE_LOOKUP = dict(zip(FEATURE_NAMES, FEATURE_TYPES))
 
 # Set of unified feature names and dtypes for variables in the GTFS data
-GTFS_NAMES = ['trip_id','stop_id','stop_lat','stop_lon','arrival_time']
-GTFS_TYPES = [str,str,float,float,str]
+GTFS_NAMES = ['trip_id','route_id','stop_id','stop_lat','stop_lon','arrival_time']
+GTFS_TYPES = [str,str,str,float,float,str]
 GTFS_LOOKUP = dict(zip(GTFS_NAMES, GTFS_TYPES))
 
 
@@ -532,15 +532,16 @@ def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_s
             st.to_csv(f"{new_folder}{file}/stop_times.txt")
 
 def merge_gtfs_files(gtfs_folder, epsg, coord_ref_center):
-    """
-    Join a set of GTFS files into a single dataframe. Each row is a trip + arrival time.
+    """Join a set of GTFS files into a single dataframe. Each row is a trip + arrival time.
     Returns: pandas dataframe with merged GTFS data.
     """
     z = pd.read_csv(gtfs_folder+"trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
+    r = pd.read_csv(gtfs_folder+"routes.txt", low_memory=False, dtype=GTFS_LOOKUP)
     st = pd.read_csv(gtfs_folder+"stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
     sl = pd.read_csv(gtfs_folder+"stops.txt", low_memory=False, dtype=GTFS_LOOKUP)
     z = pd.merge(z,st,on="trip_id")
     z = pd.merge(z,sl,on="stop_id")
+    z = pd.merge(z,r,on="route_id")
     # Calculate stop arrival from midnight
     gtfs_data = z.sort_values(['trip_id','stop_sequence'])
     gtfs_data['arrival_s'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in gtfs_data['arrival_time'].str.split(":")]
@@ -782,3 +783,28 @@ def create_grid_of_shingles(point_resolution, grid_bounds, coord_ref_center):
         res_dict[cname].extend(vals)
     res = pd.DataFrame(res_dict)
     return res
+
+def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):
+    """Filter bus schedule using best guess for trip_ids that correspond to a phone trip."""
+    # Filter to the route number shown on the headsign
+    filtered_df = gtfs_df[gtfs_df['route_short_name']==route_short_name]
+    # # Filter by service ids that are active on day of week
+    # weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
+    # phone_start_time = datetime.fromtimestamp(int(str(min(phone_df.time))[:10]))
+    # phone_start_time = phone_start_time.hour*3600 + phone_start_time.second
+    # valid_service_ids = gtfs_calendar[gtfs_calendar[weekdays[phone_start_time.weekday()]]==1].service_id
+    # filtered_df = filtered_df[filtered_df['service_id'].isin(valid_service_ids)]
+    # Filter to direction 0; will need to be improved
+    filtered_df = filtered_df[filtered_df['direction_id']==0]
+    # # Filter to trips scheduled active when the phone started recording
+    # trip_times = filtered_df[['trip_id','arrival_s']].groupby('trip_id', as_index=False).agg(['min','max'])
+    # trip_times = trip_times[phone_start_time > trip_times[('arrival_s','min')]]
+    # trip_times = trip_times[phone_start_time < trip_times[('arrival_s','max')]]
+    # filtered_df = filtered_df[filtered_df['trip_id'].isin(trip_times[('trip_id','')])]
+    # filtered_df = filtered_df.sort_values(['trip_id','arrival_s'])
+    # Return only one trip_id in the dataframe for plotting, regardless of total remaining
+    remaining_trip_ids = np.unique(filtered_df.trip_id)
+    keep_trip_id = remaining_trip_ids[0]
+    print(f"Filtered down to {len(remaining_trip_ids)} possible trip_ids; returning the first one ({keep_trip_id}).")
+    filtered_df = filtered_df[filtered_df['trip_id']==keep_trip_id]
+    return filtered_df.copy(), remaining_trip_ids

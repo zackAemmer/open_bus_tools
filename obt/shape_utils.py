@@ -1,16 +1,10 @@
-import warnings
 from random import sample
 
 import geopandas
 import numpy as np
-import pandas as pd
 from scipy.spatial import KDTree
-# from shapely.errors import ShapelyDeprecationWarning
 
 from obt import data_utils
-
-
-# warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 
 
 def get_closest_point(points, query_points):
