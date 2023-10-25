@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from joblib import Parallel, delayed
 
-from obt import data_utils
+from openbustools import data_utils
 
 
 def process_data_parallel(date_list, i, n, **kwargs):

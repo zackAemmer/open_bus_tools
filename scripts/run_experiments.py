@@ -10,8 +10,8 @@ from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 from sklearn import metrics
 from torch.utils.data import DataLoader
 
-from obt.models import grids
-from obt import data_loader, data_utils, model_utils
+from openbustools.traveltime import data_loader, grids, utils
+from openbustools import data_utils
 
 
 if __name__=="__main__":
@@ -153,7 +153,7 @@ if __name__=="__main__":
 
     for fold_num in range(n_folds):
         # Declare models
-        base_model_list, nn_model = model_utils.make_one_model(model_type, hyperparameter_dict=hyperparameter_dict, embed_dict=embed_dict, config=train_network_config, skip_gtfs=skip_gtfs, load_weights=True, weight_folder=f"{model_folder}logs/{model_type}/version_{fold_num}/checkpoints/", fold_num=fold_num)
+        base_model_list, nn_model = utils.make_one_model(model_type, hyperparameter_dict=hyperparameter_dict, embed_dict=embed_dict, config=train_network_config, skip_gtfs=skip_gtfs, load_weights=True, weight_folder=f"{model_folder}logs/{model_type}/version_{fold_num}/checkpoints/", fold_num=fold_num)
         model_names = [m.model_name for m in base_model_list]
         model_names.append(nn_model.model_name)
         print(f"Model name: {model_names}")
@@ -229,7 +229,7 @@ if __name__=="__main__":
 
             print(f"EXPERIMENT: FINE TUNING")
             # Re-declare models with original weights
-            base_model_list, nn_model = model_utils.make_one_model(model_type, hyperparameter_dict=hyperparameter_dict, embed_dict=embed_dict, config=train_network_config, skip_gtfs=skip_gtfs, load_weights=True, weight_folder=f"{model_folder}logs/{model_type}/version_{fold_num}/checkpoints/", fold_num=fold_num)
+            base_model_list, nn_model = utils.make_one_model(model_type, hyperparameter_dict=hyperparameter_dict, embed_dict=embed_dict, config=train_network_config, skip_gtfs=skip_gtfs, load_weights=True, weight_folder=f"{model_folder}logs/{model_type}/version_{fold_num}/checkpoints/", fold_num=fold_num)
             for b_model in base_model_list:
                 print(f"Fold final evaluation for: {b_model.model_name}")
                 loader = DataLoader(train_network_dataset, batch_size=1024, collate_fn=b_model.collate_fn, shuffle=False, drop_last=False, num_workers=num_workers, pin_memory=pin_memory)

@@ -1,9 +1,8 @@
 # Additional files
 /obt_venv/*
-/pdtest_venv/*
-/web_app/*
-/web_scraper/scraped_data/kcm/*
-/web_scraper/scraped_data/nwy/*
+/webapp/*
+/webscraper/scraped_data/kcm/*
+/webscraper/scraped_data/nwy/*
 /data/*
 /figures/*
 /plots/*

@@ -6,8 +6,7 @@ import boto3
 from dotenv import load_dotenv
 load_dotenv()
 
-# from obt import data_utils
-import data_utils
+from openbustools import data_utils
 
 
 def download_new_s3_files(data_folder, bucket_name):
@@ -30,6 +29,7 @@ def download_new_s3_files(data_folder, bucket_name):
     except ValueError:
         print(f"Failure to access S3")
     return None
+
 
 if __name__ == "__main__":
     print(f"Downloading new files...")

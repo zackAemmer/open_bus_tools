@@ -15,8 +15,8 @@ from sklearn.model_selection import KFold
 from tabulate import tabulate
 from torch.utils.data import DataLoader, SequentialSampler, SubsetRandomSampler
 
-from obt.models import grids
-from obt import data_loader, data_utils, model_utils
+from openbustools.traveltime import data_loader, grids, utils
+from openbustools import data_utils
 
 
 if __name__=="__main__":
@@ -95,7 +95,7 @@ if __name__=="__main__":
             'num_layers': [2, 3, 4, 5, 6],
             'dropout_rate': [.05, .1, .2, .4, .5]
         }
-        hyperparameter_dict = model_utils.random_param_search(hyperparameter_sample_dict, ["FF","CONV","GRU","TRSF"])
+        hyperparameter_dict = utils.random_param_search(hyperparameter_sample_dict, ["FF","CONV","GRU","TRSF"])
         data_utils.write_pkl(hyperparameter_sample_dict, f"{model_folder}param_search_dict.pkl")
         data_utils.write_pkl(hyperparameter_dict, f"{model_folder}param_search_dict_sample.pkl")
     # Manually specified run without testing hyperparameters
@@ -156,7 +156,7 @@ if __name__=="__main__":
         print(f"BEGIN FOLD: {fold_num}")
 
         # Declare models
-        base_model_list, nn_model = model_utils.make_one_model(model_type, hyperparameter_dict=hyperparameter_dict, embed_dict=embed_dict, config=config, skip_gtfs=skip_gtfs)
+        base_model_list, nn_model = utils.make_one_model(model_type, hyperparameter_dict=hyperparameter_dict, embed_dict=embed_dict, config=config, skip_gtfs=skip_gtfs)
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
         model_names = [m.model_name for m in base_model_list]
