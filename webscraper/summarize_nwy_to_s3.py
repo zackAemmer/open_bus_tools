@@ -12,7 +12,7 @@ import scrape_utils
 
 if __name__ == "__main__":
     load_dotenv()
-    scrape_folder = "./open_bus_tools/web_scraper/scraped_data/nwy/"
+    scrape_folder = "./open_bus_tools/webscraper/scraped_data/nwy/"
     scrape_files = os.listdir(scrape_folder)
     all_data = []
     current_date_str, current_epoch, current_datetime = scrape_utils.get_time_info(pytz.timezone("Europe/Oslo"))

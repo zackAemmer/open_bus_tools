@@ -57,5 +57,5 @@ if __name__ == "__main__":
     
     # Save scrape to file
     date_str, current_epoch, _ = scrape_utils.get_time_info(pytz.timezone("America/Los_Angeles"))
-    with open(f"./open_bus_tools/web_scraper/scraped_data/kcm/{date_str}_{current_epoch}.pkl", "wb") as f:
+    with open(f"./open_bus_tools/webscraper/scraped_data/kcm/{date_str}_{current_epoch}.pkl", "wb") as f:
         pickle.dump(data, f)
