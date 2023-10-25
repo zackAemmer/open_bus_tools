@@ -10,10 +10,9 @@ import numpy as np
 import pandas as pd
 import pyproj
 import torch
-from obt import data_loader
 from statsmodels.stats.weightstats import DescrStatsW
 
-from obt import shape_utils
+import data_loader, shape_utils
 
 
 # Set of unified feature names and dtypes for variables in the GTFS-RT data

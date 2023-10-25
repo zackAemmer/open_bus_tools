@@ -6,19 +6,19 @@ import boto3
 from dotenv import load_dotenv
 load_dotenv()
 
-from obt import data_utils
+# from obt import data_utils
+import data_utils
 
 
 def download_new_s3_files(data_folder, bucket_name):
     print(f"Getting new files for {data_folder} from S3 bucket {bucket_name}")
     downloaded_files = os.listdir(data_folder)
     print(f"Found {len(downloaded_files)} downloaded files")
-
     try:
         s3 = boto3.resource('s3')
-        bucket = s3.Bucket('gtfs-collection-kcm')
-        objs = list(bucket.objects)
-        available_files = [o.key[13:] for o in objs]
+        bucket = s3.Bucket(bucket_name)
+        objs = list(bucket.objects.all())
+        available_files = [o.key for o in objs]
         print(f"Successfully connected to S3")
         # Get list of files that are not already downloaded
         new_files = [x for x in available_files if x not in downloaded_files]
@@ -36,8 +36,8 @@ if __name__ == "__main__":
     download_new_s3_files("./data/kcm_realtime/", "gtfs-collection-kcm")
     download_new_s3_files("./data/nwy_realtime/", "gtfs-collection-nwy")
     print(f"Extracting operators from downloaded files...")
-    data_utils.extract_operator("../data/nwy_all_new/", "../data/atb_all_new/", "operator_id", "ATB")
-    data_utils.extract_operator("../data/nwy_all_new/", "../data/rut_all_new/", "operator_id", "RUT")
+    data_utils.extract_operator("./data/nwy_realtime/", "./data/atb_realtime/", "operator_id", "ATB")
+    data_utils.extract_operator("./data/nwy_realtime/", "./data/rut_realtime/", "operator_id", "RUT")
     print(f"Extracting operators from GTFS files...")
-    data_utils.extract_operator_gtfs("../data/nwy_gtfs/", "../data/atb_gtfs/", "trip_id", "trip_id", "ATB")
-    data_utils.extract_operator_gtfs("../data/nwy_gtfs/", "../data/rut_gtfs/", "trip_id", "trip_id", "RUT")
+    data_utils.extract_operator_gtfs("./data/nwy_gtfs/", "./data/atb_gtfs/", "trip_id", "trip_id", "ATB")
+    data_utils.extract_operator_gtfs("./data/nwy_gtfs/", "./data/rut_gtfs/", "trip_id", "trip_id", "RUT")

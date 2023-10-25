@@ -4,7 +4,7 @@ import geopandas
 import numpy as np
 from scipy.spatial import KDTree
 
-from obt import data_utils
+import data_utils
 
 
 def get_closest_point(points, query_points):
