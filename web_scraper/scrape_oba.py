@@ -6,7 +6,7 @@ import requests
 from dotenv import load_dotenv
 import pandas as pd
 
-from obt import scrape_utils
+import scrape_utils
 
 
 if __name__ == "__main__":
