@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import pickle
 
@@ -7,13 +7,10 @@ from dotenv import load_dotenv
 import pandas as pd
 
 
-def get_time_info(time_delta=0):
-    # Get the UTC
-    utc = datetime.utcnow()
-    adj = timedelta(hours=time_delta)
-    target_time = (utc + adj)
-    date_str = target_time.strftime("%Y_%m_%d_%H")
-    epoch = round(utc.timestamp())
+def get_time_info(tz=None):
+    current_target_time = datetime.now(tz)
+    date_str = current_target_time.strftime("%Y_%m_%d_%H")
+    epoch = round(current_target_time.timestamp())
     return date_str, epoch
 
 

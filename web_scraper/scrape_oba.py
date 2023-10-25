@@ -1,20 +1,12 @@
-from datetime import datetime, timedelta
 import os
 import pickle
+import pytz
 import requests
 
 from dotenv import load_dotenv
 import pandas as pd
 
-
-def get_time_info(time_delta=0):
-    # Get the UTC
-    utc = datetime.utcnow()
-    adj = timedelta(hours=time_delta)
-    target_time = (utc + adj)
-    date_str = target_time.strftime("%Y_%m_%d_%H")
-    epoch = round(utc.timestamp())
-    return date_str, epoch
+from obt import scrape_utils
 
 
 if __name__ == "__main__":
@@ -64,6 +56,6 @@ if __name__ == "__main__":
     }).sort_values(['trip_id','locationtime'])
     
     # Save scrape to file
-    date_str, current_epoch = get_time_info(-8)
+    date_str, current_epoch, _ = scrape_utils.get_time_info(pytz.timezone("America/Los_Angeles"))
     with open(f"./open_bus_tools/web_scraper/scraped_data/kcm/{date_str}_{current_epoch}.pkl", "wb") as f:
         pickle.dump(data, f)
