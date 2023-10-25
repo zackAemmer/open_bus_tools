@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 import os
 import pickle
 
@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import pytz
 
-from obt import scrape_utils
+import scrape_utils
 
 
 if __name__ == "__main__":
@@ -36,5 +36,6 @@ if __name__ == "__main__":
             Bucket="gtfs-collection-kcm",
             Key=prev_date_str[:10]+".pkl"
         )
-    except:
-        print(f"Either no files found for {date_str}, or failure to access S3")
+    except Exception as e:
+        print(f"Either no files found for {current_date_str}, or failure to access S3")
+        print(e)
