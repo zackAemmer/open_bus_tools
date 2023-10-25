@@ -1,8 +1,6 @@
 import json
 import os
 import shutil
-import sys
-sys.path.append("../")
 
 import h5py
 import lightning.pytorch as pl
@@ -122,6 +120,7 @@ def process_data_parallel(date_list, i, n, **kwargs):
         f.create_dataset('tabular_data', data=traces)
     return (shingle_config, summary_config)
 
+
 def clean_data(dates, **kwargs):
     # Clean a set of dates (allocated to training or testing)
     n_j = kwargs['n_jobs']
@@ -152,6 +151,7 @@ def clean_data(dates, **kwargs):
             json.dump(combined_summary_configs, out_file)
     with open(f"{kwargs['base_folder']}deeptte_formatted/{kwargs['train_or_test']}_shingle_config.json", mode="a") as out_file:
             json.dump(combined_shingle_configs, out_file)
+
 
 def prepare_run(overwrite, run_name, network_name, train_dates, test_dates, **kwargs):
     """
@@ -192,6 +192,7 @@ def prepare_run(overwrite, run_name, network_name, train_dates, test_dates, **kw
     kwargs['train_or_test'] = "test"
     clean_data(test_dates, **kwargs)
     print(f"RUN PREPARATION COMPLETED '{run_name}/{network_name}'")
+
 
 if __name__=="__main__":
     torch.set_default_dtype(torch.float)

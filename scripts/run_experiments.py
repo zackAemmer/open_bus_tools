@@ -1,7 +1,6 @@
 import json
 import shutil
 import sys
-sys.path.append("../")
 
 import lightning.pytorch as pl
 import numpy as np
@@ -15,7 +14,6 @@ from openbustools import data_utils
 
 
 if __name__=="__main__":
-
     torch.set_default_dtype(torch.float)
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)

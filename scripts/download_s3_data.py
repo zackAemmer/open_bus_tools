@@ -1,6 +1,4 @@
 import os
-import sys
-sys.path.append("../")
 
 import boto3
 from dotenv import load_dotenv

@@ -2,7 +2,6 @@ import json
 import os
 import shutil
 import sys
-sys.path.append("../")
 import time
 
 import lightning.pytorch as pl
@@ -20,7 +19,6 @@ from openbustools import data_utils
 
 
 if __name__=="__main__":
-
     torch.set_default_dtype(torch.float)
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)

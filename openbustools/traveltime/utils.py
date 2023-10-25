@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from openbustools.traveltime.models import transformer
-from openbustools.traveltime.deeptte import DeepTTE
+from openbustools.traveltime.models.deeptte import DeepTTE
 from openbustools.traveltime import data_loader
 from openbustools import data_utils
 from openbustools.traveltime.models import avg_speed, conv, ff, persistent, rnn, schedule
