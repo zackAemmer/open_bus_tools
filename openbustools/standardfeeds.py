@@ -1,6 +1,9 @@
+import datetime
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyproj
+from shapely.geometry import LineString
 
 # Set of unified feature names and dtypes for variables in the GTFS-RT data
 GTFSRT_NAMES = ['trip_id','file','locationtime','lat','lon','vehicle_id']
@@ -11,6 +14,31 @@ GTFSRT_LOOKUP = dict(zip(GTFSRT_NAMES, GTFSRT_TYPES))
 GTFS_NAMES = ['trip_id','route_id','stop_id','stop_lat','stop_lon','arrival_time']
 GTFS_TYPES = [str,str,str,float,float,str]
 GTFS_LOOKUP = dict(zip(GTFS_NAMES, GTFS_TYPES))
+
+
+def get_gtfs_shapes_lookup(gtfs_folder):
+    """Get uniquely identified route shapes:trip_ids lookup from GTFS files."""
+    routes = pd.read_csv(f"{gtfs_folder}routes.txt", low_memory=False, dtype=GTFS_LOOKUP)
+    trips = pd.read_csv(f"{gtfs_folder}trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
+    data = trips.merge(routes, on='route_id')
+    data = data[['service_id','route_id','direction_id','trip_id']].drop_duplicates().sort_values(['service_id','route_id','direction_id','trip_id'])
+    return data
+
+def get_gtfs_shapes(gtfs_folder):
+    """Use stop locations to create unique shapes from GTFS files."""
+    stops = pd.read_csv(f"{gtfs_folder}stops.txt", low_memory=False, dtype=GTFS_LOOKUP)
+    stop_times = pd.read_csv(f"{gtfs_folder}stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
+    data = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
+    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.stop_lon, data.stop_lat), crs="EPSG:4326")
+    # Avoid making duplicate shapes; one per service/route/direction
+    shapes_lookup = get_gtfs_shapes_lookup(gtfs_folder)
+    data = data.merge(shapes_lookup, on='trip_id').drop_duplicates(['service_id','route_id','direction_id','stop_id']).sort_values(['service_id','route_id','direction_id','stop_sequence'])
+    data = data.groupby(['service_id','route_id','direction_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist())).set_crs("EPSG:4326")
+    return data
+
+
+def get_realtime_data(gtfs_folder):
+    return None
 
 
 def merge_gtfs_files(gtfs_folder, epsg, coord_ref_center):
@@ -193,6 +221,20 @@ def clean_trace_df_w_timetables(traces, gtfs_folder, epsg, coord_ref_center):
     result = pd.concat(result)
     result = result.sort_values(["file","shingle_id","locationtime"], ascending=True)
     return result
+
+
+def date_to_service_id(date_str, gtfs_folder):
+    calendar = pd.read_csv(f"{gtfs_folder}calendar.txt")
+    weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
+    obs_date = datetime.datetime.strptime(date_str, "%Y_%m_%d")
+    obs_dow = weekdays[obs_date.weekday()]
+    valid_service_ids = calendar[calendar[obs_dow]==1].copy()
+    # Filter start/end
+    valid_service_ids['service_start_dates'] = pd.to_datetime(valid_service_ids['start_date'], format='%Y%m%d')
+    valid_service_ids['service_end_dates'] = pd.to_datetime(valid_service_ids['end_date'], format='%Y%m%d')
+    valid_service_ids = valid_service_ids[valid_service_ids['service_start_dates']<=obs_date]
+    valid_service_ids = valid_service_ids[valid_service_ids['service_end_dates']>=obs_date]
+    return list(valid_service_ids.service_id)
 
 
 def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):

@@ -8,6 +8,8 @@ import pandas as pd
 import plotly
 import seaborn as sns
 
+from openbustools import standardfeeds
+
 HEIGHT=6
 WIDTH=8
 HEIGHT_WIDE=3
@@ -40,7 +42,7 @@ def formatted_rel_lineplot(plot_df, x_var, y_var, rel_var, title_text, xlim=None
     return None
 
 
-def formatted_basemap_scatterplot(plot_gdf, title_text):
+def formatted_basemap_scatterplot(plot_gdf, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
     fig.set_figheight(HEIGHT_SQ)
     fig.set_figwidth(WIDTH_SQ)
@@ -68,17 +70,13 @@ def formatted_basemap_scatterplot(plot_gdf, title_text):
 
 
 def plot_gtfsrt_trip(ax, trace_df, epsg, gtfs_folder):
-    """
-    Plot a single real-time bus trajectory on a map.
-    ax: where to plot
-    trace_df: data from trip to plot
-    Returns: None.
+    """Plot a single real-time bus trajectory on a map.
     """
     # Plot trip stops from GTFS
     trace_date = trace_df['file'].iloc[0]
     trip_id = trace_df['trip_id'].iloc[0]
-    file_to_gtfs_map = data_utils.get_best_gtfs_lookup(trace_df, gtfs_folder)
-    gtfs_data = data_utils.merge_gtfs_files(f"{gtfs_folder}{file_to_gtfs_map[trace_date]}/", epsg, [0,0])
+    file_to_gtfs_map = standardfeeds.get_best_gtfs_lookup(trace_df, gtfs_folder)
+    gtfs_data = standardfeeds.merge_gtfs_files(f"{gtfs_folder}{file_to_gtfs_map[trace_date]}/", epsg, [0,0])
     to_plot_gtfs = gtfs_data[gtfs_data['trip_id']==trip_id]
     to_plot_gtfs = geopandas.GeoDataFrame(to_plot_gtfs, geometry=geopandas.points_from_xy(to_plot_gtfs.stop_x, to_plot_gtfs.stop_y), crs=f"EPSG:{epsg}")
     to_plot_gtfs.plot(ax=ax, marker='x', color='lightblue', markersize=10)
