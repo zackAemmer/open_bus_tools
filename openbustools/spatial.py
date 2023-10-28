@@ -4,20 +4,19 @@ import pandas as pd
 from scipy.spatial import KDTree
 
 
-def calculate_speed(gdf, time_col):
-    """Calculate speed between consecutive gps locations."""
+def calculate_gps_metrics(gdf, time_col):
+    """Calculate metrics between consecutive gps locations."""
+    # Ensure no repeated time obs; can still have same time trip end/next start
+    assert len(gdf.drop_duplicates(['trip_id','locationtime'])) == len(gdf)
     gdf_shifted = gdf.shift()
-    consecutive_dist_m = gdf.distance(gdf_shifted, align=False)
     consecutive_time_s = gdf[time_col] - gdf_shifted[time_col]
-    consecutive_speed_s = [d/t for (d,t) in zip(consecutive_dist_m, consecutive_time_s)]
-    return consecutive_dist_m, consecutive_time_s, consecutive_speed_s
+    consecutive_dist_m = gdf.distance(gdf_shifted, align=False)
+    # The first row of each trip will overlap previous and should be removed
+    return consecutive_time_s, consecutive_dist_m
 
 
 def calculate_gps_dist(end_x, end_y, start_x, start_y):
-    """
-    Calculate the euclidean distance between a series of points.
-    Returns: array of distances in meters.
-    """
+    """Calculate the euclidean distance between a series of points."""
     x_diff = (end_x - start_x)
     y_diff = (end_y - start_y)
     dists = np.sqrt(x_diff**2 + y_diff**2)
@@ -28,11 +27,7 @@ def calculate_gps_dist(end_x, end_y, start_x, start_y):
 
 
 def calculate_trip_speeds(data):
-    """
-    Calculate speeds between consecutive trip locations.
-    Returns: array of speeds, dist_diff, time_diff between consecutive points.
-    Nan for first point of a trip.
-    """
+    """Calculate speeds between consecutive trip locations."""
     x = data[['shingle_id','x','y','locationtime']]
     y = data[['shingle_id','x','y','locationtime']].shift()
     y.columns = [colname+"_shift" for colname in y.columns]
@@ -50,9 +45,7 @@ def get_closest_point(points, query_points):
 
 
 def get_adjacent_metric(shingle_group, adj_traces, d_buffer, t_buffer, b_buffer=None, orthogonal=False):
-    """
-    Calculate adjacent metric for each shingle from all other shingles in adj_traces.
-    """
+    """Calculate adjacent metric for each shingle from all other shingles in adj_traces."""
     # Set up spatial index for the traces
     tree = KDTree(adj_traces[:,:2])
     # Get time filter for the traces

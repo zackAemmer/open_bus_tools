@@ -1,6 +1,6 @@
 # Additional files
 /obt_venv/*
-/webapp/*
+/transitvis/*
 /webscraper/scraped_data/kcm/*
 /webscraper/scraped_data/nwy/*
 /data/*
