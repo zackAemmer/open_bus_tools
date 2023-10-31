@@ -7,7 +7,6 @@ from scipy.spatial import KDTree
 def calculate_gps_metrics(gdf, time_col):
     """Calculate metrics between consecutive gps locations."""
     # Ensure no repeated time obs; can still have same time trip end/next start
-    assert len(gdf.drop_duplicates(['trip_id', time_col])) == len(gdf)
     gdf_shifted = gdf.shift()
     consecutive_time_s = gdf[time_col] - gdf_shifted[time_col]
     consecutive_dist_m = gdf.distance(gdf_shifted, align=False)

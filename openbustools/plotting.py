@@ -54,7 +54,7 @@ def formatted_basemap_scatterplot(plot_gdf, title_text="throwaway"):
     fig.tight_layout()
     plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
     plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
-    return None
+    return fig, axes
 
 
 def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowess_kw=None):

@@ -1,4 +1,6 @@
 import datetime
+import os
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -224,6 +226,7 @@ def clean_trace_df_w_timetables(traces, gtfs_folder, epsg, coord_ref_center):
 
 
 def date_to_service_id(date_str, gtfs_folder):
+    """Get a list of valid service ids for the given day of week and month."""
     calendar = pd.read_csv(f"{gtfs_folder}calendar.txt")
     weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
     obs_date = datetime.datetime.strptime(date_str, "%Y_%m_%d")
