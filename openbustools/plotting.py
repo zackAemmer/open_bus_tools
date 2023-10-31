@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly
 import seaborn as sns
+import statsmodels.api as sm
 
 from openbustools import standardfeeds
 
@@ -19,7 +20,7 @@ WIDTH_SQ=12
 PLOT_FOLDER="../plots/"
 
 
-def formatted_lineplot(plot_df, x_var, y_var, title_text):
+def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
     fig.set_figheight(HEIGHT)
     fig.set_figwidth(WIDTH)
@@ -31,7 +32,7 @@ def formatted_lineplot(plot_df, x_var, y_var, title_text):
     return None
 
 
-def formatted_rel_lineplot(plot_df, x_var, y_var, rel_var, title_text, xlim=None, ylim=None):
+def formatted_rel_lineplot(plot_df, x_var, y_var, rel_var, title_text="throwaway", xlim=None, ylim=None):
     g = sns.relplot(plot_df, x=x_var, y=y_var, row=rel_var, kind='line', height=HEIGHT_WIDE, aspect=ASPECT_WIDE)
     if xlim:
         g.set(xlim=xlim)
@@ -54,6 +55,32 @@ def formatted_basemap_scatterplot(plot_gdf, title_text="throwaway"):
     plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
     plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
     return None
+
+
+def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowess_kw=None):
+    """Perform Lowess regression and determine a confidence interval by bootstrap resampling."""
+    # Lowess smoothing
+    smoothed = sm.nonparametric.lowess(exog=x, endog=y, xvals=eval_x, **lowess_kw)
+
+    # Perform bootstrap resamplings of the data
+    # and evaluate the smoothing at a fixed set of points
+    smoothed_values = np.empty((N, len(eval_x)))
+    for i in range(N):
+        sample = np.random.choice(len(x), len(x), replace=True)
+        sampled_x = x[sample]
+        sampled_y = y[sample]
+
+        smoothed_values[i] = sm.nonparametric.lowess(
+            exog=sampled_x, endog=sampled_y, xvals=eval_x, **lowess_kw
+        )
+
+    # Get the confidence interval
+    sorted_values = np.sort(smoothed_values, axis=0)
+    bound = int(N * (1 - conf_interval) / 2)
+    bottom = sorted_values[bound - 1]
+    top = sorted_values[-bound]
+
+    return smoothed, bottom, top
 
 
 # def formatted_barplot(plot_df):
