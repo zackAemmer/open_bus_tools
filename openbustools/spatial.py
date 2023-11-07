@@ -46,6 +46,29 @@ def get_point_distances(points, query_points):
     return dists, idxs
 
 
+def shingle(trace_df, min_len, max_len):
+    """Split a df into even chunks randomly between min and max length.
+    Each split comes from a group representing a trajectory in the dataframe.
+    trace_df: dataframe of raw bus data
+    min_len: minimum number of chunks to split a trajectory into
+    max_lan: maximum number of chunks to split a trajectory into
+    Returns: A copy of trace_df with a new index, traces with <=2 points removed.
+    """
+    shingle_groups = trace_df.groupby(['file','trip_id']).count()['lat'].values
+    idx = 0
+    new_idx = []
+    for num_pts in shingle_groups:
+        dummy = np.array([0 for i in range(0,num_pts)])
+        dummy = np.array_split(dummy, np.random.randint(min_len, max_len))
+        dummy = [len(x) for x in dummy]
+        for x in dummy:
+            [new_idx.append(idx) for y in range(0,x)]
+            idx += 1
+    z = trace_df.copy()
+    z['shingle_id'] = new_idx
+    return z
+
+
 def get_adjacent_metric(shingle_group, adj_traces, d_buffer, t_buffer, b_buffer=None, orthogonal=False):
     """Calculate adjacent metric for each shingle from all other shingles in adj_traces."""
     # Set up spatial index for the traces

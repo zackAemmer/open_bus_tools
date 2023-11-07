@@ -8,50 +8,53 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-
-FEATURE_COLS = [
-    "shingle_id",
-    "weekID",
-    "timeID",
-    "timeID_s",
-    "locationtime",
-    "lon",
-    "lat",
-    "x",
-    "y",
+NORM_COLS = [
+    "calc_speed_m_s",
+    "calc_time_s",
+    "calc_dist_km",
+    "calc_bear_d",
     "x_cent",
     "y_cent",
-    "dist_calc_km",
-    "time_calc_s",
-    "dist_cumulative_km",
-    "time_cumulative_s",
-    "speed_m_s",
-    "bearing",
-    "stop_x_cent",
-    "stop_y_cent",
-    "scheduled_time_s",
-    "stop_dist_km",
+    "cumul_time_s",
+    "cumul_dist_km",
+    "calc_stop_dist_km"
+    "sch_time_s",
     "passed_stops_n"
 ]
-SKIP_FEATURE_COLS = [
-    "shingle_id",
-    "weekID",
-    "timeID",
-    "timeID_s",
-    "locationtime",
-    "lon",
-    "lat",
-    "x",
-    "y",
-    "x_cent",
-    "y_cent",
-    "dist_calc_km",
-    "time_calc_s",
-    "dist_cumulative_km",
-    "time_cumulative_s",
-    "speed_m_s",
-    "bearing",
-]
+
+
+def create_config(data, numeric_cols):
+    config = {}
+    for col in numeric_cols:
+        col_mean = np.mean(data[col].to_numpy())
+        col_sd = np.std(data[col].to_numpy())
+        config[col] = (col_mean, col_sd)
+    return config
+
+class ContentDataset(Dataset):
+    """Load all data into memory as dataframe, provide samples by indexing."""
+    def __init__(self, data_folder, dates, grid=None, add_grid_features=False, skip_gtfs=False):
+        self.grid = grid
+        self.add_grid_features = add_grid_features
+        self.skip_gtfs = skip_gtfs
+        # Load all data from folder/dates
+        data = []
+        for day in dates:
+            data.append(pd.read_pickle(f"{data_folder}{day}"))
+        data = pd.concat(data)
+        data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
+        self.data = data
+        self.config = create_config(self.data, NORM_COLS)
+    def __getitem__(self, index):
+        samp = self.data[self.data['shingle_id']==index]
+        label = samp['cumul_time_s'].to_numpy()[-1]
+        label_seq = samp['calc_time_s'].to_numpy()
+        # norm_label = (label - self.config['time_mean']) / self.config['time_std']
+        # label_seq = samp[:,self.time_calc_s_idx]
+        # norm_label_seq = (label_seq - self.config['time_calc_s_mean']) / self.config['time_calc_s_std']
+        return {"samp": samp, "label": label, "label_seq": label_seq}
+    def __len__(self):
+        return np.max(self.data.shingle_id)
 
 
 class LoadSliceDataset(Dataset):
@@ -143,33 +146,6 @@ class LoadSliceDataset(Dataset):
         res['stop_y'] = res['stop_y_cent'] + self.config['coord_ref_center'][0][1]
         return res
 
-class ContentDataset(Dataset):
-    def __init__(self, dataframe, config, grid=None, add_grid_features=False, skip_gtfs=False):
-        self.config = config
-        self.grid = grid
-        self.add_grid_features = add_grid_features
-        self.skip_gtfs = skip_gtfs
-        # Necessary to convert from np array tabular format saved in h5 files
-        if not self.skip_gtfs:
-            self.col_names = FEATURE_COLS
-        else:
-            self.col_names = SKIP_FEATURE_COLS
-        self.dataframe = dataframe[self.col_names]
-        # Cache column name indices
-        self.time_cumulative_s_idx = self.col_names.index("time_cumulative_s")
-        self.time_calc_s_idx = self.col_names.index("time_calc_s")
-        self.x_idx = self.col_names.index("x")
-        self.y_idx = self.col_names.index("y")
-        self.locationtime_idx = self.col_names.index("locationtime")
-    def __getitem__(self, index):
-        samp = self.dataframe.loc[self.dataframe['shingle_id']==index].values
-        label = samp[-1,self.time_cumulative_s_idx]
-        norm_label = (label - self.config['time_mean']) / self.config['time_std']
-        label_seq = samp[:,self.time_calc_s_idx]
-        norm_label_seq = (label_seq - self.config['time_calc_s_mean']) / self.config['time_calc_s_std']
-        return {"samp": samp, "norm_label": norm_label, "norm_label_seq": norm_label_seq}
-    def __len__(self):
-        return len(pd.unique(self.dataframe.shingle_id))
 
 def avg_collate(batch):
     cols = ["speed_m_s","dist_calc_km","timeID_s","time_cumulative_s"]

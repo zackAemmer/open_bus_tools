@@ -114,49 +114,26 @@ def load_all_inputs(run_folder, network_folder, n_samples):
 #     return data, no_data_list
 
 
-def shingle(trace_df, min_len, max_len):
-    """Split a df into even chunks randomly between min and max length.
-    Each split comes from a group representing a trajectory in the dataframe.
-    trace_df: dataframe of raw bus data
-    min_len: minimum number of chunks to split a trajectory into
-    max_lan: maximum number of chunks to split a trajectory into
-    Returns: A copy of trace_df with a new index, traces with <=2 points removed.
-    """
-    shingle_groups = trace_df.groupby(['file','trip_id']).count()['lat'].values
-    idx = 0
-    new_idx = []
-    for num_pts in shingle_groups:
-        dummy = np.array([0 for i in range(0,num_pts)])
-        dummy = np.array_split(dummy, np.random.randint(min_len, max_len))
-        dummy = [len(x) for x in dummy]
-        for x in dummy:
-            [new_idx.append(idx) for y in range(0,x)]
-            idx += 1
-    z = trace_df.copy()
-    z['shingle_id'] = new_idx
-    return z
-
-
-def calculate_cumulative_values(data, skip_gtfs):
-    """
-    Calculate values that accumulate across each trajectory.
-    """
-    unique_traj = data.groupby('shingle_id')
-    if not skip_gtfs:
-        # Get number of passed stops
-        data['passed_stops_n'] = unique_traj['stop_sequence'].diff()
-        data['passed_stops_n'] = data['passed_stops_n'].fillna(0)
-    # Get cumulative values from trip start
-    data['time_cumulative_s'] = unique_traj['time_calc_s'].cumsum()
-    data['dist_cumulative_km'] = unique_traj['dist_calc_km'].cumsum()
-    data['time_cumulative_s'] = data.time_cumulative_s - unique_traj.time_cumulative_s.transform('min')
-    data['dist_cumulative_km'] = data.dist_cumulative_km - unique_traj.dist_cumulative_km.transform('min')
-    # Remove shingles that don't traverse more than a kilometer, or have less than n points
-    data = data.groupby(['shingle_id']).filter(lambda x: np.max(x.dist_cumulative_km) >= 1.0)
-    # Trips that cross over midnight can end up with outlier travel times; there are very few so remove trips over 3hrs
-    data = data.groupby(['shingle_id']).filter(lambda x: np.max(x.time_cumulative_s) <= 3000)
-    data = data.groupby(['shingle_id']).filter(lambda x: len(x) >= 5)
-    return data
+# def calculate_cumulative_values(data, skip_gtfs):
+#     """
+#     Calculate values that accumulate across each trajectory.
+#     """
+#     unique_traj = data.groupby('shingle_id')
+#     if not skip_gtfs:
+#         # Get number of passed stops
+#         data['passed_stops_n'] = unique_traj['stop_sequence'].diff()
+#         data['passed_stops_n'] = data['passed_stops_n'].fillna(0)
+#     # Get cumulative values from trip start
+#     data['time_cumulative_s'] = unique_traj['time_calc_s'].cumsum()
+#     data['dist_cumulative_km'] = unique_traj['dist_calc_km'].cumsum()
+#     data['time_cumulative_s'] = data.time_cumulative_s - unique_traj.time_cumulative_s.transform('min')
+#     data['dist_cumulative_km'] = data.dist_cumulative_km - unique_traj.dist_cumulative_km.transform('min')
+#     # Remove shingles that don't traverse more than a kilometer, or have less than n points
+#     data = data.groupby(['shingle_id']).filter(lambda x: np.max(x.dist_cumulative_km) >= 1.0)
+#     # Trips that cross over midnight can end up with outlier travel times; there are very few so remove trips over 3hrs
+#     data = data.groupby(['shingle_id']).filter(lambda x: np.max(x.time_cumulative_s) <= 3000)
+#     data = data.groupby(['shingle_id']).filter(lambda x: len(x) >= 5)
+#     return data
 
 
 def get_summary_config(trace_data, **kwargs):

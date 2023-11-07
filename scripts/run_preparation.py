@@ -1,6 +1,8 @@
+import datetime
 import json
 import os
 import shutil
+from zoneinfo import ZoneInfo
 
 import geopandas as gpd
 import h5py
@@ -41,7 +43,7 @@ def prepare_run(**kwargs):
         drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
         data = data[~data.index.isin(drop_indices)].reset_index()
         # Split full trip trajectories into smaller samples
-        data = data_utils.shingle(data, 2, 5)
+        data = spatial.shingle(data, 2, 5)
         # Project to local coordinate system, apply bounding box, center coords
         data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         data = data.cx[kwargs['grid_bounds'][0]:kwargs['grid_bounds'][2], kwargs['grid_bounds'][1]:kwargs['grid_bounds'][3]].copy()
@@ -71,25 +73,45 @@ def prepare_run(**kwargs):
         data['t_hour'] = data['t'].dt.hour
         data['t_min'] = data['t'].dt.minute
         data['t_sec'] = data['t'].dt.second
+        # For embedding
         data['t_min_of_day'] = (data['t_hour']*60) + data['t_min']
-        data['t_sec_of_day'] = (data['t_hour']*60*60) + (data['t_min']*60) + data['t_sec']
+        # For calculating absolute time differences in trips
+        data['t_sec_of_day'] = data['t'] - datetime.datetime(min(data['t_year']), min(data['t_month']), min(data['t_day']), 0, tzinfo=ZoneInfo(kwargs['timezone']))
+        data['t_sec_of_day'] = data['t_sec_of_day'].dt.total_seconds()
         # Get GTFS features
         best_static = standardfeeds.latest_available_static(day[:10], kwargs['static_folder'])
         data['best_static'] = best_static
-        stops = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stops.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']]
+        stops = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stops.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id')
         stop_times = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stop_times.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
+        # Deal with schedule crossing midnight
+        stop_times['t_sch_hour'] = stop_times['arrival_time'].str.slice(0,2).astype(int)
+        stop_times['t_sch_min'] = stop_times['arrival_time'].str.slice(3,5).astype(int)
+        stop_times['t_sch_sec'] = stop_times['arrival_time'].str.slice(7,9).astype(int)
+        stop_times['t_sch_min_of_day'] = (stop_times['t_sch_hour']*60) + stop_times['t_sch_min']
+        stop_times['t_sch_sec_of_day'] = (stop_times['t_sch_hour']*60*60) + (stop_times['t_sch_min']*60) + stop_times['t_sch_sec']
+        stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
+        stop_times['stop_sequence'] = stop_times.groupby('trip_id').cumcount()
         static = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
         static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         # Filter any realtime trips that are not in the schedule
         data.drop(data[~data['trip_id'].isin(static.trip_id)].index, inplace=True)
-        data['stop_id'], data['stop_dist_m'] = standardfeeds.get_scheduled_arrival(data, static)
+        data['stop_id'], data['calc_stop_dist_m'] = standardfeeds.get_scheduled_arrival(data, static)
         data = data.merge(stop_times, on=['trip_id','stop_id'])
+        data['calc_stop_dist_km'] = data['calc_stop_dist_m']/1000.0
+        # Passed stops
+        data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
+        data['pass_stops_n'] = data['pass_stops_n'].fillna(0).clip(lower=0)
+        # Scheduled time
+        data['t_sec_of_day_start'] = data.groupby('shingle_id')[['t_sec_of_day']].transform('min')
+        data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
         # Calculate cumulative values
         unique_traj = data.groupby('shingle_id')
         data['cumul_time_s'] = unique_traj['calc_time_s'].cumsum()
         data['cumul_dist_km'] = unique_traj['calc_dist_km'].cumsum()
+        data['cumul_pass_stops_n'] = unique_traj['pass_stops_n'].cumsum()
         data['cumul_time_s'] = data.cumul_time_s - unique_traj.cumul_time_s.transform('min')
         data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
+        data['cumul_pass_stops_n'] = data.cumul_pass_stops_n - unique_traj.cumul_pass_stops_n.transform('min')
         # Save processed date
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100.0}% of original points")

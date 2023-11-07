@@ -6,6 +6,7 @@ import time
 
 import lightning.pytorch as pl
 import numpy as np
+import pandas as pd
 import torch
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
@@ -22,24 +23,23 @@ if __name__=="__main__":
     torch.set_default_dtype(torch.float)
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
-
     model_type = sys.argv[1]
-    run_folder = sys.argv[2]
-    network_folder = sys.argv[3]
-    skip_gtfs = sys.argv[4]
-    is_param_search = sys.argv[5]
+    data_folder = sys.argv[2]
+    train_date = sys.argv[3]
+    train_n = sys.argv[4]
+    test_date = sys.argv[5]
+    test_n = sys.argv[6]
+    train_dates = data_utils.get_date_list(train_date, int(train_n))
+    test_dates = data_utils.get_date_list(test_date, int(test_n))
+
+    train_dataset = data_loader.ContentDataset(data_folder, train_dates)
+    train_dataset.__getitem__(100)
+
+
 
     grid_s_size=500
     n_folds=5
 
-    if skip_gtfs=="True":
-        skip_gtfs=True
-    else:
-        skip_gtfs=False
-    if is_param_search=="True":
-        is_param_search=True
-    else:
-        is_param_search=False
     if network_folder=="kcm/":
         holdout_routes=[100252,100139,102581,100341,102720]
     elif network_folder=="atb/":
@@ -63,16 +63,6 @@ if __name__=="__main__":
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
-    # Create folder structure; delete older results
-    base_folder = f"{run_folder}{network_folder}"
-    model_folder = f"{run_folder}{network_folder}models/{model_type}/"
-    try:
-        shutil.rmtree(model_folder)
-        os.mkdir(model_folder)
-    except:
-        print("Model folder not found to remove")
-        os.mkdir(model_folder)
-
     # Define embedded variables for network models
     embed_dict = {
         'timeID': {
@@ -84,49 +74,6 @@ if __name__=="__main__":
             'embed_dims': 3
         }
     }
-    # Sample parameter values for random search
-    if is_param_search:
-        hyperparameter_sample_dict = {
-            'n_param_samples': 1,
-            'batch_size': [512],
-            'hidden_size': [32, 64, 128, 256, 512],
-            'num_layers': [2, 3, 4, 5, 6],
-            'dropout_rate': [.05, .1, .2, .4, .5]
-        }
-        hyperparameter_dict = utils.random_param_search(hyperparameter_sample_dict, ["FF","CONV","GRU","TRSF"])
-        data_utils.write_pkl(hyperparameter_sample_dict, f"{model_folder}param_search_dict.pkl")
-        data_utils.write_pkl(hyperparameter_dict, f"{model_folder}param_search_dict_sample.pkl")
-    # Manually specified run without testing hyperparameters
-    else:
-        hyperparameter_dict = {
-            'FF': {
-                'batch_size': 512,
-                'hidden_size': 128,
-                'num_layers': 2,
-                'dropout_rate': .2
-            },
-            'CONV': {
-                'batch_size': 512,
-                'hidden_size': 64,
-                'num_layers': 3,
-                'dropout_rate': .1
-            },
-            'GRU': {
-                'batch_size': 512,
-                'hidden_size': 64,
-                'num_layers': 2,
-                'dropout_rate': .05
-            },
-            'TRSF': {
-                'batch_size': 512,
-                'hidden_size': 512,
-                'num_layers': 6,
-                'dropout_rate': .1
-            },
-            'DEEPTTE': {
-                'batch_size': 512
-            }
-        }
 
     # Data loading and fold setup
     with open(f"{base_folder}deeptte_formatted/train_summary_config.json", "r") as f:

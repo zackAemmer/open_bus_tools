@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn as nn
 
-from openbustools.traveltime.deeptte import GeoConv
+from openbustools.traveltime.models.deeptte import GeoConv
 
 
 class Net(nn.Module):

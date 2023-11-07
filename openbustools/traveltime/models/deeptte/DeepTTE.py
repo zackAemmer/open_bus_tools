@@ -4,8 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import lightning.pytorch as pl
 
-from openbustools import deeptte_utils
-from openbustools.traveltime.deeptte import Attr, SpatioTemporal
+from openbustools.traveltime.models.deeptte import Attr, SpatioTemporal
 
 
 EPS = 10
