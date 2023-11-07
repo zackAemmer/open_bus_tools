@@ -7,6 +7,8 @@ import pandas as pd
 import pyproj
 from shapely.geometry import LineString
 
+from openbustools import spatial
+
 # Set of unified feature names and dtypes for variables in the GTFS-RT data
 GTFSRT_NAMES = ['trip_id','file','locationtime','lat','lon','vehicle_id']
 GTFSRT_TYPES = ['object','object','int','float','float','object']
@@ -37,10 +39,6 @@ def get_gtfs_shapes(gtfs_folder):
     data = data.merge(shapes_lookup, on='trip_id').drop_duplicates(['service_id','route_id','direction_id','stop_id']).sort_values(['service_id','route_id','direction_id','stop_sequence'])
     data = data.groupby(['service_id','route_id','direction_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist())).set_crs("EPSG:4326")
     return data
-
-
-def get_realtime_data(gtfs_folder):
-    return None
 
 
 def merge_gtfs_files(gtfs_folder, epsg, coord_ref_center):
@@ -107,122 +105,134 @@ def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_s
             z.to_csv(f"{new_folder}{file}/trips.txt")
             st.to_csv(f"{new_folder}{file}/stop_times.txt")
 
-def apply_gtfs_timetables(data, gtfs_data, gtfs_folder_date):
-    data['gtfs_folder_date'] = gtfs_folder_date
-    # Remove any trips that are not in the GTFS
-    data.drop(data[~data['trip_id'].isin(gtfs_data.trip_id)].index, inplace=True)
-    # Filter trips with less than n observations
-    shingle_counts = data['shingle_id'].value_counts()
-    valid_trips = shingle_counts.index[shingle_counts >= 5]
-    data = data[data['shingle_id'].isin(valid_trips)]
-    # Save start time of first points in trajectories
-    first_points = data[['shingle_id','timeID_s']].drop_duplicates('shingle_id')
-    first_points.columns = ['shingle_id','trip_start_timeID_s']
-    closest_stops = get_scheduled_arrival(
-        data['trip_id'].values,
-        data['x'].values,
-        data['y'].values,
-        gtfs_data
-    )
-    data = data.assign(stop_x=closest_stops[:,0])
-    data = data.assign(stop_y=closest_stops[:,1]) # Skip trip_id
-    data = data.assign(stop_arrival_s=closest_stops[:,3])
-    data = data.assign(stop_sequence=closest_stops[:,4])
-    data = data.assign(stop_x_cent=closest_stops[:,5])
-    data = data.assign(stop_y_cent=closest_stops[:,6])
-    data = data.assign(route_id=closest_stops[:,7])
-    data = data.assign(route_id=closest_stops[:,7])
-    data = data.assign(service_id=closest_stops[:,8])
-    data = data.assign(direction_id=closest_stops[:,9])
-    data = data.assign(stop_dist_km=closest_stops[:,10]/1000)
-    # Get the timeID_s (for the first point of each trajectory)
-    data = pd.merge(data, first_points, on='shingle_id')
-    # Calculate the scheduled travel time from the first to each point in the shingle
-    data = data.assign(scheduled_time_s=data['stop_arrival_s'] - data['trip_start_timeID_s'])
-    # Filter out shingles where the data started after midnight, but the trip started before
-    # If the data started before the scheduled time difference is still accurate
-    valid_trips = data.groupby('shingle_id').filter(lambda x: x['scheduled_time_s'].max() <= 10000)['shingle_id'].unique()
-    data = data[data['shingle_id'].isin(valid_trips)]
-    return data
+# def apply_gtfs_timetables(data, gtfs_data, gtfs_folder_date):
+#     data['gtfs_folder_date'] = gtfs_folder_date
+#     # Remove any trips that are not in the GTFS
+#     data.drop(data[~data['trip_id'].isin(gtfs_data.trip_id)].index, inplace=True)
+#     # Filter trips with less than n observations
+#     shingle_counts = data['shingle_id'].value_counts()
+#     valid_trips = shingle_counts.index[shingle_counts >= 5]
+#     data = data[data['shingle_id'].isin(valid_trips)]
+#     # Save start time of first points in trajectories
+#     first_points = data[['shingle_id','timeID_s']].drop_duplicates('shingle_id')
+#     first_points.columns = ['shingle_id','trip_start_timeID_s']
+#     closest_stops = get_scheduled_arrival(
+#         data['trip_id'].values,
+#         data['x'].values,
+#         data['y'].values,
+#         gtfs_data
+#     )
+#     data = data.assign(stop_x=closest_stops[:,0])
+#     data = data.assign(stop_y=closest_stops[:,1]) # Skip trip_id
+#     data = data.assign(stop_arrival_s=closest_stops[:,3])
+#     data = data.assign(stop_sequence=closest_stops[:,4])
+#     data = data.assign(stop_x_cent=closest_stops[:,5])
+#     data = data.assign(stop_y_cent=closest_stops[:,6])
+#     data = data.assign(route_id=closest_stops[:,7])
+#     data = data.assign(route_id=closest_stops[:,7])
+#     data = data.assign(service_id=closest_stops[:,8])
+#     data = data.assign(direction_id=closest_stops[:,9])
+#     data = data.assign(stop_dist_km=closest_stops[:,10]/1000)
+#     # Get the timeID_s (for the first point of each trajectory)
+#     data = pd.merge(data, first_points, on='shingle_id')
+#     # Calculate the scheduled travel time from the first to each point in the shingle
+#     data = data.assign(scheduled_time_s=data['stop_arrival_s'] - data['trip_start_timeID_s'])
+#     # Filter out shingles where the data started after midnight, but the trip started before
+#     # If the data started before the scheduled time difference is still accurate
+#     valid_trips = data.groupby('shingle_id').filter(lambda x: x['scheduled_time_s'].max() <= 10000)['shingle_id'].unique()
+#     data = data[data['shingle_id'].isin(valid_trips)]
+#     return data
 
 
-def get_scheduled_arrival(trip_ids, x, y, gtfs_data):
+def get_scheduled_arrival(realtime, static):
+    """Find nearest appropriate static stop for a set of realtime coordinates. 
+    The point is to use spatial tree to only get distance to nearest 
+    neighbor for each trip, rather than all possible neighbors which requires 
+    cross join.
     """
-    Find the nearest stop to a set of trip-coordinates, and return the scheduled arrival time.
-    trip_ids: list of trip_ids
-    lons/lat: lists of places where the bus will be arriving (end point of traj)
-    gtfs_data: merged GTFS files
-    Returns: (distance to closest stop in km, scheduled arrival time at that stop).
-    """
-    gtfs_data_ary = gtfs_data[['stop_x','stop_y','trip_id','arrival_s','stop_sequence','stop_x_cent','stop_y_cent','route_id','service_id','direction_id']].values
-    gtfs_data_coords = gtfs_data[['stop_x','stop_y']].values.astype(float)
-    gtfs_data_trips = gtfs_data[['trip_id']].values.flatten().tolist()
-    data_coords = np.column_stack([x, y, np.arange(len(x))]).astype(float)
-    # Create dictionary mapping trip_ids to lists of points in gtfs
+    # Pull id and coordinate data from dataframes
+    realtime_trips = realtime.trip_id.values
+    realtime_order = np.arange(len(realtime))
+    realtime_coords = np.column_stack([realtime.geometry.x.values, realtime.geometry.y.values])
+    static_trips = static.trip_id.values
+    static_stops = static.stop_id.values
+    static_coords = np.column_stack([static.geometry.x.values, static.geometry.y.values])
+    # Create dictionary mapping trip_ids to lists of stop coordinates
     id_to_stops = {}
-    for i, tripid in enumerate(gtfs_data_trips):
+    for i, tripid in enumerate(static_trips):
         # If the key does not exist, insert the second argument. Otherwise return the value. Append afterward regardless.
-        id_to_stops.setdefault(tripid,[]).append((gtfs_data_coords[i], gtfs_data_ary[i]))
-    # Repeat for trips in the data
+        id_to_stops.setdefault(tripid,[]).append((static_coords[i], static_stops[i]))
+    # Repeat for realtime trips
     id_to_data = {}
-    for i, tripid in enumerate(trip_ids):
-        id_to_data.setdefault(tripid,[]).append(data_coords[i])
-    # Iterate over each unique trip, getting closest stops for all points from that trip, and aggregating
-    # Adding closest stop distance, and sequence number to the end of gtfs_data features
-    result_counter = 0
-    result = np.zeros((len(data_coords), gtfs_data_ary.shape[1]+2), dtype=object)
+    for i, tripid in enumerate(realtime_trips):
+        id_to_data.setdefault(tripid,[]).append((realtime_coords[i], realtime_order[i]))
+    # Iterate over each unique trip, getting closest stops for all points from that trip
+    res_counter = 0
+    res = np.zeros((len(realtime),3), dtype=object)
     for key, value in id_to_data.items():
-        trip_data = np.vstack(value)
-        stop_data = id_to_stops[key]
-        stop_coords = np.vstack([x[0] for x in stop_data])
-        stop_feats = np.vstack([x[1] for x in stop_data])
-        stop_dists, stop_idxs = spatial.get_closest_point(stop_coords[:,:2], trip_data[:,:2])
-        result[result_counter:result_counter+len(stop_idxs),:-2] = stop_feats[stop_idxs]
-        result[result_counter:result_counter+len(stop_idxs),-2] = stop_dists
-        result[result_counter:result_counter+len(stop_idxs),-1] = trip_data[:,-1]
-        result_counter += len(stop_idxs)
+        realtime_pts = np.vstack([x[0] for x in value])
+        realtime_order_i = [x[1] for x in value]
+        stop_pts = np.vstack([x[0] for x in id_to_stops[key]])
+        all_stop_ids = [x[1] for x in id_to_stops[key]]
+        stop_dists, stop_idxs = spatial.get_point_distances(stop_pts, realtime_pts)
+        stop_ids = np.array([all_stop_ids[i] for i in stop_idxs], dtype='object')
+        # Return for each point; stop id, distance to stop
+        res[res_counter:res_counter+len(stop_idxs), 0] = realtime_order_i
+        res[res_counter:res_counter+len(stop_idxs), 1] = stop_ids
+        res[res_counter:res_counter+len(stop_idxs), 2] = stop_dists
+        res_counter += len(stop_idxs)
     # Sort the data points from aggregated trips back into their respective shingles
-    original_order = np.argsort(result[:,-1])
-    result = result[original_order,:]
-    return result
+    original_order = np.argsort(res[:,0])
+    res = res[original_order,:]
+    return res[:,1], res[:,2]
 
 
-def get_best_gtfs_lookup(traces, gtfs_folder):
-    # Get the most recent GTFS files available corresponding to each unique file in the traces
-    gtfs_available = [f for f in os.listdir(gtfs_folder) if not f.startswith('.')]
-    gtfs_available = [datetime.strptime(x, "%Y_%m_%d") for x in gtfs_available]
-    dates_needed_string = list(pd.unique(traces['file']))
-    dates_needed = [datetime.strptime(x[:10], "%Y_%m_%d") for x in dates_needed_string]
-    best_gtfs_dates = []
-    for fdate in dates_needed:
-        matching_gtfs = [x for x in gtfs_available if x < fdate]
-        best_gtfs = max(matching_gtfs)
-        best_gtfs_dates.append(best_gtfs)
-    best_gtfs_dates_string = [x.strftime("%Y_%m_%d") for x in best_gtfs_dates]
-    file_to_gtfs_map = {k:v for k,v in zip(dates_needed_string, best_gtfs_dates_string)}
-    return file_to_gtfs_map
+def latest_available_static(day, static_folder):
+    # Find the latest possible static data that is less than the realtime date
+    static_available = [f for f in os.listdir(static_folder) if not f.startswith('.')]
+    static_available = [datetime.datetime.strptime(x, "%Y_%m_%d") for x in static_available]
+    static_needed = datetime.datetime.strptime(day, "%Y_%m_%d")
+    static_possible = [sp for sp in static_available if sp < static_needed]
+    static_best = max(static_possible)
+    return datetime.datetime.strftime(static_best, "%Y_%m_%d")
 
 
-def clean_trace_df_w_timetables(traces, gtfs_folder, epsg, coord_ref_center):
-    """
-    Validate a set of tracked bus locations against GTFS.
-    data: pandas dataframe with unified bus data
-    gtfs_data: merged GTFS files
-    Returns: dataframe with only trips that are in GTFS, and are reasonably close to scheduled stop ids.
-    """
-    # Process each chunk of traces using corresponding GTFS files, load 1 set of GTFS at a time
-    # The dates should be in order so that each GTFS file set is loaded only once
-    # Also seems best to only run the merge once, with as many dates as possible
-    file_to_gtfs_map = get_best_gtfs_lookup(traces, gtfs_folder)
-    result = []
-    unique_gtfs = pd.unique(list(file_to_gtfs_map.values()))
-    for current_gtfs_name in unique_gtfs:
-        keys = [k for k,v in file_to_gtfs_map.items() if v==current_gtfs_name]
-        current_gtfs_data = merge_gtfs_files(f"{gtfs_folder}{current_gtfs_name}/", epsg, coord_ref_center)
-        result.append(apply_gtfs_timetables(traces[traces['file'].isin(keys)].copy(), current_gtfs_data, current_gtfs_name))
-    result = pd.concat(result)
-    result = result.sort_values(["file","shingle_id","locationtime"], ascending=True)
-    return result
+# def get_best_gtfs_lookup(traces, gtfs_folder):
+#     # Get the most recent GTFS files available corresponding to each unique file in the traces
+#     gtfs_available = [f for f in os.listdir(gtfs_folder) if not f.startswith('.')]
+#     gtfs_available = [datetime.strptime(x, "%Y_%m_%d") for x in gtfs_available]
+#     dates_needed_string = list(pd.unique(traces['file']))
+#     dates_needed = [datetime.strptime(x[:10], "%Y_%m_%d") for x in dates_needed_string]
+#     best_gtfs_dates = []
+#     for fdate in dates_needed:
+#         matching_gtfs = [x for x in gtfs_available if x < fdate]
+#         best_gtfs = max(matching_gtfs)
+#         best_gtfs_dates.append(best_gtfs)
+#     best_gtfs_dates_string = [x.strftime("%Y_%m_%d") for x in best_gtfs_dates]
+#     file_to_gtfs_map = {k:v for k,v in zip(dates_needed_string, best_gtfs_dates_string)}
+#     return file_to_gtfs_map
+
+
+# def clean_trace_df_w_timetables(traces, gtfs_folder, epsg, coord_ref_center):
+#     """
+#     Validate a set of tracked bus locations against GTFS.
+#     data: pandas dataframe with unified bus data
+#     gtfs_data: merged GTFS files
+#     Returns: dataframe with only trips that are in GTFS, and are reasonably close to scheduled stop ids.
+#     """
+#     # Process each chunk of traces using corresponding GTFS files, load 1 set of GTFS at a time
+#     # The dates should be in order so that each GTFS file set is loaded only once
+#     # Also seems best to only run the merge once, with as many dates as possible
+#     file_to_gtfs_map = get_best_gtfs_lookup(traces, gtfs_folder)
+#     result = []
+#     unique_gtfs = pd.unique(list(file_to_gtfs_map.values()))
+#     for current_gtfs_name in unique_gtfs:
+#         keys = [k for k,v in file_to_gtfs_map.items() if v==current_gtfs_name]
+#         current_gtfs_data = merge_gtfs_files(f"{gtfs_folder}{current_gtfs_name}/", epsg, coord_ref_center)
+#         result.append(apply_gtfs_timetables(traces[traces['file'].isin(keys)].copy(), current_gtfs_data, current_gtfs_name))
+#     result = pd.concat(result)
+#     result = result.sort_values(["file","shingle_id","locationtime"], ascending=True)
+#     return result
 
 
 def date_to_service_id(date_str, gtfs_folder):

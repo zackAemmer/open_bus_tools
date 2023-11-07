@@ -95,6 +95,12 @@ def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowes
 #     plt.savefig("{PLOT_FOLDER}model_performances_kcm.png", format='png', dpi=600, bbox_inches='tight')
 #     return None
 
+# Annotated geopandas plots
+# fig, ax = plt.subplots(figsize=(20, 10))
+# data.iloc[1:5].plot(ax=ax)
+# data.iloc[1:5].apply(lambda x: ax.annotate(text=np.round(x['calc_bear_d']), xy=x.geometry.centroid.coords[0], ha='left'), axis=1)
+# data.iloc[1:5].apply(lambda x: ax.annotate(text=x['locationtime'], xy=x.geometry.centroid.coords[0], ha='right'), axis=1)
+
 
 def plot_gtfsrt_trip(ax, trace_df, epsg, gtfs_folder):
     """Plot a single real-time bus trajectory on a map.

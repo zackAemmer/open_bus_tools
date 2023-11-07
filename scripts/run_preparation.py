@@ -2,196 +2,99 @@ import json
 import os
 import shutil
 
+import geopandas as gpd
 import h5py
 import lightning.pytorch as pl
 import numpy as np
+import pandas as pd
+import pyproj
 import torch
 from joblib import Parallel, delayed
 
-from openbustools import data_utils
+from openbustools import data_utils, spatial, standardfeeds
 
 
-def process_data_parallel(date_list, i, n, **kwargs):
-    # Load data from dates
-    traces, fail_dates = data_utils.combine_pkl_data(kwargs['raw_data_folder'][n], date_list, kwargs['given_names'][n])
-    if len(fail_dates) > 0:
-        print(f"Failed to load data for dates: {fail_dates}")
-    num_raw_points = len(traces)
-    print(f"Chunk {date_list} found {num_raw_points} points...")
-    # Clean and transform raw bus data records
-    traces = data_utils.shingle(traces, 2, 5)
-    traces = data_utils.calculate_trace_df(traces, kwargs['timezone'][n], kwargs['epsg'][n], kwargs['grid_bounds'][n], kwargs['coord_ref_center'][n], kwargs['data_dropout'])
-    if not kwargs['skip_gtfs']:
-        traces = data_utils.clean_trace_df_w_timetables(traces, kwargs['gtfs_folder'][n], kwargs['epsg'][n], kwargs['coord_ref_center'][n])
-        if len(traces)==0:
-            print(f"Lost points from {date_list} when trying to match GTFS")
-    traces = data_utils.calculate_cumulative_values(traces, kwargs['skip_gtfs'])
-    if len(traces)==0:
-        print(f"No data remaining after cleaning for dates: {date_list}")
-        return (None, None)
-    # Dict: Shingle_id; data_file; lines; file; trip_id; route_id
-    # Reduce to absolute minimum variables
-    if not kwargs['skip_gtfs']:
-        traces = traces[[
-            "shingle_id",
-            "file",
-            "trip_id",
-            "weekID",
-            "timeID",
-            "timeID_s",
-            "locationtime",
-            "lon",
-            "lat",
-            "x",
-            "y",
-            "x_cent",
-            "y_cent",
-            "dist_calc_km",
-            "time_calc_s",
-            "dist_cumulative_km",
-            "time_cumulative_s",
-            "speed_m_s",
-            "bearing",
-            "route_id",
-            "stop_x_cent",
-            "stop_y_cent",
-            "scheduled_time_s",
-            "stop_dist_km",
-            "passed_stops_n"
-        ]].convert_dtypes()
-    else:
-        traces = traces[[
-            "shingle_id",
-            "file",
-            "trip_id",
-            "weekID",
-            "timeID",
-            "timeID_s",
-            "locationtime",
-            "lon",
-            "lat",
-            "x",
-            "y",
-            "x_cent",
-            "y_cent",
-            "dist_calc_km",
-            "time_calc_s",
-            "dist_cumulative_km",
-            "time_cumulative_s",
-            "speed_m_s",
-            "bearing",
-            # "route_id",
-            # "stop_x_cent",
-            # "stop_y_cent",
-            # "scheduled_time_s",
-            # "stop_dist_km",
-            # "passed_stops_n"
-        ]].convert_dtypes()
-    # Create a lookup that points to lines in the tabular file corresponding to each shingle
-    # Save the shingles to the designated network/save file, and return the lookup of shingle information
-    # The tabular format is float, so remove string identifier values and keep tham in the lookup
-    # First get summary config for normalization
-    summary_config = data_utils.get_summary_config(traces, **kwargs)
-    # Then get shingle config for saved lines
-    if not kwargs['skip_gtfs']:
-        shingle_list = traces.groupby("shingle_id")[["trip_id","file","route_id"]].agg([lambda x: x.iloc[0], len]).reset_index().values
-        traces = traces.drop(columns=["trip_id","file","route_id"]).values.astype('float32')
-    else:
-        shingle_list = traces.groupby("shingle_id")[["trip_id","file"]].agg([lambda x: x.iloc[0], len]).reset_index().values
-        traces = traces.drop(columns=["trip_id","file"]).values.astype('float32')
-    end_idxs = np.cumsum(shingle_list[:,2])
-    start_idxs = np.insert(end_idxs, 0, 0)[:-1]
-    shingle_config = {}
-    for sidx in range(len(shingle_list)):
-        vals = shingle_list[sidx,:]
-        shingle_config[sidx] = {}
-        shingle_config[sidx]['shingle_id'] = vals[0]
-        shingle_config[sidx]['trip_id'] = vals[1]
-        shingle_config[sidx]['len'] = vals[2]
-        shingle_config[sidx]['file'] = vals[3]
-        if not kwargs['skip_gtfs']:
-            shingle_config[sidx]['route_id'] = vals[5]
-        shingle_config[sidx]['start_idx'] = start_idxs[sidx]
-        shingle_config[sidx]['end_idx'] = end_idxs[sidx]
-        shingle_config[sidx]['network'] = n
-        shingle_config[sidx]['file_num'] = i
-    print(f"Retained {np.round(len(traces)/num_raw_points, 2)*100}% of original data points; saving and creating configs...")
-    with h5py.File(f"{kwargs['base_folder']}deeptte_formatted/{kwargs['train_or_test']}_data_{n}_{i}.h5", 'w') as f:
-        f.create_dataset('tabular_data', data=traces)
-    return (shingle_config, summary_config)
-
-
-def clean_data(dates, **kwargs):
-    # Clean a set of dates (allocated to training or testing)
-    n_j = kwargs['n_jobs']
-    if len(dates) < n_j:
-        n_j = 2
-    print(f"Processing {kwargs['train_or_test']} data from {len(dates)} dates across {n_j} jobs...")
-    date_splits = np.array_split(dates, n_j)
-    date_splits = [list(x) for x in date_splits]
-    # Handle mixed network datasets
-    combined_shingle_configs = {}
-    combined_summary_configs = {}
-    index = 0
-    for n in range(len(kwargs['raw_data_folder'])):
-        # n indexes the network (for mixed runs), i indexes the date chunk/file to save, and x is the date chunk
-        n_w = kwargs['n_workers']
-        if len(date_splits) < kwargs['n_workers']:
-            n_w = len(date_splits)
-        configs = Parallel(n_jobs=n_w)(delayed(process_data_parallel)(x, i, n, **kwargs) for i, x in enumerate(date_splits))
-        shingle_configs = [sh for (sh, su) in configs if sh!=None]
-        summary_configs = [su for (sh, su) in configs if su!=None]
-        for d in shingle_configs:
-            combined_shingle_configs.update({i: v for i, v in enumerate(list(d.values()), start=index)})
-            index += len(d)
-        combined_summary_configs = data_utils.combine_config_list(summary_configs, avoid_dup=True)
-    # Save configs
-    print(f"Saving {kwargs['train_or_test']} config and shingle lookups...")
-    with open(f"{kwargs['base_folder']}deeptte_formatted/{kwargs['train_or_test']}_summary_config.json", mode="a") as out_file:
-            json.dump(combined_summary_configs, out_file)
-    with open(f"{kwargs['base_folder']}deeptte_formatted/{kwargs['train_or_test']}_shingle_config.json", mode="a") as out_file:
-            json.dump(combined_shingle_configs, out_file)
-
-
-def prepare_run(overwrite, run_name, network_name, train_dates, test_dates, **kwargs):
-    """
-    Set up the folder and data structure for a set of k-fold validated model runs.
-    All run data is copied from the original download directory to the run folder.
-    Separate folders are made for the ATB and KCM networks.
-    The formatted data is saved in "deeptte_formatted". Since we are benchmarking
-    with that model, it is convenient to use the same data format for all models.
-    """
-    print("="*30)
-    print(f"PREPARE RUN: '{run_name}'")
-    print(f"NETWORK: '{network_name}'")
-    # Create folder structure
-    if len(network_name) > 1:
-        kwargs['is_mixed'] = True
-        network_name = "_".join(network_name)
-    else:
-        kwargs['is_mixed'] = False
-        network_name = network_name[0]
-    base_folder = f"./results/{run_name}/{network_name}/"
-    if run_name not in os.listdir("./results/"):
-        os.mkdir(f"./results/{run_name}")
-    if network_name in os.listdir(f"results/{run_name}/") and overwrite:
-        shutil.rmtree(base_folder)
-    if network_name not in os.listdir(f"results/{run_name}/"):
-        os.mkdir(base_folder)
-        os.mkdir(f"{base_folder}deeptte_formatted/")
-        os.mkdir(f"{base_folder}models/")
-        print(f"Created new results folder for '{run_name}'")
-    else:
-        print(f"Run '{run_name}/{network_name}' folder already exists in 'results/', delete the folder if new run desired.")
-        return None
-    kwargs['base_folder'] = base_folder
-    print(f"Processing training dates...")
-    kwargs['train_or_test'] = "train"
-    clean_data(train_dates, **kwargs)
-    print(f"Processing testing dates...")
-    kwargs['train_or_test'] = "test"
-    clean_data(test_dates, **kwargs)
-    print(f"RUN PREPARATION COMPLETED '{run_name}/{network_name}'")
+def prepare_run(**kwargs):
+    """Pre-process training data and save to sub-folder."""
+    # Summary config?
+    # Should remove 0m/s or not?
+    print(f"RUN PREPARATION STARTED: {kwargs['run_name']}, {kwargs['network_name']}")
+    for day in kwargs['dates']:
+        print(day)
+        # Loading data and unifying column names/dtypes
+        try:
+            data = pd.read_pickle(f"{kwargs['realtime_folder']}/{day}")
+        except:
+            print(f"File failed to load: {day}")
+            continue
+        num_pts_initial = len(data)
+        data['file'] = day[:10]
+        data = data[kwargs['given_names']]
+        data.columns = standardfeeds.GTFSRT_LOOKUP.keys()
+        data['locationtime'] = data['locationtime'].astype(float)
+        data = data.astype(standardfeeds.GTFSRT_LOOKUP)
+        # Avoid sensors that tend to hold over old position at start/end of trip
+        for _ in range(4):
+            data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
+            data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
+        # Avoid sensors recording at regular intervals
+        drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
+        data = data[~data.index.isin(drop_indices)].reset_index()
+        # Split full trip trajectories into smaller samples
+        data = data_utils.shingle(data, 2, 5)
+        # Project to local coordinate system, apply bounding box, center coords
+        data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
+        data = data.cx[kwargs['grid_bounds'][0]:kwargs['grid_bounds'][2], kwargs['grid_bounds'][1]:kwargs['grid_bounds'][3]].copy()
+        data['x_cent'] = data.geometry.x - kwargs['coord_ref_center'][0]
+        data['y_cent'] = data.geometry.y - kwargs['coord_ref_center'][1]
+        # Calculate geometry features
+        data['calc_time_s'], data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'locationtime')
+        # First pt of each trip (not shingle) is dependent on prev trip metrics
+        data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
+        data['calc_speed_m_s'] = data['calc_dist_m'] / data['calc_time_s']
+        data.loc[data['calc_speed_m_s']<.1, 'calc_speed_m_s'] = 0
+        data['calc_dist_km'] = data['calc_dist_m'] / 1000.0
+        # Filter out all trips with large outliers
+        mins_keep = 4
+        toss_ids = []
+        toss_ids.extend(list(data[data['calc_speed_m_s']>30]['shingle_id']))
+        toss_ids.extend(list(data[data['calc_dist_m']>mins_keep*60*30]['shingle_id']))
+        toss_ids.extend(list(data[data['calc_time_s']>mins_keep*60]['shingle_id']))
+        toss_ids = np.unique(toss_ids)
+        data = data[~data['shingle_id'].isin(toss_ids)].copy()
+        # Calculate time features
+        data['t'] = pd.to_datetime(data['locationtime'], unit='s', utc=True).dt.tz_convert(kwargs['timezone'])
+        data['t_dow'] = data['t'].dt.dayofweek
+        data['t_year'] = data['t'].dt.year
+        data['t_month'] = data['t'].dt.month
+        data['t_day'] = data['t'].dt.day
+        data['t_hour'] = data['t'].dt.hour
+        data['t_min'] = data['t'].dt.minute
+        data['t_sec'] = data['t'].dt.second
+        data['t_min_of_day'] = (data['t_hour']*60) + data['t_min']
+        data['t_sec_of_day'] = (data['t_hour']*60*60) + (data['t_min']*60) + data['t_sec']
+        # Get GTFS features
+        best_static = standardfeeds.latest_available_static(day[:10], kwargs['static_folder'])
+        data['best_static'] = best_static
+        stops = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stops.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']]
+        stop_times = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stop_times.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
+        static = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
+        static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
+        # Filter any realtime trips that are not in the schedule
+        data.drop(data[~data['trip_id'].isin(static.trip_id)].index, inplace=True)
+        data['stop_id'], data['stop_dist_m'] = standardfeeds.get_scheduled_arrival(data, static)
+        data = data.merge(stop_times, on=['trip_id','stop_id'])
+        # Calculate cumulative values
+        unique_traj = data.groupby('shingle_id')
+        data['cumul_time_s'] = unique_traj['calc_time_s'].cumsum()
+        data['cumul_dist_km'] = unique_traj['calc_dist_km'].cumsum()
+        data['cumul_time_s'] = data.cumul_time_s - unique_traj.cumul_time_s.transform('min')
+        data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
+        # Save processed date
+        num_pts_final = len(data)
+        print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100.0}% of original points")
+        data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
+    print(f"RUN PREPARATION COMPLETED: {kwargs['run_name']}, {kwargs['network_name']}")
 
 
 if __name__=="__main__":
@@ -199,43 +102,33 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
-    # # DEBUG
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="debug",
-    #     network_name=["kcm"],
-    #     train_dates=data_utils.get_date_list("2023_03_15", 3),
-    #     test_dates=data_utils.get_date_list("2023_03_21", 3),
-    #     n_workers=2,
-    #     n_jobs=2,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/kcm_gtfs/"],
-    #     raw_data_folder=["./data/kcm_all_new/"],
-    #     timezone=["America/Los_Angeles"],
-    #     epsg=["32148"],
-    #     grid_bounds=[[369903,37911,409618,87758]],
-    #     coord_ref_center=[[386910,69022]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=False
-    # )
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="debug",
-    #     network_name=["atb"],
-    #     train_dates=data_utils.get_date_list("2023_03_15", 3),
-    #     test_dates=data_utils.get_date_list("2023_03_21", 3),
-    #     n_workers=2,
-    #     n_jobs=2,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/atb_gtfs/"],
-    #     raw_data_folder=["./data/atb_all_new/"],
-    #     timezone=["Europe/Oslo"],
-    #     epsg=["32632"],
-    #     grid_bounds=[[550869,7012847,579944,7039521]],
-    #     coord_ref_center=[[569472,7034350]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=False
-    # )
+    # DEBUG
+    prepare_run(
+        run_name="debug",
+        network_name="kcm",
+        dates=data_utils.get_date_list("2023_03_15", 14),
+        data_dropout=0.2,
+        static_folder="./data/kcm_gtfs/",
+        realtime_folder="./data/kcm_realtime/",
+        timezone="America/Los_Angeles",
+        epsg=32148,
+        grid_bounds=[369903,37911,409618,87758],
+        coord_ref_center=[386910,69022],
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
+    prepare_run(
+        run_name="debug",
+        network_name="atb",
+        dates=data_utils.get_date_list("2023_03_15", 14),
+        data_dropout=0.2,
+        static_folder="./data/atb_gtfs/",
+        realtime_folder="./data/atb_realtime/",
+        timezone="Europe/Oslo",
+        epsg=32632,
+        grid_bounds=[550869,7012847,579944,7039521],
+        coord_ref_center=[569472,7034350],
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
     # # DEBUG MIXED
     # prepare_run(
     #     overwrite=True,
@@ -273,153 +166,3 @@ if __name__=="__main__":
     #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
     #     skip_gtfs=True
     # )
-
-    # # FULL RUN
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="full_run",
-    #     network_name=["kcm"],
-    #     train_dates=data_utils.get_date_list("2023_02_15", 30),
-    #     test_dates=data_utils.get_date_list("2023_04_01", 7),
-    #     n_workers=2,
-    #     n_jobs=8,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/kcm_gtfs/"],
-    #     raw_data_folder=["./data/kcm_all_new/"],
-    #     timezone=["America/Los_Angeles"],
-    #     epsg=["32148"],
-    #     grid_bounds=[[369903,37911,409618,87758]],
-    #     coord_ref_center=[[386910,69022]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=False
-    # )
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="full_run",
-    #     network_name=["atb"],
-    #     train_dates=data_utils.get_date_list("2023_02_15", 30),
-    #     test_dates=data_utils.get_date_list("2023_04_01", 7),
-    #     n_workers=2,
-    #     n_jobs=8,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/atb_gtfs/"],
-    #     raw_data_folder=["./data/atb_all_new/"],
-    #     timezone=["Europe/Oslo"],
-    #     epsg=["32632"],
-    #     grid_bounds=[[550869,7012847,579944,7039521]],
-    #     coord_ref_center=[[569472,7034350]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=False
-    # )
-    # # FULL RUN MIXED
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="full_run_nosch",
-    #     network_name=["kcm","atb"],
-    #     train_dates=data_utils.get_date_list("2023_02_15", 30),
-    #     test_dates=data_utils.get_date_list("2023_04_01", 7),
-    #     n_workers=2,
-    #     n_jobs=8,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/kcm_gtfs/","./data/atb_gtfs/"],
-    #     raw_data_folder=["./data/kcm_all_new/","./data/atb_all_new/"],
-    #     timezone=["America/Los_Angeles","Europe/Oslo"],
-    #     epsg=["32148","32632"],
-    #     grid_bounds=[[369903,37911,409618,87758],[550869,7012847,579944,7039521]],
-    #     coord_ref_center=[[386910,69022],[569472,7034350]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id'],['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=True
-    # )
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="full_run_nosch",
-    #     network_name=["rut"],
-    #     train_dates=data_utils.get_date_list("2023_02_15", 30),
-    #     test_dates=data_utils.get_date_list("2023_04_01", 7),
-    #     n_workers=2,
-    #     n_jobs=8,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/rut_gtfs/"],
-    #     raw_data_folder=["./data/rut_all_new/"],
-    #     timezone=["Europe/Oslo"],
-    #     epsg=["32632"],
-    #     grid_bounds=[[589080,6631314,604705,6648420]],
-    #     coord_ref_center=[[597427,6642805]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=True
-    # )
-
-    # # BIG RUN
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="big_run",
-    #     network_name=["kcm"],
-    #     train_dates=data_utils.get_date_list("2023_02_15", 120),
-    #     test_dates=data_utils.get_date_list("2023_06_15", 7),
-    #     n_workers=4,
-    #     n_jobs=12,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/kcm_gtfs/"],
-    #     raw_data_folder=["./data/kcm_all_new/"],
-    #     timezone=["America/Los_Angeles"],
-    #     epsg=["32148"],
-    #     grid_bounds=[[369903,37911,409618,87758]],
-    #     coord_ref_center=[[386910,69022]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=False
-    # )
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="big_run",
-    #     network_name=["atb"],
-    #     train_dates=data_utils.get_date_list("2023_02_15", 120),
-    #     test_dates=data_utils.get_date_list("2023_06_15", 7),
-    #     n_workers=4,
-    #     n_jobs=12,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/atb_gtfs/"],
-    #     raw_data_folder=["./data/atb_all_new/"],
-    #     timezone=["Europe/Oslo"],
-    #     epsg=["32632"],
-    #     grid_bounds=[[550869,7012847,579944,7039521]],
-    #     coord_ref_center=[[569472,7034350]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=False
-    # )
-    # BIG RUN MIXED
-    prepare_run(
-        overwrite=True,
-        run_name="big_run_nosch",
-        network_name=["kcm","atb"],
-        train_dates=data_utils.get_date_list("2023_02_15", 90),
-        test_dates=data_utils.get_date_list("2023_06_15", 7),
-        n_workers=4,
-        n_jobs=12,
-        data_dropout=0.2,
-        gtfs_folder=["./data/kcm_gtfs/","./data/atb_gtfs/"],
-        raw_data_folder=["./data/kcm_all_new/","./data/atb_all_new/"],
-        timezone=["America/Los_Angeles","Europe/Oslo"],
-        epsg=["32148","32632"],
-        grid_bounds=[[369903,37911,409618,87758],[550869,7012847,579944,7039521]],
-        coord_ref_center=[[386910,69022],[569472,7034350]],
-        given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id'],['trip_id','file','locationtime','lat','lon','vehicle_id']],
-        skip_gtfs=True
-    )
-    prepare_run(
-        overwrite=True,
-        run_name="big_run_nosch",
-        network_name=["rut"],
-        train_dates=data_utils.get_date_list("2023_02_15", 90),
-        test_dates=data_utils.get_date_list("2023_05_15", 7),
-        n_workers=4,
-        n_jobs=12,
-        data_dropout=0.2,
-        gtfs_folder=["./data/rut_gtfs/"],
-        raw_data_folder=["./data/rut_all_new/"],
-        timezone=["Europe/Oslo"],
-        epsg=["32632"],
-        grid_bounds=[[589080,6631314,604705,6648420]],
-        coord_ref_center=[[597427,6642805]],
-        given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-        skip_gtfs=True
-    )

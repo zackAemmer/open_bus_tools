@@ -1,6 +1,7 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyproj
 from scipy.spatial import KDTree
 
 
@@ -9,35 +10,37 @@ def calculate_gps_metrics(gdf, time_col):
     # Ensure no repeated time obs; can still have same time trip end/next start
     gdf_shifted = gdf.shift()
     consecutive_time_s = gdf[time_col] - gdf_shifted[time_col]
-    consecutive_dist_m = gdf.distance(gdf_shifted, align=False)
+    geodesic = pyproj.Geod(ellps='WGS84')
+    # Fwd azimuth is CW deg from N==0, pointed towards the latter point
+    f_azm, b_azm, distance = geodesic.inv(gdf_shifted['lon'], gdf_shifted['lat'], gdf['lon'], gdf['lat'])
     # The first row of each trip will overlap previous and should be removed
-    return consecutive_time_s, consecutive_dist_m
+    return consecutive_time_s, distance, f_azm
 
 
-def calculate_gps_dist(end_x, end_y, start_x, start_y):
-    """Calculate the euclidean distance between a series of points."""
-    x_diff = (end_x - start_x)
-    y_diff = (end_y - start_y)
-    dists = np.sqrt(x_diff**2 + y_diff**2)
-    # Measured in degrees from the positive x axis
-    # E==0, N==90, W==180, S==-90
-    bearings = np.arctan2(y_diff, x_diff)*180/np.pi
-    return dists, bearings
+# def calculate_gps_dist(end_x, end_y, start_x, start_y):
+#     """Calculate the euclidean distance between a series of points."""
+#     x_diff = (end_x - start_x)
+#     y_diff = (end_y - start_y)
+#     dists = np.sqrt(x_diff**2 + y_diff**2)
+#     # Measured in degrees from the positive x axis
+#     # E==0, N==90, W==180, S==-90
+#     bearings = np.arctan2(y_diff, x_diff)*180/np.pi
+#     return dists, bearings
 
 
-def calculate_trip_speeds(data):
-    """Calculate speeds between consecutive trip locations."""
-    x = data[['shingle_id','x','y','locationtime']]
-    y = data[['shingle_id','x','y','locationtime']].shift()
-    y.columns = [colname+"_shift" for colname in y.columns]
-    z = pd.concat([x,y], axis=1)
-    z['dist_diff'], z['bearing'] = calculate_gps_dist(z['x'].values, z['y'].values, z['x_shift'].values, z['y_shift'].values)
-    z['time_diff'] = z['locationtime'] - z['locationtime_shift']
-    z['speed_m_s'] = z['dist_diff'] / z['time_diff']
-    return z['speed_m_s'].values, z['dist_diff'].values, z['time_diff'].values, z['bearing'].values
+# def calculate_trip_speeds(data):
+#     """Calculate speeds between consecutive trip locations."""
+#     x = data[['shingle_id','x','y','locationtime']]
+#     y = data[['shingle_id','x','y','locationtime']].shift()
+#     y.columns = [colname+"_shift" for colname in y.columns]
+#     z = pd.concat([x,y], axis=1)
+#     z['dist_diff'], z['bearing'] = calculate_gps_dist(z['x'].values, z['y'].values, z['x_shift'].values, z['y_shift'].values)
+#     z['time_diff'] = z['locationtime'] - z['locationtime_shift']
+#     z['speed_m_s'] = z['dist_diff'] / z['time_diff']
+#     return z['speed_m_s'].values, z['dist_diff'].values, z['time_diff'].values, z['bearing'].values
 
 
-def get_closest_point(points, query_points):
+def get_point_distances(points, query_points):
     tree = KDTree(points)
     dists, idxs = tree.query(query_points)
     return dists, idxs

@@ -83,40 +83,39 @@ def load_all_inputs(run_folder, network_folder, n_samples):
     }
 
 
-def combine_pkl_data(folder, file_list, given_names):
-    """
-    Load raw feed data stored in a .pkl file to a dataframe. Unify column names and dtypes.
-    This should ALWAYS be used to load the raw bus data from .pkl files, because it unifies the column names and types from different networks.
-    folder: the folder to search in
-    file_list: the file names to read and combine
-    given_names: list of the names of the features in the raw data
-    Returns: a dataframe of all data concatenated together, a column 'file' is added, also a list of all files with no data.
-    """
-    data_list = []
-    no_data_list = []
-    for file in file_list:
-        try:
-            data = load_pkl(folder + "/" + file, is_pandas=True)
-            data['file'] = file
-            # Get unified column names
-            data = data[given_names]
-            data.columns = FEATURE_LOOKUP.keys()
-            # Nwy locationtimes are downloaded as floats and have a decimal point; must go from object through float again to get int
-            data['locationtime'] = data['locationtime'].astype(float)
-            # Get unified data types
-            data = data.astype(FEATURE_LOOKUP)
-            data_list.append(data)
-        except FileNotFoundError:
-            no_data_list.append(file)
-    data = pd.concat(data_list, axis=0)
-    # Critical to ensure data frame is sorted by date, then trip_id, then locationtime
-    data = data.sort_values(['file','trip_id','locationtime'], ascending=True)
-    return data, no_data_list
+# def combine_pkl_data(folder, file_list, given_names):
+#     """
+#     Load raw feed data stored in a .pkl file to a dataframe. Unify column names and dtypes.
+#     This should ALWAYS be used to load the raw bus data from .pkl files, because it unifies the column names and types from different networks.
+#     folder: the folder to search in
+#     file_list: the file names to read and combine
+#     given_names: list of the names of the features in the raw data
+#     Returns: a dataframe of all data concatenated together, a column 'file' is added, also a list of all files with no data.
+#     """
+#     data_list = []
+#     no_data_list = []
+#     for file in file_list:
+#         try:
+#             data = load_pkl(folder + "/" + file, is_pandas=True)
+#             data['file'] = file
+#             # Get unified column names
+#             data = data[given_names]
+#             data.columns = FEATURE_LOOKUP.keys()
+#             # Nwy locationtimes are downloaded as floats and have a decimal point; must go from object through float again to get int
+#             data['locationtime'] = data['locationtime'].astype(float)
+#             # Get unified data types
+#             data = data.astype(FEATURE_LOOKUP)
+#             data_list.append(data)
+#         except FileNotFoundError:
+#             no_data_list.append(file)
+#     data = pd.concat(data_list, axis=0)
+#     # Critical to ensure data frame is sorted by date, then trip_id, then locationtime
+#     data = data.sort_values(['file','trip_id','locationtime'], ascending=True)
+#     return data, no_data_list
 
 
 def shingle(trace_df, min_len, max_len):
-    """
-    Split a df into even chunks randomly between min and max length.
+    """Split a df into even chunks randomly between min and max length.
     Each split comes from a group representing a trajectory in the dataframe.
     trace_df: dataframe of raw bus data
     min_len: minimum number of chunks to split a trajectory into
@@ -136,83 +135,6 @@ def shingle(trace_df, min_len, max_len):
     z = trace_df.copy()
     z['shingle_id'] = new_idx
     return z
-
-
-def calculate_trace_df(data, timezone, epsg, grid_bounds, coord_ref_center, data_dropout=.10):
-    """
-    Calculate difference in metrics between two consecutive trip points.
-    This is the only place where points are filtered rather than entire shingles.
-    data: pandas df with all bus trips
-    timezone: string for timezone the data were collected in
-    remove_stopeed_pts: whether to include consecutive points with no bus movement
-    Returns: combination of original point values, and new _diff values
-    """
-    # Some points with collection issues
-    data = data[data['lat']!=0]
-    data = data[data['lon']!=0]
-    # Drop out random points from all shingles
-    data = data.reset_index()
-    drop_indices = np.random.choice(data.index, int(data_dropout*len(data)), replace=False)
-    data = data[~data.index.isin(drop_indices)].reset_index()
-    # Project to local coordinate system
-    default_crs = pyproj.CRS.from_epsg(4326)
-    proj_crs = pyproj.CRS.from_epsg(epsg)
-    transformer = pyproj.Transformer.from_crs(default_crs, proj_crs, always_xy=True)
-    data['x'], data['y'] = transformer.transform(data['lon'], data['lat'])
-    # Add coordinates that are translated s.t. CBD is 0,0
-    data['x_cent'] = data['x'] - coord_ref_center[0]
-    data['y_cent'] = data['y'] - coord_ref_center[1]
-    # Drop points outside of the network/grid bounding box
-    data = data[data['x']>grid_bounds[0]]
-    data = data[data['y']>grid_bounds[1]]
-    data = data[data['x']<grid_bounds[2]]
-    data = data[data['y']<grid_bounds[3]]
-    # Calculate feature values between consecutive points, assign to the latter point
-    data['speed_m_s'], data['dist_calc_m'], data['time_calc_s'], data['bearing'] = calculate_trip_speeds(data)
-    # Remove first point of every trip (not shingle), since its features are based on a different trip
-    data = data.groupby(['file','trip_id'], as_index=False).apply(lambda group: group.iloc[1:,:])
-    # Remove any points which seem to be erroneous or repeated
-    data = data[data['dist_calc_m']>0]
-    data = data[data['dist_calc_m']<20000]
-    data = data[data['time_calc_s']>0]
-    data = data[data['time_calc_s']<60*60]
-    data = data[data['speed_m_s']>0]
-    data = data[data['speed_m_s']<35]
-    # Now error points are removed, recalculate time and speed features
-    # From here out, must filter shingles in order to not change time/dist calcs
-    # Note that any point filtering necessitates recalculating travel times for individual points
-    data['speed_m_s'], data['dist_calc_m'], data['time_calc_s'], data['bearing'] = calculate_trip_speeds(data)
-    shingles = data.groupby(['shingle_id'], as_index=False)
-    data = shingles.apply(lambda group: group.iloc[1:,:])
-    shingle_dists = shingles[['dist_calc_m']].sum()
-    shingle_times = shingles[['time_calc_s']].sum()
-    # Remove (shingles this time) based on final calculation of speeds, distances, times
-    invalid_shingles = []
-    # Total distance
-    invalid_shingles.append(shingle_dists[shingle_dists['dist_calc_m']<=0].shingle_id)
-    invalid_shingles.append(shingle_dists[shingle_dists['dist_calc_m']>=20000].shingle_id)
-    # Total time
-    invalid_shingles.append(shingle_times[shingle_times['time_calc_s']<=0].shingle_id)
-    invalid_shingles.append(shingle_times[shingle_times['time_calc_s']>=3*60*60].shingle_id)
-    # Invidiual point distance, time, speed
-    invalid_shingles.append(data[data['dist_calc_m']<=0].shingle_id)
-    invalid_shingles.append(data[data['dist_calc_m']>=20000].shingle_id)
-    invalid_shingles.append(data[data['time_calc_s']<=0].shingle_id)
-    invalid_shingles.append(data[data['time_calc_s']>=60*60].shingle_id)
-    invalid_shingles.append(data[data['speed_m_s']<=0].shingle_id)
-    invalid_shingles.append(data[data['speed_m_s']>=35].shingle_id)
-    invalid_shingles = pd.concat(invalid_shingles).values
-    data = data[~data['shingle_id'].isin(invalid_shingles)]
-    data['dist_calc_km'] = data['dist_calc_m'] / 1000.0
-    data = data.dropna()
-    # Time values for deeptte
-    data['datetime'] = pd.to_datetime(data['locationtime'], unit='s', utc=True).map(lambda x: x.tz_convert(timezone))
-    data['dateID'] = (data['datetime'].dt.day)
-    data['weekID'] = (data['datetime'].dt.dayofweek)
-    # (be careful with these last two as they change across the trajectory)
-    data['timeID'] = (data['datetime'].dt.hour * 60) + (data['datetime'].dt.minute)
-    data['timeID_s'] = (data['datetime'].dt.hour * 60 * 60) + (data['datetime'].dt.minute * 60) + (data['datetime'].dt.second)
-    return data
 
 
 def calculate_cumulative_values(data, skip_gtfs):
