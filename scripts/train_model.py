@@ -33,7 +33,6 @@ if __name__=="__main__":
     test_dates = data_utils.get_date_list(test_date, int(test_n))
 
     # grid_s_size=500
-    n_folds=5
 
     # if network_folder=="kcm/":
     #     holdout_routes=[100252,100139,102581,100341,102720]
@@ -47,7 +46,7 @@ if __name__=="__main__":
         pin_memory=True
         accelerator="auto"
     else:
-        num_workers=0
+        num_workers=4
         pin_memory=False
         accelerator="cpu"
 
@@ -79,15 +78,15 @@ if __name__=="__main__":
     # test_ngrid.build_cell_lookup()
     # test_dataset.grid = test_ngrid
 
-    k_fold = KFold(n_folds, shuffle=True, random_state=42)
+    k_fold = KFold(5, shuffle=True, random_state=42)
     run_results = []
 
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
-        print(f"BEGIN FOLD: {fold_num}")
+        print(f"FOLD: {fold_num}")
 
         # Declare models
-        model = model_utils.make_model(model_type)
+        model = model_utils.make_model(model_type, fold_num)
         # base_model_list, nn_model = utils.make_one_model(model_type)
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
@@ -103,24 +102,27 @@ if __name__=="__main__":
         #         "Labels":[],
         #         "Preds":[]
         #     }
-
+        # for x in range(10000):
+        #     z = train_dataset.__getitem__(x)
         # # Total run samples
         # print(f"Training on {len(train_dataset)} samples, testing on {len(test_dataset)} samples")
 
-        train_loader = DataLoader(train_dataset, batch_size=model.batch_size, collate_fn=model.collate_fn, sampler=train_sampler, drop_last=True, num_workers=num_workers, pin_memory=pin_memory)
-        val_loader = DataLoader(train_dataset, batch_size=model.batch_size, collate_fn=model.collate_fn, sampler=val_sampler, drop_last=True, num_workers=num_workers, pin_memory=pin_memory)
-        test_loader = DataLoader(test_dataset, batch_size=model.batch_size, collate_fn=model.collate_fn, shuffle=False, drop_last=False, num_workers=num_workers, pin_memory=pin_memory)
-        # t0=time.time()
+        train_loader = DataLoader(train_dataset, collate_fn=model.collate_fn, batch_size=model.batch_size, sampler=train_sampler, drop_last=True, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
+        val_loader = DataLoader(train_dataset, collate_fn=model.collate_fn, batch_size=model.batch_size, sampler=val_sampler, drop_last=True, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
+        test_loader = DataLoader(test_dataset, collate_fn=model.collate_fn, batch_size=model.batch_size, shuffle=False, drop_last=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=True)
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
-            max_epochs=50,
-            min_epochs=5,
+            max_epochs=5,
+            min_epochs=1,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"./logs/", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.001, patience=3)],
+            profiler=pl.profilers.AdvancedProfiler(filename='profiler_results'),
+            # limit_train_batches=2,
+            # limit_val_batches=2,
         )
         trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-
+        # preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
 
 
         # for b_model in base_model_list:

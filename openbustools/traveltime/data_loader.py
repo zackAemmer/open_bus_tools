@@ -67,18 +67,22 @@ class ContentDataset(Dataset):
             data.append(pd.read_pickle(f"{data_folder}{day}"))
         data = pd.concat(data)
         data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
+        data = data.set_index('shingle_id')
+        # Testing lookup speeds
         self.data = data
-        self.config = create_config(self.data, LABEL_FEATS + GPS_FEATS + STATIC_FEATS)
+        self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS]
+        self.groupdata = self.feat_data.groupby('shingle_id')
+        self.config = create_config(self.data, LABEL_FEATS+GPS_FEATS+STATIC_FEATS)
     def __getitem__(self, index):
-        sample_df = self.data[self.data['shingle_id']==index]
+        sample_df = self.groupdata.get_group(index)
         sample = {}
-        for k in LABEL_FEATS + GPS_FEATS + STATIC_FEATS:
+        for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS:
             sample[k] = normalize(sample_df[k].to_numpy(), self.config[k])
         for k in EMBED_FEATS:
             sample[k] = sample_df[k].to_numpy()[0]
         return sample
     def __len__(self):
-        return np.max(self.data['shingle_id'].to_numpy())
+        return np.max(self.data.index.to_numpy())
 
 
 # class LoadSliceDataset(Dataset):

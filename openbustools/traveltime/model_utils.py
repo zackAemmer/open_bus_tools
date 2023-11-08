@@ -9,6 +9,36 @@ from openbustools.traveltime import data_loader
 from openbustools import data_utils
 from openbustools.traveltime.models import avg_speed, conv, ff, persistent, rnn, schedule
 
+HYPERPARAM_DICT = {
+    'FF': {
+        'batch_size': 512,
+        'hidden_size': 128,
+        'num_layers': 2,
+        'dropout_rate': .2
+    },
+    'CONV': {
+        'batch_size': 512,
+        'hidden_size': 64,
+        'num_layers': 3,
+        'dropout_rate': .1
+    },
+    'GRU': {
+        'batch_size': 512,
+        'hidden_size': 64,
+        'num_layers': 2,
+        'dropout_rate': .05
+    },
+    'TRSF': {
+        'batch_size': 512,
+        'hidden_size': 512,
+        'num_layers': 6,
+        'dropout_rate': .1
+    },
+    'DEEPTTE': {
+        'batch_size': 512
+    }
+}
+
 
 def set_feature_extraction(model, feature_extraction=True):
     if feature_extraction==False:
@@ -42,143 +72,170 @@ def random_param_search(hyperparameter_sample_dict, model_names):
     return set_of_random_dicts
 
 
-def make_model(model_type):
-    # # Declare base models
-    # base_model_list = []
-    # base_model_list.append(avg_speed.AvgHourlySpeedModel("AVG"))
-    # base_model_list.append(persistent.PersistentTimeSeqModel("PER_TIM"))
-    # if not skip_gtfs:
-    #     base_model_list.append(schedule.TimeTableModel("SCH"))
-    # # Declare neural network models
+def make_model(model_type, fold_num):
+    """Allow one main script to be re-used for different model types."""
     if model_type=="FF":
-        model = ff.FF_L(
-            "FF",
-            n_features=8,
+        model = ff.FF(
+            f"FF_{fold_num}",
+            input_size=10,
             collate_fn=data_loader.basic_collate_nosch,
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="FF_GTFS":
-        model = ff.FF_L(
-            "FF_GTFS",
-            n_features=14,
+    elif model_type=="FF_STATIC":
+        model = ff.FF(
+            f"FF_STATIC_{fold_num}",
+            input_size=18,
             collate_fn=data_loader.basic_collate,
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="FF_GRID":
-        model = ff.FF_GRID_L(
-            "FF_GRID",
-            n_features=14,
+    elif model_type=="FF_REALTIME":
+        model = ff.FF_REALTIME(
+            f"FF_REALTIME_{fold_num}",
+            input_size=18,
             n_grid_features=3*3*1,
-            # n_grid_features=3*3*3*3,
             grid_compression_size=8,
             collate_fn=data_loader.basic_grid_collate,
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
     elif model_type=="CONV":
-        model = conv.CONV_L(
-            "CONV",
-            n_features=4,
+        model = conv.CONV(
+            f"CONV_{fold_num}",
+            input_size=5,
             collate_fn=data_loader.sequential_collate_nosch,
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="CONV_GTFS":
-        model = conv.CONV_L(
-            "CONV_GTFS",
-            n_features=10,
+    elif model_type=="CONV_STATIC":
+        model = conv.CONV(
+            f"CONV_STATIC_{fold_num}",
+            input_size=9,
             collate_fn=data_loader.sequential_collate,
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="CONV_GRID":
-        model = conv.CONV_GRID_L(
-            "CONV_GRID",
-            n_features=10,
+    elif model_type=="CONV_REALTIME":
+        model = conv.CONV_REALTIME(
+            f"CONV_REALTIME_{fold_num}",
+            input_size=9,
             n_grid_features=3*3*1,
-            # n_grid_features=3*3*3*3,
             grid_compression_size=8,
             collate_fn=data_loader.sequential_grid_collate,
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
     elif model_type=="GRU":
-        model = rnn.GRU_L(
-            "GRU",
-            input_size=4,
+        model = rnn.GRU(
+            f"GRU_{fold_num}",
+            input_size=5,
             collate_fn=data_loader.collate_seq,
-            batch_size=embedding.HYPERPARAM_DICT['GRU']['batch_size'],
-            hidden_size=embedding.HYPERPARAM_DICT['GRU']['hidden_size'],
-            num_layers=embedding.HYPERPARAM_DICT['GRU']['num_layers'],
-            dropout_rate=embedding.HYPERPARAM_DICT['GRU']['dropout_rate'],
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="GRU_GTFS":
-        model = rnn.GRU_L(
-            "GRU_GTFS",
-            n_features=10,
-            hyperparameter_dict=hyperparameter_dict['GRU'],
-            embed_dict=embed_dict,
+    elif model_type=="GRU_STATIC":
+        model = rnn.GRU(
+            f"GRU_STATIC_{fold_num}",
+            input_size=9,
             collate_fn=data_loader.sequential_collate,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="GRU_GRID":
-        model = rnn.GRU_GRID_L(
-            "GRU_GRID",
-            n_features=10,
+    elif model_type=="GRU_REALTIME":
+        model = rnn.GRU_REALTIME(
+            f"GRU_REALTIME_{fold_num}",
+            input_size=9,
             n_grid_features=3*3*1,
-            # n_grid_features=3*3*3*3,
             grid_compression_size=8,
-            hyperparameter_dict=hyperparameter_dict['GRU'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.sequential_grid_collate,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
     elif model_type=="TRSF":
-        model = transformer.TRSF_L(
-            "TRSF",
-            n_features=4,
-            hyperparameter_dict=hyperparameter_dict['TRSF'],
-            embed_dict=embed_dict,
+        model = transformer.TRSF(
+            f"TRSF_{fold_num}",
+            input_size=5,
             collate_fn=data_loader.sequential_collate_nosch,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="TRSF_GTFS":
-        model = transformer.TRSF_L(
-            "TRSF_GTFS",
-            n_features=10,
-            hyperparameter_dict=hyperparameter_dict['TRSF'],
-            embed_dict=embed_dict,
+    elif model_type=="TRSF_STATIC":
+        model = transformer.TRSF(
+            f"TRSF_STATIC_{fold_num}",
+            input_size=9,
             collate_fn=data_loader.sequential_collate,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="TRSF_GRID":
-        model = transformer.TRSF_GRID_L(
-            "TRSF_GRID",
-            n_features=10,
+    elif model_type=="TRSF_REALTIME":
+        model = transformer.TRSF_REALTIME(
+            f"TRSF_REALTIME_{fold_num}",
+            input_size=9,
             n_grid_features=3*3*1,
-            # n_grid_features=3*3*3*3,
             grid_compression_size=8,
-            hyperparameter_dict=hyperparameter_dict['TRSF'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.sequential_grid_collate,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
     elif model_type=="DEEP_TTE":
         model = DeepTTE.Net(
-            "DEEP_TTE",
-            hyperparameter_dict=hyperparameter_dict['DEEPTTE'],
+            f"DEEP_TTE_{fold_num}",
             collate_fn=data_loader.deeptte_collate_nosch,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    elif model_type=="DEEP_TTE_GTFS":
+    elif model_type=="DEEP_TTE_STATIC":
         model = DeepTTE.Net(
-            "DEEP_TTE_GTFS",
-            hyperparameter_dict=hyperparameter_dict['DEEPTTE'],
+            f"DEEP_TTE_STATIC_{fold_num}",
             collate_fn=data_loader.deeptte_collate,
-            config=config
+            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
         )
-    # # Load weights if applicable
-    # if load_weights:
-    #     new_base_model_list = []
-    #     for b in base_model_list:
-    #         new_base_model_list.append(data_utils.load_pkl(f"{weight_folder}../../../../../{b.model_name}_{fold_num}.pkl"))
-    #         base_model_list = new_base_model_list
-    #     last_ckpt = os.listdir(weight_folder)
-    #     if not torch.cuda.is_available():
-    #         model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}", map_location=torch.device('cpu')).eval()
-    #     else:
-    #         model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}").eval()
     return model
+
+
+def load_model(load_weights, weight_folder):
+    # Load weights if applicable
+    if load_weights:
+        new_base_model_list = []
+        for b in base_model_list:
+            new_base_model_list.append(data_utils.load_pkl(f"{weight_folder}../../../../../{b.model_name}_{fold_num}.pkl"))
+            base_model_list = new_base_model_list
+        last_ckpt = os.listdir(weight_folder)
+        if not torch.cuda.is_available():
+            model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}", map_location=torch.device('cpu')).eval()
+        else:
+            model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}").eval()
+    return None
 
 
 def pad_sequence(sequences, lengths):
@@ -349,16 +406,12 @@ def extract_lightning_results(model_name, base_folder, city_name):
     result_df = pd.concat(all_data, axis=0)
     return result_df
 
-def create_tensor_mask(seq_lens, device, drop_first=True):
-    """
-    Create a mask based on a tensor of sequence lengths.
-    """
-    max_len = max(seq_lens)
-    mask = torch.zeros(len(seq_lens), max_len, dtype=torch.bool, device=device)
-    for i, seq_len in enumerate(seq_lens):
-        mask[i, :seq_len] = 1
+def fill_tensor_mask(mask, x_sl, drop_first=True):
+    """Create a mask based on a tensor of sequence lengths."""
+    for i, seq_len in enumerate(x_sl):
+        mask[:seq_len, i] = 1
     if drop_first:
-        mask[:,0] = 0
+        mask[0,:] = 0
     return mask
 
 def pad_tensors(tensor_list, pad_dim):

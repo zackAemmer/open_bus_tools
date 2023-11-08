@@ -7,9 +7,9 @@ from openbustools.traveltime import masked_loss, model_utils
 from openbustools.traveltime.models import embedding
 
 
-class GRU_L(pl.LightningModule):
+class GRU(pl.LightningModule):
     def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
-        super(GRU_L, self).__init__()
+        super(GRU, self).__init__()
         self.model_name = model_name
         self.input_size = input_size
         self.collate_fn = collate_fn
@@ -37,19 +37,18 @@ class GRU_L(pl.LightningModule):
         x_ct = x[1]
         x_sl = x[2]
         # Embed categorical variables
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        x_em = torch.cat((timeID_embedded,weekID_embedded), dim=1).unsqueeze(1)
-        x_em = x_em.expand(-1, x_ct.shape[1], -1)
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
+        x_em = x_em.expand(x_ct.shape[0], -1, -1)
         # Get recurrent pred
-        x_ct = torch.swapaxes(x_ct, 1, 2)
-        x_ct = self.norm(x_ct)
-        x_ct = torch.swapaxes(x_ct, 1, 2)
         x_ct, hidden_prev = self.rnn(x_ct)
         # Combine all variables
         out = torch.cat([x_em, x_ct], dim=2)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
-        mask = data_utils.create_tensor_mask(x_sl, self.device)
+        # Masked loss; init mask here since module knows device
+        mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
+        mask = model_utils.fill_tensor_mask(mask, x_sl)
         loss = self.loss_fn(out, y, mask)
         self.log_dict(
             {
@@ -58,29 +57,27 @@ class GRU_L(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
-        # for name, param in self.named_parameters():
-        #     self.logger.experiment.add_histogram(name, param, self.current_epoch)
         return loss
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
         x_sl = x[2]
         # Embed categorical variables
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        x_em = torch.cat((timeID_embedded,weekID_embedded), dim=1).unsqueeze(1)
-        x_em = x_em.expand(-1, x_ct.shape[1], -1)
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
+        x_em = x_em.expand(x_ct.shape[0], -1, -1)
         # Get recurrent pred
-        x_ct = torch.swapaxes(x_ct, 1, 2)
-        x_ct = self.norm(x_ct)
-        x_ct = torch.swapaxes(x_ct, 1, 2)
         x_ct, hidden_prev = self.rnn(x_ct)
         # Combine all variables
         out = torch.cat([x_em, x_ct], dim=2)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
-        mask = data_utils.create_tensor_mask(x_sl, self.device)
+        # Masked loss; init mask here since module knows device
+        mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
+        mask = model_utils.fill_tensor_mask(mask, x_sl)
         loss = self.loss_fn(out, y, mask)
         self.log_dict(
             {
@@ -89,40 +86,41 @@ class GRU_L(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
-    def predict_step(self, batch, batch_idx):
+    def predict_step(self, batch):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
         x_sl = x[2]
         # Embed categorical variables
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        x_em = torch.cat((timeID_embedded,weekID_embedded), dim=1).unsqueeze(1)
-        x_em = x_em.expand(-1, x_ct.shape[1], -1)
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
+        x_em = x_em.expand(x_ct.shape[0], -1, -1)
         # Get recurrent pred
-        x_ct = torch.swapaxes(x_ct, 1, 2)
-        x_ct = self.norm(x_ct)
-        x_ct = torch.swapaxes(x_ct, 1, 2)
         x_ct, hidden_prev = self.rnn(x_ct)
         # Combine all variables
         out = torch.cat([x_em, x_ct], dim=2)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
-        mask = data_utils.create_tensor_mask(x_sl, self.device, drop_first=False)
+        # Masked loss; init mask here since module knows device
+        mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
+        mask = model_utils.fill_tensor_mask(mask, x_sl)
+        # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
-        out  = (out.detach().cpu().numpy() * self.config['time_calc_s_std']) + self.config['time_calc_s_mean']
-        y = (y.detach().cpu().numpy() * self.config['time_calc_s_std']) + self.config['time_calc_s_mean']
-        out_agg = data_utils.aggregate_tts(out, mask)
-        y_agg = data_utils.aggregate_tts(y, mask)
-        return {"out_agg":out_agg, "y_agg":y_agg, "out":out, "y":y, "mask":mask}
+        out = out.detach().cpu().numpy()
+        y = y.detach().cpu().numpy()
+        # out_agg = data_utils.aggregate_tts(out, mask)
+        # y_agg = data_utils.aggregate_tts(y, mask)
+        return {"pred":out, "label":y, "mask":mask}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-class GRU_GRID_L(pl.LightningModule):
+class GRU_REALTIME(pl.LightningModule):
     def __init__(self, model_name, n_features, n_grid_features, grid_compression_size, hyperparameter_dict, embed_dict, collate_fn, config):
-        super(GRU_GRID_L, self).__init__()
+        super(GRU_REALTIME, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
         self.n_features = n_features

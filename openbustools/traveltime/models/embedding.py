@@ -4,36 +4,6 @@ import lightning.pytorch as pl
 
 from openbustools.traveltime import masked_loss, model_utils
 
-HYPERPARAM_DICT = {
-    'FF': {
-        'batch_size': 512,
-        'hidden_size': 128,
-        'num_layers': 2,
-        'dropout_rate': .2
-    },
-    'CONV': {
-        'batch_size': 512,
-        'hidden_size': 64,
-        'num_layers': 3,
-        'dropout_rate': .1
-    },
-    'GRU': {
-        'batch_size': 512,
-        'hidden_size': 64,
-        'num_layers': 2,
-        'dropout_rate': .05
-    },
-    'TRSF': {
-        'batch_size': 512,
-        'hidden_size': 512,
-        'num_layers': 6,
-        'dropout_rate': .1
-    },
-    'DEEPTTE': {
-        'batch_size': 512
-    }
-}
-
 EMBED_DICT = {
     't_min_of_day': {
         'vocab_dim': 1440,
