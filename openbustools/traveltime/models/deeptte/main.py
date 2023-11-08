@@ -2,7 +2,7 @@ import os
 import json
 import pickle
 import time
-import utils
+import openbustools.traveltime.model_utils as model_utils
 import traveltime
 import logger
 import inspect
@@ -69,7 +69,7 @@ def train(model, elogger, files, network_folder, fold_num, n_folds, keep_chunks=
                     elogger.log(f'Batch size of 1 detected, skipping batch')
                     continue
                 else:
-                    attr, traj = utils.to_var(attr), utils.to_var(traj)
+                    attr, traj = model_utils.to_var(attr), model_utils.to_var(traj)
                 _, loss = model.eval_on_batch(attr, traj, config)
                 # update the model
                 optimizer.zero_grad()
@@ -103,7 +103,7 @@ def evaluate(model, elogger, files, network_folder, save_result=False, fold_num=
                 elogger.log(f'Batch size of 1 detected in evaluation, skipping batch')
                 continue
             else:
-                attr, traj = utils.to_var(attr), utils.to_var(traj)
+                attr, traj = model_utils.to_var(attr), model_utils.to_var(traj)
             _, loss = model.eval_on_batch(attr, traj, config)
             pred_dict, loss = model.eval_on_batch(attr, traj, config)
             if save_result: 

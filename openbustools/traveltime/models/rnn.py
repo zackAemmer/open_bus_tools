@@ -3,36 +3,35 @@ import torch
 from torch import nn
 import lightning.pytorch as pl
 
-from openbustools import data_utils
-from openbustools.traveltime import masked_loss
+from openbustools.traveltime import masked_loss, model_utils
+from openbustools.traveltime.models import embedding
 
 
 class GRU_L(pl.LightningModule):
-    def __init__(self, model_name, n_features, hyperparameter_dict, embed_dict, collate_fn, config):
+    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
         super(GRU_L, self).__init__()
-        self.save_hyperparameters()
         self.model_name = model_name
-        self.n_features = n_features
-        self.hyperparameter_dict = hyperparameter_dict
-        self.batch_size = int(self.hyperparameter_dict['batch_size'])
-        self.embed_dict = embed_dict
+        self.input_size = input_size
         self.collate_fn = collate_fn
-        self.config = config
+        self.save_hyperparameters()
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
         self.is_nn = True
         self.requires_grid = False
         self.train_time = 0.0
         self.loss_fn = masked_loss.MaskedHuberLoss()
         # Embeddings
-        self.embed_total_dims = np.sum([self.embed_dict[key]['embed_dims'] for key in self.embed_dict.keys()]).astype('int32')
-        self.timeID_em = nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
-        self.weekID_em = nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
+        self.min_em = embedding.MinuteEmbedding()
+        self.day_em = embedding.DayEmbedding()
+        self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
         # Recurrent layer
-        self.norm = nn.BatchNorm1d(self.n_features)
-        self.rnn = nn.GRU(input_size=self.n_features, hidden_size=self.hyperparameter_dict['hidden_size'], num_layers=self.hyperparameter_dict['num_layers'], batch_first=True, dropout=self.hyperparameter_dict['dropout_rate'])
+        self.rnn = nn.GRU(input_size=self.input_size, hidden_size=self.hidden_size, num_layers=self.num_layers, dropout=self.dropout_rate)
         # Linear compression layer
-        self.feature_extract = nn.Linear(in_features=self.hyperparameter_dict['hidden_size'] + self.embed_total_dims, out_features=1)
+        self.feature_extract = nn.Linear(in_features=self.hidden_size + self.embed_total_dims, out_features=1)
         self.feature_extract_activation = nn.ReLU()
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]

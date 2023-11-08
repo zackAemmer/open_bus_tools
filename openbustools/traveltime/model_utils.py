@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 
-from openbustools.traveltime.models import transformer
+from openbustools.traveltime.models import embedding, transformer
 from openbustools.traveltime.models.deeptte import DeepTTE
 from openbustools.traveltime import data_loader
 from openbustools import data_utils
@@ -42,31 +42,25 @@ def random_param_search(hyperparameter_sample_dict, model_names):
     return set_of_random_dicts
 
 
-def make_one_model(model_type, hyperparameter_dict, embed_dict, config, load_weights=False, weight_folder=None, fold_num=None, skip_gtfs=False):
-    # Declare base models
-    base_model_list = []
-    base_model_list.append(avg_speed.AvgHourlySpeedModel("AVG"))
-    base_model_list.append(persistent.PersistentTimeSeqModel("PER_TIM"))
-    if not skip_gtfs:
-        base_model_list.append(schedule.TimeTableModel("SCH"))
-    # Declare neural network models
+def make_model(model_type):
+    # # Declare base models
+    # base_model_list = []
+    # base_model_list.append(avg_speed.AvgHourlySpeedModel("AVG"))
+    # base_model_list.append(persistent.PersistentTimeSeqModel("PER_TIM"))
+    # if not skip_gtfs:
+    #     base_model_list.append(schedule.TimeTableModel("SCH"))
+    # # Declare neural network models
     if model_type=="FF":
         model = ff.FF_L(
             "FF",
             n_features=8,
-            hyperparameter_dict=hyperparameter_dict['FF'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.basic_collate_nosch,
-            config=config
         )
     elif model_type=="FF_GTFS":
         model = ff.FF_L(
             "FF_GTFS",
             n_features=14,
-            hyperparameter_dict=hyperparameter_dict['FF'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.basic_collate,
-            config=config
         )
     elif model_type=="FF_GRID":
         model = ff.FF_GRID_L(
@@ -75,28 +69,19 @@ def make_one_model(model_type, hyperparameter_dict, embed_dict, config, load_wei
             n_grid_features=3*3*1,
             # n_grid_features=3*3*3*3,
             grid_compression_size=8,
-            hyperparameter_dict=hyperparameter_dict['FF'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.basic_grid_collate,
-            config=config
         )
     elif model_type=="CONV":
         model = conv.CONV_L(
             "CONV",
             n_features=4,
-            hyperparameter_dict=hyperparameter_dict['CONV'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.sequential_collate_nosch,
-            config=config
         )
     elif model_type=="CONV_GTFS":
         model = conv.CONV_L(
             "CONV_GTFS",
             n_features=10,
-            hyperparameter_dict=hyperparameter_dict['CONV'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.sequential_collate,
-            config=config
         )
     elif model_type=="CONV_GRID":
         model = conv.CONV_GRID_L(
@@ -105,19 +90,17 @@ def make_one_model(model_type, hyperparameter_dict, embed_dict, config, load_wei
             n_grid_features=3*3*1,
             # n_grid_features=3*3*3*3,
             grid_compression_size=8,
-            hyperparameter_dict=hyperparameter_dict['CONV'],
-            embed_dict=embed_dict,
             collate_fn=data_loader.sequential_grid_collate,
-            config=config
         )
     elif model_type=="GRU":
         model = rnn.GRU_L(
             "GRU",
-            n_features=4,
-            hyperparameter_dict=hyperparameter_dict['GRU'],
-            embed_dict=embed_dict,
-            collate_fn=data_loader.sequential_collate_nosch,
-            config=config
+            input_size=4,
+            collate_fn=data_loader.collate_seq,
+            batch_size=embedding.HYPERPARAM_DICT['GRU']['batch_size'],
+            hidden_size=embedding.HYPERPARAM_DICT['GRU']['hidden_size'],
+            num_layers=embedding.HYPERPARAM_DICT['GRU']['num_layers'],
+            dropout_rate=embedding.HYPERPARAM_DICT['GRU']['dropout_rate'],
         )
     elif model_type=="GRU_GTFS":
         model = rnn.GRU_L(
@@ -184,44 +167,18 @@ def make_one_model(model_type, hyperparameter_dict, embed_dict, config, load_wei
             collate_fn=data_loader.deeptte_collate,
             config=config
         )
-    # Load weights if applicable
-    if load_weights:
-        new_base_model_list = []
-        for b in base_model_list:
-            new_base_model_list.append(data_utils.load_pkl(f"{weight_folder}../../../../../{b.model_name}_{fold_num}.pkl"))
-            base_model_list = new_base_model_list
-        last_ckpt = os.listdir(weight_folder)
-        if not torch.cuda.is_available():
-            model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}", map_location=torch.device('cpu')).eval()
-        else:
-            model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}").eval()
-    return base_model_list, model
-
-
-def geo_distance(lon1, lat1, lon2, lat2):
-    """
-    Calculate the great circle distance between two points
-    on the earth (specified in decimal degrees)
-    """
-    lon1, lat1, lon2, lat2 = map(radians, map(float, [lon1, lat1, lon2, lat2]))
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * asin(sqrt(a))
-    r = 6371
-    return c * r
-
-
-def normalize(x, key):
-    mean = config[key + '_mean']
-    std = config[key + '_std']
-    return (x - mean) / std
-
-
-def unnormalize(x, key):
-    mean = config[key + '_mean']
-    std = config[key + '_std']
-    return x * std + mean
+    # # Load weights if applicable
+    # if load_weights:
+    #     new_base_model_list = []
+    #     for b in base_model_list:
+    #         new_base_model_list.append(data_utils.load_pkl(f"{weight_folder}../../../../../{b.model_name}_{fold_num}.pkl"))
+    #         base_model_list = new_base_model_list
+    #     last_ckpt = os.listdir(weight_folder)
+    #     if not torch.cuda.is_available():
+    #         model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}", map_location=torch.device('cpu')).eval()
+    #     else:
+    #         model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}").eval()
+    return model
 
 
 def pad_sequence(sequences, lengths):

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from openbustools.traveltime import utils
+from openbustools.traveltime import model_utils
 
 
 class Net(nn.Module):

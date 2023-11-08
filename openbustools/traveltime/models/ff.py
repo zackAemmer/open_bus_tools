@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from torch import nn
 import lightning.pytorch as pl
 
 
@@ -18,22 +17,22 @@ class FF_L(pl.LightningModule):
         self.is_nn = True
         self.requires_grid = False
         self.train_time = 0.0
-        self.loss_fn = nn.HuberLoss()
+        self.loss_fn = torch.nn.HuberLoss()
         # Embeddings
         self.embed_total_dims = np.sum([self.embed_dict[key]['embed_dims'] for key in self.embed_dict.keys()]).astype('int32')
-        self.timeID_em = nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
-        self.weekID_em = nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
+        self.timeID_em = torch.nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
+        self.weekID_em = torch.nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
         # Feedforward
-        self.linear_relu_stack = nn.Sequential()
-        self.linear_relu_stack.append(nn.BatchNorm1d(self.n_features + self.embed_total_dims))
-        self.linear_relu_stack.append(nn.Linear(self.n_features + self.embed_total_dims, self.hyperparameter_dict['hidden_size']))
-        self.linear_relu_stack.append(nn.ReLU())
+        self.linear_relu_stack = torch.nn.Sequential()
+        self.linear_relu_stack.append(torch.nn.BatchNorm1d(self.n_features + self.embed_total_dims))
+        self.linear_relu_stack.append(torch.nn.Linear(self.n_features + self.embed_total_dims, self.hyperparameter_dict['hidden_size']))
+        self.linear_relu_stack.append(torch.nn.ReLU())
         for i in range(self.hyperparameter_dict['num_layers']):
-            self.linear_relu_stack.append(nn.Linear(self.hyperparameter_dict['hidden_size'], self.hyperparameter_dict['hidden_size']))
-            self.linear_relu_stack.append(nn.ReLU())
-        self.linear_relu_stack.append(nn.Dropout(p=self.hyperparameter_dict['dropout_rate']))
-        self.feature_extract = nn.Linear(self.hyperparameter_dict['hidden_size'], 1)
-        self.feature_extract_activation = nn.ReLU()
+            self.linear_relu_stack.append(torch.nn.Linear(self.hyperparameter_dict['hidden_size'], self.hyperparameter_dict['hidden_size']))
+            self.linear_relu_stack.append(torch.nn.ReLU())
+        self.linear_relu_stack.append(torch.nn.Dropout(p=self.hyperparameter_dict['dropout_rate']))
+        self.feature_extract = torch.nn.Linear(self.hyperparameter_dict['hidden_size'], 1)
+        self.feature_extract_activation = torch.nn.ReLU()
     def training_step(self, batch, batch_idx):
         x,y = batch
         x_em = x[0]
@@ -106,30 +105,30 @@ class FF_GRID_L(pl.LightningModule):
         self.is_nn = True
         self.requires_grid = True
         self.train_time = 0.0
-        self.loss_fn = nn.HuberLoss()
+        self.loss_fn = torch.nn.HuberLoss()
         # Embeddings
         self.embed_total_dims = np.sum([self.embed_dict[key]['embed_dims'] for key in self.embed_dict.keys()]).astype('int32')
-        self.timeID_em = nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
-        self.weekID_em = nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
+        self.timeID_em = torch.nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
+        self.weekID_em = torch.nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
         # Grid Feedforward
-        self.linear_relu_stack_grid = nn.Sequential(
-            nn.BatchNorm1d(self.n_grid_features),
-            nn.Linear(self.n_grid_features, self.hyperparameter_dict['hidden_size']),
-            nn.ReLU(),
-            nn.Linear(self.hyperparameter_dict['hidden_size'], self.grid_compression_size),
-            nn.ReLU()
+        self.linear_relu_stack_grid = torch.nn.Sequential(
+            torch.nn.BatchNorm1d(self.n_grid_features),
+            torch.nn.Linear(self.n_grid_features, self.hyperparameter_dict['hidden_size']),
+            torch.nn.ReLU(),
+            torch.nn.Linear(self.hyperparameter_dict['hidden_size'], self.grid_compression_size),
+            torch.nn.ReLU()
         )
         # Feedforward
-        self.linear_relu_stack = nn.Sequential()
-        self.linear_relu_stack.append(nn.BatchNorm1d(self.n_features + self.embed_total_dims + self.grid_compression_size))
-        self.linear_relu_stack.append(nn.Linear(self.n_features + self.embed_total_dims + self.grid_compression_size, self.hyperparameter_dict['hidden_size']))
-        self.linear_relu_stack.append(nn.ReLU())
+        self.linear_relu_stack = torch.nn.Sequential()
+        self.linear_relu_stack.append(torch.nn.BatchNorm1d(self.n_features + self.embed_total_dims + self.grid_compression_size))
+        self.linear_relu_stack.append(torch.nn.Linear(self.n_features + self.embed_total_dims + self.grid_compression_size, self.hyperparameter_dict['hidden_size']))
+        self.linear_relu_stack.append(torch.nn.ReLU())
         for i in range(self.hyperparameter_dict['num_layers']):
-            self.linear_relu_stack.append(nn.Linear(self.hyperparameter_dict['hidden_size'], self.hyperparameter_dict['hidden_size']))
-            self.linear_relu_stack.append(nn.ReLU())
-        self.linear_relu_stack.append(nn.Dropout(p=self.hyperparameter_dict['dropout_rate']))
-        self.feature_extract = nn.Linear(self.hyperparameter_dict['hidden_size'], 1)
-        self.feature_extract_activation = nn.ReLU()
+            self.linear_relu_stack.append(torch.nn.Linear(self.hyperparameter_dict['hidden_size'], self.hyperparameter_dict['hidden_size']))
+            self.linear_relu_stack.append(torch.nn.ReLU())
+        self.linear_relu_stack.append(torch.nn.Dropout(p=self.hyperparameter_dict['dropout_rate']))
+        self.feature_extract = torch.nn.Linear(self.hyperparameter_dict['hidden_size'], 1)
+        self.feature_extract_activation = torch.nn.ReLU()
     def training_step(self, batch, batch_idx):
         x,y = batch
         x_em = x[0]

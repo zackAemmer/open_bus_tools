@@ -66,16 +66,16 @@ def prepare_run(**kwargs):
         data = data[~data['shingle_id'].isin(toss_ids)].copy()
         # Calculate time features
         data['t'] = pd.to_datetime(data['locationtime'], unit='s', utc=True).dt.tz_convert(kwargs['timezone'])
-        data['t_dow'] = data['t'].dt.dayofweek
         data['t_year'] = data['t'].dt.year
         data['t_month'] = data['t'].dt.month
         data['t_day'] = data['t'].dt.day
         data['t_hour'] = data['t'].dt.hour
         data['t_min'] = data['t'].dt.minute
         data['t_sec'] = data['t'].dt.second
-        # For embedding
+        # For embeddings
+        data['t_day_of_week'] = data['t'].dt.dayofweek
         data['t_min_of_day'] = (data['t_hour']*60) + data['t_min']
-        # For calculating absolute time differences in trips
+        # For calculating absolute time differences in trips (midnight crossover)
         data['t_sec_of_day'] = data['t'] - datetime.datetime(min(data['t_year']), min(data['t_month']), min(data['t_day']), 0, tzinfo=ZoneInfo(kwargs['timezone']))
         data['t_sec_of_day'] = data['t_sec_of_day'].dt.total_seconds()
         # Get GTFS features
@@ -104,7 +104,7 @@ def prepare_run(**kwargs):
         # Scheduled time
         data['t_sec_of_day_start'] = data.groupby('shingle_id')[['t_sec_of_day']].transform('min')
         data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
-        # Calculate cumulative values
+        # Cumulative values
         unique_traj = data.groupby('shingle_id')
         data['cumul_time_s'] = unique_traj['calc_time_s'].cumsum()
         data['cumul_dist_km'] = unique_traj['calc_dist_km'].cumsum()

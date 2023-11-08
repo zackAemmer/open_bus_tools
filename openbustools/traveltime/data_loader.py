@@ -8,19 +8,42 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-NORM_COLS = [
-    "calc_speed_m_s",
+LABEL_FEATS = [
     "calc_time_s",
+    "cumul_time_s",
+]
+EMBED_FEATS = [
+    "t_min_of_day",
+    "t_day_of_week"
+]
+GPS_FEATS = [
+    "calc_speed_m_s",
     "calc_dist_km",
     "calc_bear_d",
     "x_cent",
     "y_cent",
-    "cumul_time_s",
-    "cumul_dist_km",
-    "calc_stop_dist_km"
-    "sch_time_s",
-    "passed_stops_n"
 ]
+STATIC_FEATS = [
+    "calc_stop_dist_km",
+    "sch_time_s",
+    "pass_stops_n",
+    "cumul_pass_stops_n"
+]
+REALTIME_FEATS = [
+    ""
+]
+
+
+def normalize(x, config_entry):
+    mean = config_entry[0]
+    std = config_entry[1]
+    return (x - mean) / std
+
+
+def unnormalize(x, config_entry):
+    mean = config_entry[0]
+    std = config_entry[1]
+    return x * std + mean
 
 
 def create_config(data, numeric_cols):
@@ -30,6 +53,7 @@ def create_config(data, numeric_cols):
         col_sd = np.std(data[col].to_numpy())
         config[col] = (col_mean, col_sd)
     return config
+
 
 class ContentDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing."""
@@ -44,107 +68,107 @@ class ContentDataset(Dataset):
         data = pd.concat(data)
         data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
         self.data = data
-        self.config = create_config(self.data, NORM_COLS)
+        self.config = create_config(self.data, LABEL_FEATS + GPS_FEATS + STATIC_FEATS)
     def __getitem__(self, index):
-        samp = self.data[self.data['shingle_id']==index]
-        label = samp['cumul_time_s'].to_numpy()[-1]
-        label_seq = samp['calc_time_s'].to_numpy()
-        # norm_label = (label - self.config['time_mean']) / self.config['time_std']
-        # label_seq = samp[:,self.time_calc_s_idx]
-        # norm_label_seq = (label_seq - self.config['time_calc_s_mean']) / self.config['time_calc_s_std']
-        return {"samp": samp, "label": label, "label_seq": label_seq}
+        sample_df = self.data[self.data['shingle_id']==index]
+        sample = {}
+        for k in LABEL_FEATS + GPS_FEATS + STATIC_FEATS:
+            sample[k] = normalize(sample_df[k].to_numpy(), self.config[k])
+        for k in EMBED_FEATS:
+            sample[k] = sample_df[k].to_numpy()[0]
+        return sample
     def __len__(self):
-        return np.max(self.data.shingle_id)
+        return np.max(self.data['shingle_id'].to_numpy())
 
 
-class LoadSliceDataset(Dataset):
-    def __init__(self, file_path, config, grid=None, holdout_routes=None, keep_only_holdout=False, add_grid_features=False, skip_gtfs=False):
-        self.file_path = file_path
-        self.config = config
-        self.grid = grid
-        self.holdout_routes = holdout_routes
-        self.keep_only_holdout = keep_only_holdout
-        self.add_grid_features = add_grid_features
-        self.skip_gtfs = skip_gtfs
-        # Necessary to convert from np array tabular format saved in h5 files
-        if not self.skip_gtfs:
-            self.col_names = FEATURE_COLS
-        else:
-            self.col_names = SKIP_FEATURE_COLS
-        # Cache column name indices
-        self.time_cumulative_s_idx = self.col_names.index("time_cumulative_s")
-        self.time_calc_s_idx = self.col_names.index("time_calc_s")
-        self.x_idx = self.col_names.index("x")
-        self.y_idx = self.col_names.index("y")
-        self.locationtime_idx = self.col_names.index("locationtime")
-        # Keep open files for the dataset
-        self.h5_lookup = {}
-        self.base_path = "/".join(self.file_path.split("/")[:-1])+"/"
-        self.train_or_test = self.file_path.split("/")[-1]
-        for filename in os.listdir(self.base_path):
-            if filename.startswith(self.train_or_test) and filename.endswith(".h5"):
-                self.h5_lookup[filename] = h5py.File(f"{self.base_path}{filename}", 'r')['tabular_data']
-        # Read shingle lookup corresponding to dataset
-        # This is a list of keys that will be filtered and each point to a sample
-        with open(f"{self.file_path}_shingle_config.json") as f:
-            self.shingle_lookup = json.load(f)
-            self.shingle_keys = list(self.shingle_lookup.keys())
-        # Filter out (or keep exclusively) any routes that are used for generalization tests
-        if self.holdout_routes is not None:
-            holdout_idxs = [self.shingle_lookup[x]['route_id'] in self.holdout_routes for x in self.shingle_lookup]
-            if self.keep_only_holdout==True:
-                self.shingle_keys = [i for (i,v) in zip(self.shingle_keys, holdout_idxs) if v]
-            else:
-                self.shingle_keys = [i for (i,v) in zip(self.shingle_keys, holdout_idxs) if not v]
-    def __getitem__(self, index):
-        # Get information on shingle file location and lines; read specific shingle lines from specific shingle file
-        samp_dict = self.shingle_lookup[self.shingle_keys[index]]
-        samp = self.h5_lookup[f"{self.train_or_test}_data_{samp_dict['network']}_{samp_dict['file_num']}.h5"][samp_dict['start_idx']:samp_dict['end_idx']]
-        label = samp[-1,self.time_cumulative_s_idx]
-        norm_label = (label - self.config['time_mean']) / self.config['time_std']
-        label_seq = samp[:,self.time_calc_s_idx]
-        norm_label_seq = (label_seq - self.config['time_calc_s_mean']) / self.config['time_calc_s_std']
-        if not self.add_grid_features:
-            return {"samp": samp, "norm_label": norm_label, "norm_label_seq": norm_label_seq}
-        else:
-            xbin_idxs, ybin_idxs = self.grid.digitize_points(samp[:,self.x_idx], samp[:,self.y_idx])
-            grid_features = self.grid.get_recent_points(xbin_idxs, ybin_idxs, samp[:,self.locationtime_idx], 3)
-            return {"samp": samp, "grid": grid_features, "norm_label": norm_label, "norm_label_seq": norm_label_seq}
-    def __len__(self):
-        return len(self.shingle_keys)
-    def get_all_samples(self, keep_cols, indexes=None):
-        # Read all h5 files in run base directory; get all point obs
-        # Much faster way to get all points, but does not maintain unique samples
-        res = []
-        for k in list(self.h5_lookup.keys()):
-            df = self.h5_lookup[k][:]
-            df = pd.DataFrame(df, columns=self.col_names)
-            df['shingle_id'] = df['shingle_id'].astype(int)
-            df = df[keep_cols]
-            res.append(df)
-        res = pd.concat(res)
-        if indexes is not None:
-            # Indexes are in order, but shingle_id's are not; get shingle id for each keep index and filter
-            keep_shingles = [self.shingle_lookup[self.shingle_keys[i]]['shingle_id'] for i in indexes]
-            res = res[res['shingle_id'].isin(keep_shingles)]
-        return res
-    def get_all_samples_shingle_accurate(self, n_samples):
-        # Iterate every item in dataset
-        # Slower way to get data out, but keeps all samples unique
-        idxs = sample(list(np.arange(self.__len__())), n_samples)
-        z = []
-        for i in idxs:
-            z_data = pd.DataFrame(self.__getitem__(i)['samp'], columns=self.col_names)
-            z_dict = self.shingle_lookup[str(i)]
-            z_data['file'] = z_dict['file']
-            z_data['trip_id'] = z_dict['trip_id']
-            z_data['route_id'] = z_dict['route_id']
-            z_data['file_num'] = z_dict['file_num']
-            z.append(z_data)
-        res = pd.concat(z)
-        res['stop_x'] = res['stop_x_cent'] + self.config['coord_ref_center'][0][0]
-        res['stop_y'] = res['stop_y_cent'] + self.config['coord_ref_center'][0][1]
-        return res
+# class LoadSliceDataset(Dataset):
+#     def __init__(self, file_path, config, grid=None, holdout_routes=None, keep_only_holdout=False, add_grid_features=False, skip_gtfs=False):
+#         self.file_path = file_path
+#         self.config = config
+#         self.grid = grid
+#         self.holdout_routes = holdout_routes
+#         self.keep_only_holdout = keep_only_holdout
+#         self.add_grid_features = add_grid_features
+#         self.skip_gtfs = skip_gtfs
+#         # Necessary to convert from np array tabular format saved in h5 files
+#         if not self.skip_gtfs:
+#             self.col_names = FEATURE_COLS
+#         else:
+#             self.col_names = SKIP_FEATURE_COLS
+#         # Cache column name indices
+#         self.time_cumulative_s_idx = self.col_names.index("time_cumulative_s")
+#         self.time_calc_s_idx = self.col_names.index("time_calc_s")
+#         self.x_idx = self.col_names.index("x")
+#         self.y_idx = self.col_names.index("y")
+#         self.locationtime_idx = self.col_names.index("locationtime")
+#         # Keep open files for the dataset
+#         self.h5_lookup = {}
+#         self.base_path = "/".join(self.file_path.split("/")[:-1])+"/"
+#         self.train_or_test = self.file_path.split("/")[-1]
+#         for filename in os.listdir(self.base_path):
+#             if filename.startswith(self.train_or_test) and filename.endswith(".h5"):
+#                 self.h5_lookup[filename] = h5py.File(f"{self.base_path}{filename}", 'r')['tabular_data']
+#         # Read shingle lookup corresponding to dataset
+#         # This is a list of keys that will be filtered and each point to a sample
+#         with open(f"{self.file_path}_shingle_config.json") as f:
+#             self.shingle_lookup = json.load(f)
+#             self.shingle_keys = list(self.shingle_lookup.keys())
+#         # Filter out (or keep exclusively) any routes that are used for generalization tests
+#         if self.holdout_routes is not None:
+#             holdout_idxs = [self.shingle_lookup[x]['route_id'] in self.holdout_routes for x in self.shingle_lookup]
+#             if self.keep_only_holdout==True:
+#                 self.shingle_keys = [i for (i,v) in zip(self.shingle_keys, holdout_idxs) if v]
+#             else:
+#                 self.shingle_keys = [i for (i,v) in zip(self.shingle_keys, holdout_idxs) if not v]
+#     def __getitem__(self, index):
+#         # Get information on shingle file location and lines; read specific shingle lines from specific shingle file
+#         samp_dict = self.shingle_lookup[self.shingle_keys[index]]
+#         samp = self.h5_lookup[f"{self.train_or_test}_data_{samp_dict['network']}_{samp_dict['file_num']}.h5"][samp_dict['start_idx']:samp_dict['end_idx']]
+#         label = samp[-1,self.time_cumulative_s_idx]
+#         norm_label = (label - self.config['time_mean']) / self.config['time_std']
+#         label_seq = samp[:,self.time_calc_s_idx]
+#         norm_label_seq = (label_seq - self.config['time_calc_s_mean']) / self.config['time_calc_s_std']
+#         if not self.add_grid_features:
+#             return {"samp": samp, "norm_label": norm_label, "norm_label_seq": norm_label_seq}
+#         else:
+#             xbin_idxs, ybin_idxs = self.grid.digitize_points(samp[:,self.x_idx], samp[:,self.y_idx])
+#             grid_features = self.grid.get_recent_points(xbin_idxs, ybin_idxs, samp[:,self.locationtime_idx], 3)
+#             return {"samp": samp, "grid": grid_features, "norm_label": norm_label, "norm_label_seq": norm_label_seq}
+#     def __len__(self):
+#         return len(self.shingle_keys)
+#     def get_all_samples(self, keep_cols, indexes=None):
+#         # Read all h5 files in run base directory; get all point obs
+#         # Much faster way to get all points, but does not maintain unique samples
+#         res = []
+#         for k in list(self.h5_lookup.keys()):
+#             df = self.h5_lookup[k][:]
+#             df = pd.DataFrame(df, columns=self.col_names)
+#             df['shingle_id'] = df['shingle_id'].astype(int)
+#             df = df[keep_cols]
+#             res.append(df)
+#         res = pd.concat(res)
+#         if indexes is not None:
+#             # Indexes are in order, but shingle_id's are not; get shingle id for each keep index and filter
+#             keep_shingles = [self.shingle_lookup[self.shingle_keys[i]]['shingle_id'] for i in indexes]
+#             res = res[res['shingle_id'].isin(keep_shingles)]
+#         return res
+#     def get_all_samples_shingle_accurate(self, n_samples):
+#         # Iterate every item in dataset
+#         # Slower way to get data out, but keeps all samples unique
+#         idxs = sample(list(np.arange(self.__len__())), n_samples)
+#         z = []
+#         for i in idxs:
+#             z_data = pd.DataFrame(self.__getitem__(i)['samp'], columns=self.col_names)
+#             z_dict = self.shingle_lookup[str(i)]
+#             z_data['file'] = z_dict['file']
+#             z_data['trip_id'] = z_dict['trip_id']
+#             z_data['route_id'] = z_dict['route_id']
+#             z_data['file_num'] = z_dict['file_num']
+#             z.append(z_data)
+#         res = pd.concat(z)
+#         res['stop_x'] = res['stop_x_cent'] + self.config['coord_ref_center'][0][0]
+#         res['stop_y'] = res['stop_y_cent'] + self.config['coord_ref_center'][0][1]
+#         return res
 
 
 def avg_collate(batch):
@@ -219,19 +243,17 @@ def basic_grid_collate(batch):
         # X_gr[:,i,:,:,:] = torch.nan_to_num(X_gr[:,i,:,:,:], m)
     return [X_em, X_ct, X_gr], y
 
-def sequential_collate(batch):
-    y_col = "time_calc_s"
-    em_cols = ["timeID","weekID"]
-    ct_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","stop_x_cent","stop_y_cent","passed_stops_n","bearing","dist_calc_km","dist_calc_km"]
-    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['norm_label_seq'], dtype=torch.float) for b in batch], batch_first=True)
-    batch = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
-    X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
-    first = torch.cat([b[0,:].unsqueeze(0) for b in batch], axis=0)
-    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
-    batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True)
-    X_ct = batch[:,:,([FEATURE_COLS.index(z) for z in ct_cols])]
-    return [X_em, X_ct, X_sl], y
-def sequential_collate_nosch(batch):
+def collate_seq(batch):
+    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
+    X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
+    X_ct = torch.zeros((torch.max(X_sl), len(batch), len(GPS_FEATS)))
+    for i,col in enumerate(GPS_FEATS):
+        X_ct[:,:,i] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[col], dtype=torch.float) for b in batch])
+    return (X_em, X_ct, X_sl), y
+def collate_seq_static(batch):
     y_col = "time_calc_s"
     em_cols = ["timeID","weekID"]
     ct_cols = ["x_cent","y_cent","bearing","dist_calc_km"]
@@ -243,7 +265,7 @@ def sequential_collate_nosch(batch):
     batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True)
     X_ct = batch[:,:,([FEATURE_COLS.index(z) for z in ct_cols])]
     return [X_em, X_ct, X_sl], y
-def sequential_grid_collate(batch):
+def collate_seq_realtime(batch):
     y_col = "time_calc_s"
     em_cols = ["timeID","weekID"]
     ct_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","stop_x_cent","stop_y_cent","passed_stops_n","bearing","dist_calc_km","dist_calc_km"]

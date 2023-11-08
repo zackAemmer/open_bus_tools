@@ -9,6 +9,7 @@
 /results/*
 /.vscode/*
 /dist/*
+/logs/*
 secret.py
 .DS_Store
 .env

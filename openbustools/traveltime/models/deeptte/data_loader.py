@@ -1,5 +1,5 @@
 import time
-import utils
+import openbustools.traveltime.model_utils as model_utils
 
 import torch
 import torch.nn as nn
@@ -90,7 +90,7 @@ def collate_fn(data):
     ### Since these features are continuous, then normalise them
     for key in stat_attrs:
         x = torch.FloatTensor([item[key] for item in data])
-        attr[key] = utils.normalize(x, key)
+        attr[key] = model_utils.normalize(x, key)
 
     for key in info_attrs:
         attr[key] = torch.LongTensor([item[key] for item in data])
@@ -108,7 +108,7 @@ def collate_fn(data):
         padded[mask] = np.concatenate(seqs)
 
         if key in traj_attrs:
-            padded = utils.normalize(padded, key)
+            padded = model_utils.normalize(padded, key)
 
         ### Convert to torch tensor
         padded = torch.from_numpy(padded).float()
