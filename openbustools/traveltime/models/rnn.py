@@ -19,16 +19,14 @@ class GRU(pl.LightningModule):
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
         self.is_nn = True
-        self.requires_grid = False
-        self.train_time = 0.0
         self.loss_fn = masked_loss.MaskedHuberLoss()
         # Embeddings
         self.min_em = embedding.MinuteEmbedding()
         self.day_em = embedding.DayEmbedding()
         self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
-        # Recurrent layer
+        # Recurrent
         self.rnn = nn.GRU(input_size=self.input_size, hidden_size=self.hidden_size, num_layers=self.num_layers, dropout=self.dropout_rate)
-        # Linear compression layer
+        # Linear compression/feature extraction
         self.feature_extract = nn.Linear(in_features=self.hidden_size + self.embed_total_dims, out_features=1)
         self.feature_extract_activation = nn.ReLU()
     def training_step(self, batch):
@@ -40,7 +38,7 @@ class GRU(pl.LightningModule):
         x_min_em = self.min_em(x_em[:,0])
         x_day_em = self.day_em(x_em[:,1])
         x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
-        x_em = x_em.expand(x_ct.shape[0], -1, -1)
+        x_em = x_em.expand(x_ct.shape[0],-1,-1)
         # Get recurrent pred
         x_ct, hidden_prev = self.rnn(x_ct)
         # Combine all variables
@@ -118,27 +116,24 @@ class GRU(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
+
 class GRU_REALTIME(pl.LightningModule):
-    def __init__(self, model_name, n_features, n_grid_features, grid_compression_size, hyperparameter_dict, embed_dict, collate_fn, config):
+    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
         super(GRU_REALTIME, self).__init__()
-        self.save_hyperparameters()
         self.model_name = model_name
-        self.n_features = n_features
-        self.n_grid_features = n_grid_features
-        self.grid_compression_size = grid_compression_size
-        self.hyperparameter_dict = hyperparameter_dict
-        self.batch_size = int(self.hyperparameter_dict['batch_size'])
-        self.embed_dict = embed_dict
+        self.input_size = input_size
         self.collate_fn = collate_fn
-        self.config = config
+        self.save_hyperparameters()
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
         self.is_nn = True
-        self.requires_grid = True
-        self.train_time = 0.0
         self.loss_fn = masked_loss.MaskedHuberLoss()
         # Embeddings
-        self.embed_total_dims = np.sum([self.embed_dict[key]['embed_dims'] for key in self.embed_dict.keys()]).astype('int32')
-        self.timeID_em = nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
-        self.weekID_em = nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
+        self.min_em = embedding.MinuteEmbedding()
+        self.day_em = embedding.DayEmbedding()
+        self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
         # Grid Feedforward
         self.grid_norm = nn.BatchNorm1d(self.n_grid_features)
         self.linear_relu_stack_grid = nn.Sequential(

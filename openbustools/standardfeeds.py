@@ -184,7 +184,7 @@ def get_scheduled_arrival(realtime, static):
     # Sort the data points from aggregated trips back into their respective shingles
     original_order = np.argsort(res[:,0])
     res = res[original_order,:]
-    return res[:,1], res[:,2]
+    return res[:,1], res[:,2].astype(float)
 
 
 def latest_available_static(day, static_folder):

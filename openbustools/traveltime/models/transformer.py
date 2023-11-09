@@ -4,58 +4,59 @@ from torch import nn
 import lightning.pytorch as pl
 
 from openbustools import data_utils
-from openbustools.traveltime import masked_loss, pos_encodings
+from openbustools.traveltime import masked_loss, model_utils, pos_encodings
+from openbustools.traveltime.models import embedding
 
 
-class TRSF_L(pl.LightningModule):
-    def __init__(self, model_name, n_features, hyperparameter_dict, embed_dict, collate_fn, config):
-        super(TRSF_L, self).__init__()
-        self.save_hyperparameters()
+class TRSF(pl.LightningModule):
+    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+        super(TRSF, self).__init__()
         self.model_name = model_name
-        self.n_features = n_features
-        self.hyperparameter_dict = hyperparameter_dict
-        self.batch_size = int(self.hyperparameter_dict['batch_size'])
-        self.embed_dict = embed_dict
+        self.input_size = input_size
         self.collate_fn = collate_fn
-        self.config = config
+        self.save_hyperparameters()
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.dropout_rate = dropout_rate
         self.is_nn = True
-        self.requires_grid = False
-        self.train_time = 0.0
         self.loss_fn = masked_loss.MaskedHuberLoss()
         # Embeddings
-        self.embed_total_dims = np.sum([self.embed_dict[key]['embed_dims'] for key in self.embed_dict.keys()]).astype('int32')
-        self.timeID_em = nn.Embedding(self.embed_dict['timeID']['vocab_size'], self.embed_dict['timeID']['embed_dims'])
-        self.weekID_em = nn.Embedding(self.embed_dict['weekID']['vocab_size'], self.embed_dict['weekID']['embed_dims'])
-        # Positional encoding layer
-        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.n_features)
-        # Encoder layer
-        self.norm = nn.BatchNorm1d(self.n_features)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=self.n_features, nhead=2, dim_feedforward=self.hyperparameter_dict['hidden_size'], batch_first=True, dropout=self.hyperparameter_dict['dropout_rate'])
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.hyperparameter_dict['num_layers'])
-        # Linear compression layer
-        self.feature_extract = nn.Linear(self.n_features + self.embed_total_dims, 1)
+        self.min_em = embedding.MinuteEmbedding()
+        self.day_em = embedding.DayEmbedding()
+        self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
+        # Positional encoding
+        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.hidden_size)
+        # Reshape for multihead attention
+        self.reshape = nn.Linear(in_features=self.input_size, out_features=self.hidden_size)
+        # Encoder
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=self.hidden_size, nhead=4, dim_feedforward=self.hidden_size, dropout=self.dropout_rate)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=self.num_layers)
+        # Linear compression/feature extraction
+        self.feature_extract = nn.Linear(in_features=self.hidden_size + self.embed_total_dims, out_features=1)
         self.feature_extract_activation = nn.ReLU()
-        # self.logger.experiments.log_graph(model=self, input_array=prototype_array)
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
         x_sl = x[2]
         # Embed categorical variables
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        x_em = torch.cat((timeID_embedded,weekID_embedded), dim=1).unsqueeze(1)
-        x_em = x_em.expand(-1, x_ct.shape[1], -1)
-        # Get transformer prediction
-        x_ct = torch.swapaxes(x_ct, 1, 2)
-        x_ct = self.norm(x_ct)
-        x_ct = torch.swapaxes(x_ct, 1, 2)
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
+        x_em = x_em.expand(x_ct.shape[0],-1,-1)
+        # Get transformer pred
+        x_ct = self.reshape(x_ct)
+        x_ct = torch.swapaxes(x_ct, 0, 1)
         x_ct = self.pos_encoder(x_ct)
+        x_ct = torch.swapaxes(x_ct, 0, 1)
         x_ct = self.transformer_encoder(x_ct)
         # Combine all variables
         out = torch.cat([x_em, x_ct], dim=2)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
-        mask = data_utils.create_tensor_mask(x_sl, self.device)
+        # Masked loss; init mask here since module knows device
+        mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
+        mask = model_utils.fill_tensor_mask(mask, x_sl)
         loss = self.loss_fn(out, y, mask)
         self.log_dict(
             {
@@ -64,30 +65,31 @@ class TRSF_L(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
-        # for name, param in self.named_parameters():
-        #     self.logger.experiment.add_histogram(name, param, self.current_epoch)
         return loss
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
         x_sl = x[2]
         # Embed categorical variables
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        x_em = torch.cat((timeID_embedded,weekID_embedded), dim=1).unsqueeze(1)
-        x_em = x_em.expand(-1, x_ct.shape[1], -1)
-        # Get transformer prediction
-        x_ct = torch.swapaxes(x_ct, 1, 2)
-        x_ct = self.norm(x_ct)
-        x_ct = torch.swapaxes(x_ct, 1, 2)
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
+        x_em = x_em.expand(x_ct.shape[0],-1,-1)
+        # Get transformer pred
+        x_ct = self.reshape(x_ct)
+        x_ct = torch.swapaxes(x_ct, 0, 1)
         x_ct = self.pos_encoder(x_ct)
+        x_ct = torch.swapaxes(x_ct, 0, 1)
         x_ct = self.transformer_encoder(x_ct)
         # Combine all variables
         out = torch.cat([x_em, x_ct], dim=2)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
-        mask = data_utils.create_tensor_mask(x_sl, self.device)
+        # Masked loss; init mask here since module knows device
+        mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
+        mask = model_utils.fill_tensor_mask(mask, x_sl)
         loss = self.loss_fn(out, y, mask)
         self.log_dict(
             {
@@ -96,41 +98,46 @@ class TRSF_L(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
-    def predict_step(self, batch, batch_idx):
+    def predict_step(self, batch):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
         x_sl = x[2]
         # Embed categorical variables
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        x_em = torch.cat((timeID_embedded,weekID_embedded), dim=1).unsqueeze(1)
-        x_em = x_em.expand(-1, x_ct.shape[1], -1)
-        # Get transformer prediction
-        x_ct = torch.swapaxes(x_ct, 1, 2)
-        x_ct = self.norm(x_ct)
-        x_ct = torch.swapaxes(x_ct, 1, 2)
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        x_em = torch.cat((x_min_em, x_day_em), dim=1).unsqueeze(0)
+        x_em = x_em.expand(x_ct.shape[0], -1, -1)
+        # Get transformer pred
+        x_ct = self.reshape(x_ct)
+        x_ct = torch.swapaxes(x_ct, 0, 1)
         x_ct = self.pos_encoder(x_ct)
+        x_ct = torch.swapaxes(x_ct, 0, 1)
         x_ct = self.transformer_encoder(x_ct)
         # Combine all variables
         out = torch.cat([x_em, x_ct], dim=2)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
-        mask = data_utils.create_tensor_mask(x_sl, self.device, drop_first=False)
+        # Masked loss; init mask here since module knows device
+        mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
+        mask = model_utils.fill_tensor_mask(mask, x_sl)
+        # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
-        out  = (out.detach().cpu().numpy() * self.config['time_calc_s_std']) + self.config['time_calc_s_mean']
-        y = (y.detach().cpu().numpy() * self.config['time_calc_s_std']) + self.config['time_calc_s_mean']
-        out_agg = data_utils.aggregate_tts(out, mask)
-        y_agg = data_utils.aggregate_tts(y, mask)
-        return {"out_agg":out_agg, "y_agg":y_agg, "out":out, "y":y, "mask":mask}
+        out = out.detach().cpu().numpy()
+        y = y.detach().cpu().numpy()
+        # out_agg = data_utils.aggregate_tts(out, mask)
+        # y_agg = data_utils.aggregate_tts(y, mask)
+        return {"pred":out, "label":y, "mask":mask}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-class TRSF_GRID_L(pl.LightningModule):
+
+class TRSF_REALTIME(pl.LightningModule):
     def __init__(self, model_name, n_features, n_grid_features, grid_compression_size, hyperparameter_dict, embed_dict, collate_fn, config):
-        super(TRSF_GRID_L, self).__init__()
+        super(TRSF_REALTIME, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
         self.n_features = n_features

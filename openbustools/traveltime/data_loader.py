@@ -56,7 +56,7 @@ def create_config(data, numeric_cols):
 
 
 class ContentDataset(Dataset):
-    """Load all data into memory as dataframe, provide samples by indexing."""
+    """Load all data into memory as dataframe, provide samples by indexing groups."""
     def __init__(self, data_folder, dates, grid=None, add_grid_features=False, skip_gtfs=False):
         self.grid = grid
         self.add_grid_features = add_grid_features
@@ -83,6 +83,178 @@ class ContentDataset(Dataset):
         return sample
     def __len__(self):
         return np.max(self.data.index.to_numpy())
+
+
+def collate_avg(batch):
+    cols = ["speed_m_s","dist_calc_km","timeID_s","time_cumulative_s"]
+    col_idxs = [FEATURE_COLS.index(cname) for cname in cols]
+    avg_speeds = [np.mean(b['samp'][:,col_idxs[0]]) for b in batch]
+    tot_dists = [np.sum(b['samp'][:,col_idxs[1]])*1000 for b in batch]
+    start_times = [b['samp'][0,col_idxs[2]]//3600 for b in batch]
+    tot_times = [b['samp'][-1,col_idxs[3]] for b in batch]
+    return (avg_speeds, tot_dists, start_times, tot_times)
+
+
+def collate_sch(batch):
+    cols = ["scheduled_time_s","time_cumulative_s"]
+    col_idxs = [FEATURE_COLS.index(cname) for cname in cols]
+    sch_times = [b['samp'][-1,col_idxs[0]] for b in batch]
+    tot_times = [b['samp'][-1,col_idxs[1]] for b in batch]
+    return (sch_times, tot_times)
+
+
+def collate_per(batch):
+    seq_lens = [b['samp'].shape[0] for b in batch]
+    cols = ["time_cumulative_s"]
+    col_idxs = [FEATURE_COLS.index(cname) for cname in cols]
+    tot_times = [b['samp'][-1,col_idxs[0]] for b in batch]
+    return (seq_lens, tot_times)
+
+
+def collate(batch):
+    y = torch.tensor([b['cumul_time_s'][-1] for b in batch], dtype=torch.float)
+    X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
+    X_ct = torch.zeros((len(batch), len(GPS_FEATS)*2))
+    for i,col in enumerate(GPS_FEATS):
+        X_ct[:,i] = torch.tensor([b[col][0] for b in batch], dtype=torch.float)
+        X_ct[:,i+len(GPS_FEATS)] = torch.tensor([b[col][-1] for b in batch], dtype=torch.float)
+    return (X_em, X_ct), y
+
+
+def collate_static(batch):
+    y = torch.tensor([b['cumul_time_s'][-1] for b in batch], dtype=torch.float)
+    X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
+    X_ct = torch.zeros((len(batch), (len(GPS_FEATS)+len(STATIC_FEATS))*2))
+    for i,col in enumerate(GPS_FEATS+STATIC_FEATS):
+        X_ct[:,i] = torch.tensor([b[col][0] for b in batch], dtype=torch.float)
+        X_ct[:,i+len(GPS_FEATS)+len(STATIC_FEATS)] = torch.tensor([b[col][-1] for b in batch], dtype=torch.float)
+    return (X_em, X_ct), y
+
+
+def collate_realtime(batch):
+    y_col = "time_cumulative_s"
+    em_cols = ["timeID","weekID"]
+    first_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","passed_stops_n","speed_m_s","bearing"]
+    last_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","passed_stops_n","dist_cumulative_km","bearing"]
+    y = torch.tensor([b['norm_label'] for b in batch], dtype=torch.float)
+    batch_ct = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
+    first = torch.cat([b[0,:].unsqueeze(0) for b in batch_ct], axis=0)
+    last = torch.cat([b[-1,:].unsqueeze(0) for b in batch_ct], axis=0)
+    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
+    X_ct_first = first[:,([FEATURE_COLS.index(z) for z in first_cols])]
+    X_ct_last = last[:,([FEATURE_COLS.index(z) for z in last_cols])]
+    X_ct = torch.cat([X_ct_first, X_ct_last], axis=1)
+    # Get speed/bearing/obs age from grid results; average out all values across timesteps; 1 value per cell/obs/variable
+    X_gr = torch.cat([torch.nanmean(torch.tensor(z['grid'], dtype=torch.float)[:,3:,:], dim=0).unsqueeze(0) for z in batch])
+    # X_gr = torch.cat([torch.nanmean(torch.tensor(z['grid'], dtype=torch.float)[:,3:,:,:,:], dim=0).unsqueeze(0) for z in batch])
+    # Replace any nans with the average for that feature
+    means = torch.nanmean(torch.swapaxes(X_gr, 0, 1).flatten(1), dim=1)
+    for i,m in enumerate(means):
+        X_gr[:,i,:] = torch.nan_to_num(X_gr[:,i,:], m)
+        # X_gr[:,i,:,:,:] = torch.nan_to_num(X_gr[:,i,:,:,:], m)
+    return [X_em, X_ct, X_gr], y
+
+
+def collate_seq(batch):
+    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
+    X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
+    X_ct = torch.zeros((torch.max(X_sl), len(batch), len(GPS_FEATS)))
+    for i,col in enumerate(GPS_FEATS):
+        X_ct[:,:,i] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[col], dtype=torch.float) for b in batch])
+    return (X_em, X_ct, X_sl), y
+
+
+def collate_seq_static(batch):
+    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
+    X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
+    X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
+    X_ct = torch.zeros((torch.max(X_sl), len(batch), len(GPS_FEATS+STATIC_FEATS)))
+    for i,col in enumerate(GPS_FEATS+STATIC_FEATS):
+        X_ct[:,:,i] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[col], dtype=torch.float) for b in batch])
+    return (X_em, X_ct, X_sl), y
+
+
+def collate_seq_realtime(batch):
+    y_col = "time_calc_s"
+    em_cols = ["timeID","weekID"]
+    ct_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","stop_x_cent","stop_y_cent","passed_stops_n","bearing","dist_calc_km","dist_calc_km"]
+    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['norm_label_seq'], dtype=torch.float) for b in batch], batch_first=True)
+    batch_ct = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
+    batch_gr = [torch.tensor(b['grid'], dtype=torch.float) for b in batch]
+    X_sl = torch.tensor([len(b) for b in batch_ct], dtype=torch.int)
+    first = torch.cat([b[0,:].unsqueeze(0) for b in batch_ct], axis=0)
+    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
+    batch_ct = torch.nn.utils.rnn.pad_sequence(batch_ct, batch_first=True)
+    X_ct = batch_ct[:,:,([FEATURE_COLS.index(z) for z in ct_cols])]
+    # Get speed/bearing/obs age from grid results; average out all values across timesteps; 1 value per cell/obs/variable
+    X_gr = [b[:,3:,:] for b in batch_gr]
+    # X_gr = [b[:,3:,:,:,:] for b in batch_gr]
+    X_gr = torch.nn.utils.rnn.pad_sequence(X_gr, batch_first=True)
+    # Replace any nans with the average for that feature
+    means = torch.nanmean(torch.swapaxes(X_gr, 0, 2).flatten(1), dim=1)
+    for i,m in enumerate(means):
+        X_gr[:,:,i,:] = torch.nan_to_num(X_gr[:,:,i,:], m)
+        # X_gr[:,:,i,:,:,:] = torch.nan_to_num(X_gr[:,:,i,:,:,:], m)
+    return [X_em, X_ct, X_gr, X_sl], y
+
+
+def collate_deeptte(data):
+    stat_attrs = ['dist_cumulative_km', 'time_cumulative_s']
+    stat_names = ['dist','time']
+    info_attrs = ['weekID', 'timeID']
+    traj_attrs = ['y_cent','x_cent','time_calc_s','dist_calc_km','bearing','scheduled_time_s','stop_dist_km','stop_x_cent','stop_y_cent','passed_stops_n']
+    attr, traj = {}, {}
+    batch_ct = [torch.tensor(b['samp']) for b in data]
+    lens = np.array([len(b) for b in batch_ct])
+    for n,key in zip(stat_names, stat_attrs):
+        attr[n] = torch.FloatTensor([d['samp'][-1,FEATURE_COLS.index(key)] for d in data])
+    for key in info_attrs:
+        attr[key] = torch.LongTensor([int(d['samp'][0,FEATURE_COLS.index(key)]) for d in data])
+    for key in traj_attrs:
+        seqs = [d['samp'][:,FEATURE_COLS.index(key)] for d in data]
+        seqs = np.asarray(seqs, dtype=object)
+        mask = np.arange(lens.max()) < lens[:, None]
+        padded = np.zeros(mask.shape, dtype=np.float32)
+        padded[mask] = np.concatenate(seqs)
+        padded = torch.from_numpy(padded).float()
+        traj[key] = padded
+    lens = lens.tolist()
+    traj['lens'] = lens
+    return [attr, traj]
+
+
+def collate_deeptte_static(data):
+    stat_attrs = ['dist_cumulative_km', 'time_cumulative_s']
+    stat_names = ['dist','time']
+    info_attrs = ['weekID', 'timeID']
+    traj_attrs = ['y_cent', 'x_cent', 'time_calc_s', 'dist_calc_km']
+    attr, traj = {}, {}
+    batch_ct = [torch.tensor(b['samp']) for b in data]
+    lens = np.array([len(b) for b in batch_ct])
+    for n,key in zip(stat_names, stat_attrs):
+        attr[n] = torch.FloatTensor([d['samp'][-1,FEATURE_COLS.index(key)] for d in data])
+    for key in info_attrs:
+        attr[key] = torch.LongTensor([int(d['samp'][0,FEATURE_COLS.index(key)]) for d in data])
+    for key in traj_attrs:
+        seqs = [d['samp'][:,FEATURE_COLS.index(key)] for d in data]
+        seqs = np.asarray(seqs, dtype=object)
+        mask = np.arange(lens.max()) < lens[:, None]
+        padded = np.zeros(mask.shape, dtype=np.float32)
+        padded[mask] = np.concatenate(seqs)
+        padded = torch.from_numpy(padded).float()
+        traj[key] = padded
+    lens = lens.tolist()
+    traj['lens'] = lens
+    return [attr, traj]
 
 
 # class LoadSliceDataset(Dataset):
@@ -173,168 +345,3 @@ class ContentDataset(Dataset):
 #         res['stop_x'] = res['stop_x_cent'] + self.config['coord_ref_center'][0][0]
 #         res['stop_y'] = res['stop_y_cent'] + self.config['coord_ref_center'][0][1]
 #         return res
-
-
-def avg_collate(batch):
-    cols = ["speed_m_s","dist_calc_km","timeID_s","time_cumulative_s"]
-    col_idxs = [FEATURE_COLS.index(cname) for cname in cols]
-    avg_speeds = [np.mean(b['samp'][:,col_idxs[0]]) for b in batch]
-    tot_dists = [np.sum(b['samp'][:,col_idxs[1]])*1000 for b in batch]
-    start_times = [b['samp'][0,col_idxs[2]]//3600 for b in batch]
-    tot_times = [b['samp'][-1,col_idxs[3]] for b in batch]
-    return (avg_speeds, tot_dists, start_times, tot_times)
-def schedule_collate(batch):
-    cols = ["scheduled_time_s","time_cumulative_s"]
-    col_idxs = [FEATURE_COLS.index(cname) for cname in cols]
-    sch_times = [b['samp'][-1,col_idxs[0]] for b in batch]
-    tot_times = [b['samp'][-1,col_idxs[1]] for b in batch]
-    return (sch_times, tot_times)
-def persistent_collate(batch):
-    seq_lens = [b['samp'].shape[0] for b in batch]
-    cols = ["time_cumulative_s"]
-    col_idxs = [FEATURE_COLS.index(cname) for cname in cols]
-    tot_times = [b['samp'][-1,col_idxs[0]] for b in batch]
-    return (seq_lens, tot_times)
-
-def basic_collate(batch):
-    y_col = "time_cumulative_s"
-    em_cols = ["timeID","weekID"]
-    first_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","passed_stops_n","speed_m_s","bearing"]
-    last_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","passed_stops_n","dist_cumulative_km","bearing"]
-    y = torch.tensor([b['norm_label'] for b in batch], dtype=torch.float)
-    batch = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
-    first = torch.cat([b[0,:].unsqueeze(0) for b in batch], axis=0)
-    last = torch.cat([b[-1,:].unsqueeze(0) for b in batch], axis=0)
-    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
-    X_ct_first = first[:,([FEATURE_COLS.index(z) for z in first_cols])]
-    X_ct_last = last[:,([FEATURE_COLS.index(z) for z in last_cols])]
-    X_ct = torch.cat([X_ct_first, X_ct_last], axis=1)
-    return [X_em, X_ct], y
-def basic_collate_nosch(batch):
-    y_col = "time_cumulative_s"
-    em_cols = ["timeID","weekID"]
-    first_cols = ["x_cent","y_cent","speed_m_s","bearing"]
-    last_cols = ["x_cent","y_cent","dist_cumulative_km","bearing"]
-    y = torch.tensor([b['norm_label'] for b in batch], dtype=torch.float)
-    batch = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
-    first = torch.cat([b[0,:].unsqueeze(0) for b in batch], axis=0)
-    last = torch.cat([b[-1,:].unsqueeze(0) for b in batch], axis=0)
-    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
-    X_ct_first = first[:,([FEATURE_COLS.index(z) for z in first_cols])]
-    X_ct_last = last[:,([FEATURE_COLS.index(z) for z in last_cols])]
-    X_ct = torch.cat([X_ct_first, X_ct_last], axis=1)
-    return [X_em, X_ct], y
-def basic_grid_collate(batch):
-    y_col = "time_cumulative_s"
-    em_cols = ["timeID","weekID"]
-    first_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","passed_stops_n","speed_m_s","bearing"]
-    last_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","passed_stops_n","dist_cumulative_km","bearing"]
-    y = torch.tensor([b['norm_label'] for b in batch], dtype=torch.float)
-    batch_ct = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
-    first = torch.cat([b[0,:].unsqueeze(0) for b in batch_ct], axis=0)
-    last = torch.cat([b[-1,:].unsqueeze(0) for b in batch_ct], axis=0)
-    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
-    X_ct_first = first[:,([FEATURE_COLS.index(z) for z in first_cols])]
-    X_ct_last = last[:,([FEATURE_COLS.index(z) for z in last_cols])]
-    X_ct = torch.cat([X_ct_first, X_ct_last], axis=1)
-    # Get speed/bearing/obs age from grid results; average out all values across timesteps; 1 value per cell/obs/variable
-    X_gr = torch.cat([torch.nanmean(torch.tensor(z['grid'], dtype=torch.float)[:,3:,:], dim=0).unsqueeze(0) for z in batch])
-    # X_gr = torch.cat([torch.nanmean(torch.tensor(z['grid'], dtype=torch.float)[:,3:,:,:,:], dim=0).unsqueeze(0) for z in batch])
-    # Replace any nans with the average for that feature
-    means = torch.nanmean(torch.swapaxes(X_gr, 0, 1).flatten(1), dim=1)
-    for i,m in enumerate(means):
-        X_gr[:,i,:] = torch.nan_to_num(X_gr[:,i,:], m)
-        # X_gr[:,i,:,:,:] = torch.nan_to_num(X_gr[:,i,:,:,:], m)
-    return [X_em, X_ct, X_gr], y
-
-def collate_seq(batch):
-    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
-    X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
-    X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
-    X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
-    X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
-    X_ct = torch.zeros((torch.max(X_sl), len(batch), len(GPS_FEATS)))
-    for i,col in enumerate(GPS_FEATS):
-        X_ct[:,:,i] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[col], dtype=torch.float) for b in batch])
-    return (X_em, X_ct, X_sl), y
-def collate_seq_static(batch):
-    y_col = "time_calc_s"
-    em_cols = ["timeID","weekID"]
-    ct_cols = ["x_cent","y_cent","bearing","dist_calc_km"]
-    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['norm_label_seq'], dtype=torch.float) for b in batch], batch_first=True)
-    batch = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
-    X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
-    first = torch.cat([b[0,:].unsqueeze(0) for b in batch], axis=0)
-    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
-    batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True)
-    X_ct = batch[:,:,([FEATURE_COLS.index(z) for z in ct_cols])]
-    return [X_em, X_ct, X_sl], y
-def collate_seq_realtime(batch):
-    y_col = "time_calc_s"
-    em_cols = ["timeID","weekID"]
-    ct_cols = ["x_cent","y_cent","scheduled_time_s","stop_dist_km","stop_x_cent","stop_y_cent","passed_stops_n","bearing","dist_calc_km","dist_calc_km"]
-    y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['norm_label_seq'], dtype=torch.float) for b in batch], batch_first=True)
-    batch_ct = [torch.tensor(b['samp'], dtype=torch.float) for b in batch]
-    batch_gr = [torch.tensor(b['grid'], dtype=torch.float) for b in batch]
-    X_sl = torch.tensor([len(b) for b in batch_ct], dtype=torch.int)
-    first = torch.cat([b[0,:].unsqueeze(0) for b in batch_ct], axis=0)
-    X_em = first[:,([FEATURE_COLS.index(z) for z in em_cols])].int()
-    batch_ct = torch.nn.utils.rnn.pad_sequence(batch_ct, batch_first=True)
-    X_ct = batch_ct[:,:,([FEATURE_COLS.index(z) for z in ct_cols])]
-    # Get speed/bearing/obs age from grid results; average out all values across timesteps; 1 value per cell/obs/variable
-    X_gr = [b[:,3:,:] for b in batch_gr]
-    # X_gr = [b[:,3:,:,:,:] for b in batch_gr]
-    X_gr = torch.nn.utils.rnn.pad_sequence(X_gr, batch_first=True)
-    # Replace any nans with the average for that feature
-    means = torch.nanmean(torch.swapaxes(X_gr, 0, 2).flatten(1), dim=1)
-    for i,m in enumerate(means):
-        X_gr[:,:,i,:] = torch.nan_to_num(X_gr[:,:,i,:], m)
-        # X_gr[:,:,i,:,:,:] = torch.nan_to_num(X_gr[:,:,i,:,:,:], m)
-    return [X_em, X_ct, X_gr, X_sl], y
-
-def deeptte_collate(data):
-    stat_attrs = ['dist_cumulative_km', 'time_cumulative_s']
-    stat_names = ['dist','time']
-    info_attrs = ['weekID', 'timeID']
-    traj_attrs = ['y_cent','x_cent','time_calc_s','dist_calc_km','bearing','scheduled_time_s','stop_dist_km','stop_x_cent','stop_y_cent','passed_stops_n']
-    attr, traj = {}, {}
-    batch_ct = [torch.tensor(b['samp']) for b in data]
-    lens = np.array([len(b) for b in batch_ct])
-    for n,key in zip(stat_names, stat_attrs):
-        attr[n] = torch.FloatTensor([d['samp'][-1,FEATURE_COLS.index(key)] for d in data])
-    for key in info_attrs:
-        attr[key] = torch.LongTensor([int(d['samp'][0,FEATURE_COLS.index(key)]) for d in data])
-    for key in traj_attrs:
-        seqs = [d['samp'][:,FEATURE_COLS.index(key)] for d in data]
-        seqs = np.asarray(seqs, dtype=object)
-        mask = np.arange(lens.max()) < lens[:, None]
-        padded = np.zeros(mask.shape, dtype=np.float32)
-        padded[mask] = np.concatenate(seqs)
-        padded = torch.from_numpy(padded).float()
-        traj[key] = padded
-    lens = lens.tolist()
-    traj['lens'] = lens
-    return [attr, traj]
-def deeptte_collate_nosch(data):
-    stat_attrs = ['dist_cumulative_km', 'time_cumulative_s']
-    stat_names = ['dist','time']
-    info_attrs = ['weekID', 'timeID']
-    traj_attrs = ['y_cent', 'x_cent', 'time_calc_s', 'dist_calc_km']
-    attr, traj = {}, {}
-    batch_ct = [torch.tensor(b['samp']) for b in data]
-    lens = np.array([len(b) for b in batch_ct])
-    for n,key in zip(stat_names, stat_attrs):
-        attr[n] = torch.FloatTensor([d['samp'][-1,FEATURE_COLS.index(key)] for d in data])
-    for key in info_attrs:
-        attr[key] = torch.LongTensor([int(d['samp'][0,FEATURE_COLS.index(key)]) for d in data])
-    for key in traj_attrs:
-        seqs = [d['samp'][:,FEATURE_COLS.index(key)] for d in data]
-        seqs = np.asarray(seqs, dtype=object)
-        mask = np.arange(lens.max()) < lens[:, None]
-        padded = np.zeros(mask.shape, dtype=np.float32)
-        padded[mask] = np.concatenate(seqs)
-        padded = torch.from_numpy(padded).float()
-        traj[key] = padded
-    lens = lens.tolist()
-    traj['lens'] = lens
-    return [attr, traj]

@@ -30,7 +30,7 @@ HYPERPARAM_DICT = {
     },
     'TRSF': {
         'batch_size': 512,
-        'hidden_size': 512,
+        'hidden_size': 64,
         'num_layers': 6,
         'dropout_rate': .1
     },
@@ -38,6 +38,24 @@ HYPERPARAM_DICT = {
         'batch_size': 512
     }
 }
+
+
+def aggregate_tts(tts, mask):
+    """
+    Convert a sequence of predicted travel times to total travel time.
+    """
+    masked_tts = (tts*mask)
+    total_tts = np.sum(masked_tts, axis=1)
+    return total_tts
+
+
+def fill_tensor_mask(mask, x_sl, drop_first=True):
+    """Create a mask based on a tensor of sequence lengths."""
+    for i, seq_len in enumerate(x_sl):
+        mask[:seq_len, i] = 1
+    if drop_first:
+        mask[0,:] = 0
+    return mask
 
 
 def set_feature_extraction(model, feature_extraction=True):
@@ -74,25 +92,26 @@ def random_param_search(hyperparameter_sample_dict, model_names):
 
 def make_model(model_type, fold_num):
     """Allow one main script to be re-used for different model types."""
+    model_archetype = model_type.split('_')[0]
     if model_type=="FF":
         model = ff.FF(
             f"FF_{fold_num}",
             input_size=10,
-            collate_fn=data_loader.basic_collate_nosch,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="FF_STATIC":
         model = ff.FF(
             f"FF_STATIC_{fold_num}",
             input_size=18,
-            collate_fn=data_loader.basic_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="FF_REALTIME":
         model = ff.FF_REALTIME(
@@ -100,31 +119,31 @@ def make_model(model_type, fold_num):
             input_size=18,
             n_grid_features=3*3*1,
             grid_compression_size=8,
-            collate_fn=data_loader.basic_grid_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_realtime,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="CONV":
         model = conv.CONV(
             f"CONV_{fold_num}",
             input_size=5,
-            collate_fn=data_loader.sequential_collate_nosch,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="CONV_STATIC":
         model = conv.CONV(
             f"CONV_STATIC_{fold_num}",
             input_size=9,
-            collate_fn=data_loader.sequential_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="CONV_REALTIME":
         model = conv.CONV_REALTIME(
@@ -132,31 +151,31 @@ def make_model(model_type, fold_num):
             input_size=9,
             n_grid_features=3*3*1,
             grid_compression_size=8,
-            collate_fn=data_loader.sequential_grid_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq_realtime,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="GRU":
         model = rnn.GRU(
             f"GRU_{fold_num}",
             input_size=5,
             collate_fn=data_loader.collate_seq,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="GRU_STATIC":
         model = rnn.GRU(
             f"GRU_STATIC_{fold_num}",
             input_size=9,
-            collate_fn=data_loader.sequential_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="GRU_REALTIME":
         model = rnn.GRU_REALTIME(
@@ -164,31 +183,31 @@ def make_model(model_type, fold_num):
             input_size=9,
             n_grid_features=3*3*1,
             grid_compression_size=8,
-            collate_fn=data_loader.sequential_grid_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq_realtime,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="TRSF":
         model = transformer.TRSF(
             f"TRSF_{fold_num}",
             input_size=5,
-            collate_fn=data_loader.sequential_collate_nosch,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="TRSF_STATIC":
         model = transformer.TRSF(
             f"TRSF_STATIC_{fold_num}",
             input_size=9,
-            collate_fn=data_loader.sequential_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="TRSF_REALTIME":
         model = transformer.TRSF_REALTIME(
@@ -196,29 +215,29 @@ def make_model(model_type, fold_num):
             input_size=9,
             n_grid_features=3*3*1,
             grid_compression_size=8,
-            collate_fn=data_loader.sequential_grid_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_seq_realtime,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="DEEP_TTE":
         model = DeepTTE.Net(
             f"DEEP_TTE_{fold_num}",
-            collate_fn=data_loader.deeptte_collate_nosch,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_deeptte,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="DEEP_TTE_STATIC":
         model = DeepTTE.Net(
             f"DEEP_TTE_STATIC_{fold_num}",
-            collate_fn=data_loader.deeptte_collate,
-            batch_size=HYPERPARAM_DICT[model_type]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_type]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_type]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_type]['dropout_rate'],
+            collate_fn=data_loader.collate_deeptte_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     return model
 
@@ -238,29 +257,29 @@ def load_model(load_weights, weight_folder):
     return None
 
 
-def pad_sequence(sequences, lengths):
-    padded = torch.zeros(len(sequences), lengths[0]).float()
-    for i, seq in enumerate(sequences):
-        seq = torch.Tensor(seq)
-        padded[i, :lengths[i]] = seq[:]
-    return padded
+# def pad_sequence(sequences, lengths):
+#     padded = torch.zeros(len(sequences), lengths[0]).float()
+#     for i, seq in enumerate(sequences):
+#         seq = torch.Tensor(seq)
+#         padded[i, :lengths[i]] = seq[:]
+#     return padded
 
 
-def to_var(var):
-    if torch.is_tensor(var):
-        var = Variable(var)
-        if torch.cuda.is_available():
-            var = var.cuda()
-        return var
-    if isinstance(var, int) or isinstance(var, float):
-        return var
-    if isinstance(var, dict):
-        for key in var:
-            var[key] = to_var(var[key])
-        return var
-    if isinstance(var, list):
-        var = list(map(lambda x: to_var(x), var))
-        return var
+# def to_var(var):
+#     if torch.is_tensor(var):
+#         var = Variable(var)
+#         if torch.cuda.is_available():
+#             var = var.cuda()
+#         return var
+#     if isinstance(var, int) or isinstance(var, float):
+#         return var
+#     if isinstance(var, dict):
+#         for key in var:
+#             var[key] = to_var(var[key])
+#         return var
+#     if isinstance(var, list):
+#         var = list(map(lambda x: to_var(x), var))
+#         return var
 
 
 def get_local_seq(full_seq, kernel_size, mean, std):
@@ -406,34 +425,19 @@ def extract_lightning_results(model_name, base_folder, city_name):
     result_df = pd.concat(all_data, axis=0)
     return result_df
 
-def fill_tensor_mask(mask, x_sl, drop_first=True):
-    """Create a mask based on a tensor of sequence lengths."""
-    for i, seq_len in enumerate(x_sl):
-        mask[:seq_len, i] = 1
-    if drop_first:
-        mask[0,:] = 0
-    return mask
 
-def pad_tensors(tensor_list, pad_dim):
-    """
-    Pad list of tensors with unequal lengths on pad_dim and combine.
-    """
-    tensor_lens = [tensor.shape[pad_dim] for tensor in tensor_list]
-    max_len = max(tensor_lens)
-    total_dim = len(tensor_list[0].shape)
-    paddings = []
-    for tensor in tensor_list:
-        padding = list(0 for i in range(total_dim))
-        padding[pad_dim] = max_len - tensor.shape[pad_dim]
-        paddings.append(tuple(padding))
-    padded_tensor_list = [torch.nn.functional.pad(tensor, paddings[i]) for i, tensor in enumerate(tensor_list)]
-    padded_tensor_list = torch.cat(padded_tensor_list, dim=0)
-    return padded_tensor_list
-
-def aggregate_tts(tts, mask):
-    """
-    Convert a sequence of predicted travel times to total travel time.
-    """
-    masked_tts = (tts*mask)
-    total_tts = np.sum(masked_tts, axis=1)
-    return total_tts
+# def pad_tensors(tensor_list, pad_dim):
+#     """
+#     Pad list of tensors with unequal lengths on pad_dim and combine.
+#     """
+#     tensor_lens = [tensor.shape[pad_dim] for tensor in tensor_list]
+#     max_len = max(tensor_lens)
+#     total_dim = len(tensor_list[0].shape)
+#     paddings = []
+#     for tensor in tensor_list:
+#         padding = list(0 for i in range(total_dim))
+#         padding[pad_dim] = max_len - tensor.shape[pad_dim]
+#         paddings.append(tuple(padding))
+#     padded_tensor_list = [torch.nn.functional.pad(tensor, paddings[i]) for i, tensor in enumerate(tensor_list)]
+#     padded_tensor_list = torch.cat(padded_tensor_list, dim=0)
+#     return padded_tensor_list

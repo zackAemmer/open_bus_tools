@@ -20,7 +20,7 @@ def prepare_run(**kwargs):
     """Pre-process training data and save to sub-folder."""
     # Summary config?
     # Should remove 0m/s or not?
-    print(f"RUN PREPARATION STARTED: {kwargs['run_name']}, {kwargs['network_name']}")
+    print(f"PROCESSING: {kwargs['run_name']}, {kwargs['network_name']}")
     for day in kwargs['dates']:
         print(day)
         # Loading data and unifying column names/dtypes
@@ -35,7 +35,7 @@ def prepare_run(**kwargs):
         data.columns = standardfeeds.GTFSRT_LOOKUP.keys()
         data['locationtime'] = data['locationtime'].astype(float)
         data = data.astype(standardfeeds.GTFSRT_LOOKUP)
-        # Avoid sensors that tend to hold over old position at start/end of trip
+        # Sensors seem to hold old positions right at start/end of trip
         for _ in range(4):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
