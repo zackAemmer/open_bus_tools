@@ -68,7 +68,6 @@ class ContentDataset(Dataset):
         data = pd.concat(data)
         data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
         data = data.set_index('shingle_id')
-        # Testing lookup speeds
         self.data = data
         self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS]
         self.groupdata = self.feat_data.groupby('shingle_id')

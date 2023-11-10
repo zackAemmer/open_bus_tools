@@ -242,19 +242,14 @@ def make_model(model_type, fold_num):
     return model
 
 
-def load_model(load_weights, weight_folder):
-    # Load weights if applicable
-    if load_weights:
-        new_base_model_list = []
-        for b in base_model_list:
-            new_base_model_list.append(data_utils.load_pkl(f"{weight_folder}../../../../../{b.model_name}_{fold_num}.pkl"))
-            base_model_list = new_base_model_list
-        last_ckpt = os.listdir(weight_folder)
-        if not torch.cuda.is_available():
-            model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}", map_location=torch.device('cpu')).eval()
-        else:
-            model = model.load_from_checkpoint(f"{weight_folder}{last_ckpt[0]}").eval()
-    return None
+def load_model(model_type, fold_num):
+    model = make_model(model_type, fold_num)
+    last_ckpt = os.listdir(f"./logs/{model_type}_{fold_num}")[-1]
+    if not torch.cuda.is_available():
+        model = model.load_from_checkpoint(f"./logs/{model_type}_{fold_num}/{last_ckpt}", map_location=torch.device('cpu')).eval()
+    else:
+        model = model.load_from_checkpoint(f"./logs/{model_type}_{fold_num}/{last_ckpt}").eval()
+    return model
 
 
 # def pad_sequence(sequences, lengths):

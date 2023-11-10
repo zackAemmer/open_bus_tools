@@ -33,7 +33,6 @@ if __name__=="__main__":
     # test_dates = data_utils.get_date_list(test_date, int(test_n))
 
     # grid_s_size=500
-
     # if network_folder=="kcm/":
     #     holdout_routes=[100252,100139,102581,100341,102720]
     # elif network_folder=="atb/":
@@ -98,3 +97,4 @@ if __name__=="__main__":
         )
         trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
         # preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
+    print(f"TRAINING COMPLETE")
