@@ -4,7 +4,7 @@ import boto3
 from dotenv import load_dotenv
 load_dotenv()
 
-from openbustools import data_utils
+from openbustools import standardfeeds
 
 
 def download_new_s3_files(data_folder, bucket_name):
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     download_new_s3_files("./data/kcm_realtime/", "gtfs-collection-kcm")
     download_new_s3_files("./data/nwy_realtime/", "gtfs-collection-nwy")
     print(f"Extracting operators from downloaded files...")
-    data_utils.extract_operator("./data/nwy_realtime/", "./data/atb_realtime/", "operator_id", "ATB")
-    data_utils.extract_operator("./data/nwy_realtime/", "./data/rut_realtime/", "operator_id", "RUT")
-    print(f"Extracting operators from GTFS files...")
-    data_utils.extract_operator_gtfs("./data/nwy_gtfs/", "./data/atb_gtfs/", "trip_id", "trip_id", "ATB")
-    data_utils.extract_operator_gtfs("./data/nwy_gtfs/", "./data/rut_gtfs/", "trip_id", "trip_id", "RUT")
+    standardfeeds.extract_operator("./data/nwy_realtime/", "./data/atb_realtime/", "operator_id", "ATB")
+    standardfeeds.extract_operator("./data/nwy_realtime/", "./data/rut_realtime/", "operator_id", "RUT")
+    # print(f"Extracting operators from GTFS files...")
+    # data_utils.extract_operator_gtfs("./data/nwy_gtfs/", "./data/atb_gtfs/", "trip_id", "trip_id", "ATB")
+    # data_utils.extract_operator_gtfs("./data/nwy_gtfs/", "./data/rut_gtfs/", "trip_id", "trip_id", "RUT")

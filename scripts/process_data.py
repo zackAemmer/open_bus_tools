@@ -1,24 +1,18 @@
 import datetime
-import json
-import os
-import shutil
 from zoneinfo import ZoneInfo
 
 import geopandas as gpd
-import h5py
 import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
-import pyproj
 import torch
-from joblib import Parallel, delayed
 
 from openbustools import data_utils, spatial, standardfeeds
 
 
 def prepare_run(**kwargs):
     """Pre-process training data and save to sub-folder."""
-    print(f"PROCESSING: {kwargs['run_name']}, {kwargs['network_name']}")
+    print(f"PROCESSING: {kwargs['network_name']}")
     for day in kwargs['dates']:
         print(day)
         # Loading data and unifying column names/dtypes
@@ -125,7 +119,7 @@ def prepare_run(**kwargs):
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
         data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
-    print(f"RUN PREPARATION COMPLETED: {kwargs['run_name']}, {kwargs['network_name']}")
+    print(f"PROCESSING COMPLETED: {kwargs['network_name']}")
 
 
 if __name__=="__main__":
@@ -133,9 +127,7 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
-    # DEBUG
     prepare_run(
-        run_name="debug",
         network_name="kcm",
         dates=data_utils.get_date_list("2023_03_15", 14),
         data_dropout=0.2,
@@ -148,7 +140,6 @@ if __name__=="__main__":
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
     prepare_run(
-        run_name="debug",
         network_name="atb",
         dates=data_utils.get_date_list("2023_03_15", 14),
         data_dropout=0.2,
@@ -160,40 +151,3 @@ if __name__=="__main__":
         coord_ref_center=[569472,7034350],
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
-    # # DEBUG MIXED
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="debug_nosch",
-    #     network_name=["kcm","atb"],
-    #     train_dates=data_utils.get_date_list("2023_03_15", 3),
-    #     test_dates=data_utils.get_date_list("2023_03_21", 3),
-    #     n_workers=2,
-    #     n_jobs=2,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/kcm_gtfs/","./data/atb_gtfs/"],
-    #     raw_data_folder=["./data/kcm_all_new/","./data/atb_all_new/"],
-    #     timezone=["America/Los_Angeles","Europe/Oslo"],
-    #     epsg=["32148","32632"],
-    #     grid_bounds=[[369903,37911,409618,87758],[550869,7012847,579944,7039521]],
-    #     coord_ref_center=[[386910,69022],[569472,7034350]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id'],['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=True
-    # )
-    # prepare_run(
-    #     overwrite=True,
-    #     run_name="debug_nosch",
-    #     network_name=["rut"],
-    #     train_dates=data_utils.get_date_list("2023_03_15", 3),
-    #     test_dates=data_utils.get_date_list("2023_03_21", 3),
-    #     n_workers=2,
-    #     n_jobs=2,
-    #     data_dropout=0.2,
-    #     gtfs_folder=["./data/rut_gtfs/"],
-    #     raw_data_folder=["./data/rut_all_new/"],
-    #     timezone=["Europe/Oslo"],
-    #     epsg=["32632"],
-    #     grid_bounds=[[589080,6631314,604705,6648420]],
-    #     coord_ref_center=[[597427,6642805]],
-    #     given_names=[['trip_id','file','locationtime','lat','lon','vehicle_id']],
-    #     skip_gtfs=True
-    # )

@@ -1,5 +1,6 @@
 import datetime
 import os
+import pickle
 
 import geopandas as gpd
 import numpy as np
@@ -79,9 +80,9 @@ def extract_operator(old_folder, new_folder, source_col, op_name):
     for file in files:
         print(f"Extracting {op_name} from {old_folder}{file} to {new_folder}{file}...")
         if file != ".DS_Store":
-            data = load_pkl(f"{old_folder}{file}", is_pandas=True)
+            data = pd.read_pickle(f"{old_folder}{file}")
             data = data[data[source_col]==op_name]
-            write_pkl(data,f"{new_folder}{file}" )
+            pickle.dump(data, open(f"{new_folder}{file}", "wb"))
 
 
 def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_stop_times, op_name):

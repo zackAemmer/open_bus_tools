@@ -48,9 +48,7 @@ class FF(pl.LightningModule):
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
         loss = self.loss_fn(out, y)
         self.log_dict(
-            {
-                'train_loss': loss,
-            },
+            {'train_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -69,9 +67,7 @@ class FF(pl.LightningModule):
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
         loss = self.loss_fn(out, y)
         self.log_dict(
-            {
-                'valid_loss': loss,
-            },
+            {'valid_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -88,7 +84,7 @@ class FF(pl.LightningModule):
         out = torch.cat([x_ct, x_min_em, x_day_em], dim=1)
         out = self.linear_relu_stack(out)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
-        return {"preds":out, "labels":y}
+        return {'preds':out, 'labels':y}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer

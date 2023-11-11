@@ -1,23 +1,12 @@
-import json
-import os
 from pathlib import Path
 import pickle
-import shutil
 import sys
-import time
 
 import lightning.pytorch as pl
-import numpy as np
-import pandas as pd
 import torch
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
-from sklearn import metrics
-from sklearn.model_selection import KFold
-from tabulate import tabulate
-from torch.utils.data import DataLoader, SequentialSampler, SubsetRandomSampler
+from torch.utils.data import DataLoader
 
-from openbustools.traveltime import data_loader, grids, model_utils
+from openbustools.traveltime import data_loader, model_utils
 from openbustools import data_utils
 
 
@@ -25,25 +14,15 @@ if __name__=="__main__":
     torch.set_default_dtype(torch.float)
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
+
     model_type = sys.argv[1]
     model_folder = sys.argv[2]
     network_name = sys.argv[3]
     train_city_data_folder = sys.argv[4]
     test_city_data_folder = sys.argv[5]
-    train_date = sys.argv[6]
-    train_n = sys.argv[7]
-    test_date = sys.argv[8]
-    test_n = sys.argv[9]
-    train_dates = data_utils.get_date_list(train_date, int(train_n))
+    test_date = sys.argv[6]
+    test_n = sys.argv[7]
     test_dates = data_utils.get_date_list(test_date, int(test_n))
-
-    # grid_s_size=500
-    # if network_folder=="kcm/":
-    #     holdout_routes=[100252,100139,102581,100341,102720]
-    # elif network_folder=="atb/":
-    #     holdout_routes=["ATB:Line:2_28","ATB:Line:2_3","ATB:Line:2_9","ATB:Line:2_340","ATB:Line:2_299"]
-    # else:
-    #     holdout_routes=None
 
     if torch.cuda.is_available():
         num_workers=4

@@ -61,9 +61,7 @@ class TRSF(pl.LightningModule):
         mask = model_utils.fill_tensor_mask(mask, x_sl)
         loss = self.loss_fn(out, y, mask)
         self.log_dict(
-            {
-                'train_loss': loss,
-            },
+            {'train_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -94,9 +92,7 @@ class TRSF(pl.LightningModule):
         mask = model_utils.fill_tensor_mask(mask, x_sl)
         loss = self.loss_fn(out, y, mask)
         self.log_dict(
-            {
-                'valid_loss': loss,
-            },
+            {'valid_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -129,9 +125,9 @@ class TRSF(pl.LightningModule):
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
         y = y.detach().cpu().numpy()
-        # out_agg = data_utils.aggregate_tts(out, mask)
-        # y_agg = data_utils.aggregate_tts(y, mask)
-        return {"pred":out, "label":y, "mask":mask}
+        out_agg = data_utils.aggregate_tts(out, mask)
+        y_agg = data_utils.aggregate_tts(y, mask)
+        return {'pred': out_agg, 'label': y_agg}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer

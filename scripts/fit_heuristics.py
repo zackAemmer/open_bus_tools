@@ -25,9 +25,11 @@ if __name__=="__main__":
     torch.set_default_dtype(torch.float)
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
-    data_folder = sys.argv[1]
-    train_date = sys.argv[2]
-    train_n = sys.argv[3]
+
+    network_name = sys.argv[1]
+    data_folder = sys.argv[2]
+    train_date = sys.argv[3]
+    train_n = sys.argv[4]
     train_dates = data_utils.get_date_list(train_date, int(train_n))
 
     print("="*30)
@@ -35,13 +37,14 @@ if __name__=="__main__":
     print(f"DATA: '{data_folder}'")
     print(f"MODEL: HEURISTICS")
 
-    # Data loading and fold setup
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.ContentDataset(data_folder, train_dates)
+    train_dataset = data_loader.ContentDataset(data_folder, train_dates, holdout_type='create')
 
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
         model = avg_speed.AvgSpeedModel('AVG', train_dataset.data.loc[train_idx])
-        pickle.dump(model, open(f"./logs/AVG_{fold_num}.pkl", 'wb'))
+        model.config = train_dataset.config
+        model.holdout_routes = train_dataset.holdout_routes
+        pickle.dump(model, open(f"./logs/{network_name}/AVG_{fold_num}.pkl", 'wb'))
     print(f"TRAINING COMPLETE")
