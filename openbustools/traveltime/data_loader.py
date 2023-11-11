@@ -14,10 +14,9 @@ LABEL_FEATS = [
 ]
 EMBED_FEATS = [
     "t_min_of_day",
-    "t_day_of_week"
+    "t_day_of_week",
 ]
 GPS_FEATS = [
-    "calc_speed_m_s",
     "calc_dist_km",
     "calc_bear_d",
     "x_cent",
@@ -27,10 +26,10 @@ STATIC_FEATS = [
     "calc_stop_dist_km",
     "sch_time_s",
     "pass_stops_n",
-    "cumul_pass_stops_n"
+    "cumul_pass_stops_n",
 ]
 REALTIME_FEATS = [
-    ""
+    "calc_speed_m_s",
 ]
 
 
@@ -40,15 +39,15 @@ def normalize(x, config_entry):
     return (x - mean) / std
 
 
-def unnormalize(x, config_entry):
+def denormalize(x, config_entry):
     mean = config_entry[0]
     std = config_entry[1]
     return x * std + mean
 
 
-def create_config(data, numeric_cols):
+def create_config(data):
     config = {}
-    for col in numeric_cols:
+    for col in LABEL_FEATS+GPS_FEATS+STATIC_FEATS:
         col_mean = np.mean(data[col].to_numpy())
         col_sd = np.std(data[col].to_numpy())
         config[col] = (col_mean, col_sd)
@@ -57,21 +56,31 @@ def create_config(data, numeric_cols):
 
 class ContentDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing groups."""
-    def __init__(self, data_folder, dates, grid=None, add_grid_features=False, skip_gtfs=False):
-        self.grid = grid
-        self.add_grid_features = add_grid_features
-        self.skip_gtfs = skip_gtfs
-        # Load all data from folder/dates
+    def __init__(self, data_folder, dates, holdout_type=None, only_holdout=False, **kwargs):
         data = []
         for day in dates:
             data.append(pd.read_pickle(f"{data_folder}{day}"))
         data = pd.concat(data)
+        # Deal with different scenarios for holdout route training/testing
+        if holdout_type=='create':
+            unique_routes = pd.unique(data['route_id'])
+            self.holdout_routes = np.random.choice(pd.unique(data['route_id']), int(len(unique_routes)*.05))
+            if only_holdout:
+                data = data[data['route_id'].isin(self.holdout_routes)]
+            else:
+                data = data[~data['route_id'].isin(self.holdout_routes)]
+        elif holdout_type=='specify':
+            self.holdout_routes = kwargs['holdout_routes']
+            if only_holdout:
+                data = data[data['route_id'].isin(self.holdout_routes)]
+            else:
+                data = data[~data['route_id'].isin(self.holdout_routes)]
         data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
         data = data.set_index('shingle_id')
         self.data = data
         self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS]
         self.groupdata = self.feat_data.groupby('shingle_id')
-        self.config = create_config(self.data, LABEL_FEATS+GPS_FEATS+STATIC_FEATS)
+        self.config = None
     def __getitem__(self, index):
         sample_df = self.groupdata.get_group(index)
         sample = {}

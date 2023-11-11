@@ -18,8 +18,6 @@ from openbustools import data_utils, spatial, standardfeeds
 
 def prepare_run(**kwargs):
     """Pre-process training data and save to sub-folder."""
-    # Summary config?
-    # Should remove 0m/s or not?
     print(f"PROCESSING: {kwargs['run_name']}, {kwargs['network_name']}")
     for day in kwargs['dates']:
         print(day)
@@ -41,7 +39,9 @@ def prepare_run(**kwargs):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
         # Avoid sensors recording at regular intervals
         drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
-        data = data[~data.index.isin(drop_indices)].reset_index()
+        data = data[~data.index.isin(drop_indices)].reset_index().drop(columns='index')
+        # Ensure correct order
+        data = data.sort_values(['trip_id','locationtime'])
         # Split full trip trajectories into smaller samples
         data = spatial.shingle(data, 2, 5)
         # Project to local coordinate system, apply bounding box, center coords
@@ -51,14 +51,19 @@ def prepare_run(**kwargs):
         data['y_cent'] = data.geometry.y - kwargs['coord_ref_center'][1]
         # Calculate geometry features
         data['calc_time_s'], data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'locationtime')
+        # Drop consecutive points where bus did not move, re-calculate features
+        data = data[data['calc_dist_m']>0].copy()
+        data['calc_time_s'], data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'locationtime')
         # First pt of each trip (not shingle) is dependent on prev trip metrics
         data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
         data['calc_speed_m_s'] = data['calc_dist_m'] / data['calc_time_s']
-        data.loc[data['calc_speed_m_s']<.1, 'calc_speed_m_s'] = 0
         data['calc_dist_km'] = data['calc_dist_m'] / 1000.0
-        # Filter out all trips with large outliers
-        mins_keep = 4
+        # Filter trips with less than 2 points
         toss_ids = []
+        pt_counts = data.groupby('shingle_id')[['calc_dist_m']].count()
+        toss_ids.extend(list(pt_counts[pt_counts['calc_dist_m']<2].index))
+        # Filter trips with outliers
+        mins_keep = 4
         toss_ids.extend(list(data[data['calc_speed_m_s']>30]['shingle_id']))
         toss_ids.extend(list(data[data['calc_dist_m']>mins_keep*60*30]['shingle_id']))
         toss_ids.extend(list(data[data['calc_time_s']>mins_keep*60]['shingle_id']))
@@ -83,6 +88,7 @@ def prepare_run(**kwargs):
         data['best_static'] = best_static
         stops = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stops.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id')
         stop_times = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stop_times.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
+        trips = pd.read_csv(f"{kwargs['static_folder']}{best_static}/trips.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']]
         # Deal with schedule crossing midnight
         stop_times['t_sch_hour'] = stop_times['arrival_time'].str.slice(0,2).astype(int)
         stop_times['t_sch_min'] = stop_times['arrival_time'].str.slice(3,5).astype(int)
@@ -97,6 +103,7 @@ def prepare_run(**kwargs):
         data.drop(data[~data['trip_id'].isin(static.trip_id)].index, inplace=True)
         data['stop_id'], data['calc_stop_dist_m'] = standardfeeds.get_scheduled_arrival(data, static)
         data = data.merge(stop_times, on=['trip_id','stop_id'])
+        data = data.merge(trips, on='trip_id')
         data['calc_stop_dist_km'] = data['calc_stop_dist_m']/1000.0
         # Passed stops
         data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
@@ -112,9 +119,11 @@ def prepare_run(**kwargs):
         data['cumul_time_s'] = data.cumul_time_s - unique_traj.cumul_time_s.transform('min')
         data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
         data['cumul_pass_stops_n'] = data.cumul_pass_stops_n - unique_traj.cumul_pass_stops_n.transform('min')
+        # Ensure correct order
+        data = data.sort_values(['shingle_id','locationtime'])
         # Save processed date
         num_pts_final = len(data)
-        print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100.0}% of original points")
+        print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
         data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
     print(f"RUN PREPARATION COMPLETED: {kwargs['run_name']}, {kwargs['network_name']}")
 

@@ -43,15 +43,12 @@ if __name__=="__main__":
         accelerator="cpu"
 
     print("="*30)
-    print(f"TRAINING")
+    print(f"TUNING")
     print(f"DATA: {data_folder}")
     print(f"MODEL: {model_type}")
     print(f"NETWORK: {network_name}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
-
-    k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.ContentDataset(data_folder, train_dates, holdout_type='create')
 
     # print(f"Building grid on fold training data")
     # train_dataset = data_loader.LoadSliceDataset(f"{base_folder}deeptte_formatted/train", config, holdout_routes=holdout_routes, skip_gtfs=skip_gtfs)
@@ -60,43 +57,32 @@ if __name__=="__main__":
     # train_ngrid.build_cell_lookup()
     # train_dataset.grid = train_ngrid
 
-    for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
+    n_folds = 5
+    for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        train_dataset.config = data_loader.create_config(train_dataset.data.loc[train_idx])
-        model = model_utils.make_model(model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
-        train_sampler = SubsetRandomSampler(train_idx)
-        val_sampler = SequentialSampler(val_idx)
+        model = model_utils.load_model(model_folder, network_name, model_type, fold_num)
+        model.model_name = f"{model_type}TUNED_{fold_num}"
+        train_dataset = data_loader.ContentDataset(data_folder, train_dates)
+        train_idx = np.random.choice(np.arange(train_dataset.__len__()), 100)
+        train_dataset.config = model.config
+        train_sampler = SequentialSampler(train_idx)
         train_loader = DataLoader(
             train_dataset,
             collate_fn=model.collate_fn,
             batch_size=model.batch_size,
             sampler=train_sampler,
-            drop_last=True,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers=True
-        )
-        val_loader = DataLoader(
-            train_dataset,
-            collate_fn=model.collate_fn,
-            batch_size=model.batch_size,
-            sampler=val_sampler,
-            drop_last=True,
+            drop_last=False,
             num_workers=num_workers,
             pin_memory=pin_memory,
             persistent_workers=True
         )
         trainer = pl.Trainer(
-            check_val_every_n_epoch=1,
-            max_epochs=5,
-            min_epochs=1,
+            max_epochs=10,
+            min_epochs=5,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{model_folder}{network_name}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.001, patience=3)],
-            # profiler=pl.profilers.AdvancedProfiler(filename='profiler_results'),
-            # limit_train_batches=2,
-            # limit_val_batches=2,
+            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.001, patience=3)],
         )
-        trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    print(f"TRAINING COMPLETE")
+        trainer.fit(model=model, train_dataloaders=train_loader)
+    print(f"TUNING COMPLETE")

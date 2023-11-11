@@ -11,31 +11,31 @@ from openbustools.traveltime.models import avg_speed, conv, ff, persistent, rnn,
 
 HYPERPARAM_DICT = {
     'FF': {
-        'batch_size': 512,
-        'hidden_size': 128,
+        'batch_size': 64,
+        'hidden_size': 32,
         'num_layers': 2,
-        'dropout_rate': .2
+        'dropout_rate': .1
     },
     'CONV': {
-        'batch_size': 512,
-        'hidden_size': 64,
-        'num_layers': 3,
+        'batch_size': 64,
+        'hidden_size': 32,
+        'num_layers': 2,
         'dropout_rate': .1
     },
     'GRU': {
-        'batch_size': 512,
-        'hidden_size': 64,
+        'batch_size': 64,
+        'hidden_size': 32,
         'num_layers': 2,
-        'dropout_rate': .05
+        'dropout_rate': .1
     },
     'TRSF': {
-        'batch_size': 512,
-        'hidden_size': 64,
-        'num_layers': 6,
+        'batch_size': 64,
+        'hidden_size': 32,
+        'num_layers': 2,
         'dropout_rate': .1
     },
     'DEEPTTE': {
-        'batch_size': 512
+        'batch_size': 64
     }
 }
 
@@ -50,7 +50,7 @@ def aggregate_tts(tts, mask):
 
 
 def fill_tensor_mask(mask, x_sl, drop_first=True):
-    """Create a mask based on a tensor of sequence lengths."""
+    """Fill a mask based on sequence lengths."""
     for i, seq_len in enumerate(x_sl):
         mask[:seq_len, i] = 1
     if drop_first:
@@ -76,27 +76,29 @@ def set_feature_extraction(model, feature_extraction=True):
                 param.requires_grad = True
 
 
-def random_param_search(hyperparameter_sample_dict, model_names):
-    # Keep list of hyperparam dicts; each is randomly sampled from the given; repeat dict for each model
-    set_of_random_dicts = []
-    for i in range(hyperparameter_sample_dict['n_param_samples']):
-        all_model_dict = {}
-        random_dict = {}
-        for key in list(hyperparameter_sample_dict.keys()):
-            random_dict[key] = np.random.choice(hyperparameter_sample_dict[key],1)[0]
-        for mname in model_names:
-            all_model_dict[mname] = random_dict
-        set_of_random_dicts.append(all_model_dict)
-    return set_of_random_dicts
+# def random_param_search(hyperparameter_sample_dict, model_names):
+#     # Keep list of hyperparam dicts; each is randomly sampled from the given; repeat dict for each model
+#     set_of_random_dicts = []
+#     for i in range(hyperparameter_sample_dict['n_param_samples']):
+#         all_model_dict = {}
+#         random_dict = {}
+#         for key in list(hyperparameter_sample_dict.keys()):
+#             random_dict[key] = np.random.choice(hyperparameter_sample_dict[key],1)[0]
+#         for mname in model_names:
+#             all_model_dict[mname] = random_dict
+#         set_of_random_dicts.append(all_model_dict)
+#     return set_of_random_dicts
 
 
-def make_model(model_type, fold_num):
+def make_model(model_type, fold_num, config, holdout_routes):
     """Allow one main script to be re-used for different model types."""
     model_archetype = model_type.split('_')[0]
     if model_type=="FF":
         model = ff.FF(
             f"FF_{fold_num}",
-            input_size=10,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=8,
             collate_fn=data_loader.collate,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -106,7 +108,9 @@ def make_model(model_type, fold_num):
     elif model_type=="FF_STATIC":
         model = ff.FF(
             f"FF_STATIC_{fold_num}",
-            input_size=18,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=16,
             collate_fn=data_loader.collate_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -116,6 +120,8 @@ def make_model(model_type, fold_num):
     elif model_type=="FF_REALTIME":
         model = ff.FF_REALTIME(
             f"FF_REALTIME_{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
             input_size=18,
             n_grid_features=3*3*1,
             grid_compression_size=8,
@@ -128,7 +134,9 @@ def make_model(model_type, fold_num):
     elif model_type=="CONV":
         model = conv.CONV(
             f"CONV_{fold_num}",
-            input_size=5,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=4,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -138,7 +146,9 @@ def make_model(model_type, fold_num):
     elif model_type=="CONV_STATIC":
         model = conv.CONV(
             f"CONV_STATIC_{fold_num}",
-            input_size=9,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=8,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -148,6 +158,8 @@ def make_model(model_type, fold_num):
     elif model_type=="CONV_REALTIME":
         model = conv.CONV_REALTIME(
             f"CONV_REALTIME_{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
             input_size=9,
             n_grid_features=3*3*1,
             grid_compression_size=8,
@@ -160,7 +172,9 @@ def make_model(model_type, fold_num):
     elif model_type=="GRU":
         model = rnn.GRU(
             f"GRU_{fold_num}",
-            input_size=5,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=4,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -170,7 +184,9 @@ def make_model(model_type, fold_num):
     elif model_type=="GRU_STATIC":
         model = rnn.GRU(
             f"GRU_STATIC_{fold_num}",
-            input_size=9,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=8,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -180,6 +196,8 @@ def make_model(model_type, fold_num):
     elif model_type=="GRU_REALTIME":
         model = rnn.GRU_REALTIME(
             f"GRU_REALTIME_{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
             input_size=9,
             n_grid_features=3*3*1,
             grid_compression_size=8,
@@ -192,7 +210,9 @@ def make_model(model_type, fold_num):
     elif model_type=="TRSF":
         model = transformer.TRSF(
             f"TRSF_{fold_num}",
-            input_size=5,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=4,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -202,7 +222,9 @@ def make_model(model_type, fold_num):
     elif model_type=="TRSF_STATIC":
         model = transformer.TRSF(
             f"TRSF_STATIC_{fold_num}",
-            input_size=9,
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=8,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -212,6 +234,8 @@ def make_model(model_type, fold_num):
     elif model_type=="TRSF_REALTIME":
         model = transformer.TRSF_REALTIME(
             f"TRSF_REALTIME_{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
             input_size=9,
             n_grid_features=3*3*1,
             grid_compression_size=8,
@@ -224,6 +248,9 @@ def make_model(model_type, fold_num):
     elif model_type=="DEEP_TTE":
         model = DeepTTE.Net(
             f"DEEP_TTE_{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=4,
             collate_fn=data_loader.collate_deeptte,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -233,6 +260,9 @@ def make_model(model_type, fold_num):
     elif model_type=="DEEP_TTE_STATIC":
         model = DeepTTE.Net(
             f"DEEP_TTE_STATIC_{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=8,
             collate_fn=data_loader.collate_deeptte_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -242,13 +272,24 @@ def make_model(model_type, fold_num):
     return model
 
 
-def load_model(model_type, fold_num):
-    model = make_model(model_type, fold_num)
-    last_ckpt = os.listdir(f"./logs/{model_type}_{fold_num}")[-1]
-    if not torch.cuda.is_available():
-        model = model.load_from_checkpoint(f"./logs/{model_type}_{fold_num}/{last_ckpt}", map_location=torch.device('cpu')).eval()
-    else:
-        model = model.load_from_checkpoint(f"./logs/{model_type}_{fold_num}/{last_ckpt}").eval()
+def load_model(model_folder, network_name, model_type, fold_num):
+    """Load latest checkpoint depending on user chosen model type and fold."""
+    last_version = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}"))[-1]
+    last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/"))[-1]
+    if model_type=='FF':
+        model_cl = ff.FF
+    elif model_type=='GRU':
+        model_cl = rnn.GRU
+    elif model_type=='CONV':
+        model_cl = conv.CONV
+    elif model_type=='TRSF':
+        model_cl = transformer.TRSF
+    elif model_type=='DEEP_TTE':
+        model_cl = DeepTTE.Net
+    try:
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}").eval()
+    except:
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", map_location=torch.device('cpu')).eval()
     return model
 
 
@@ -277,52 +318,52 @@ def load_model(model_type, fold_num):
 #         return var
 
 
-def get_local_seq(full_seq, kernel_size, mean, std):
-    seq_len = full_seq.size()[1]
+# def get_local_seq(full_seq, kernel_size, mean, std):
+#     seq_len = full_seq.size()[1]
 
-    if torch.cuda.is_available():
-        indices = torch.cuda.LongTensor(seq_len)
-    else:
-        indices = torch.LongTensor(seq_len)
+#     if torch.cuda.is_available():
+#         indices = torch.cuda.LongTensor(seq_len)
+#     else:
+#         indices = torch.LongTensor(seq_len)
 
-    torch.arange(0, seq_len, out = indices)
-    indices = Variable(indices, requires_grad = False)   ### size [max len of trip in batch, ]
+#     torch.arange(0, seq_len, out = indices)
+#     indices = Variable(indices, requires_grad = False)   ### size [max len of trip in batch, ]
 
-    first_seq = torch.index_select(full_seq, dim = 1, index = indices[kernel_size - 1:])
-    second_seq = torch.index_select(full_seq, dim = 1, index = indices[:-kernel_size + 1])
+#     first_seq = torch.index_select(full_seq, dim = 1, index = indices[kernel_size - 1:])
+#     second_seq = torch.index_select(full_seq, dim = 1, index = indices[:-kernel_size + 1])
 
-    local_seq = first_seq - second_seq   ### this is basically a lag operation feature of local path
+#     local_seq = first_seq - second_seq   ### this is basically a lag operation feature of local path
 
-    local_seq = (local_seq - mean) / std
+#     local_seq = (local_seq - mean) / std
 
-    return local_seq
+#     return local_seq
 
 
-def extract_results(model_results, city):
-    # Extract metric results
-    fold_results = [x['All_Losses'] for x in model_results]
-    cities = []
-    models = []
-    mapes = []
-    rmses = []
-    maes = []
-    fold_nums = []
-    for fold_num in range(0,len(fold_results)):
-        for value in range(0,len(fold_results[0])):
-            cities.append(city)
-            fold_nums.append(fold_num)
-            models.append(fold_results[fold_num][value][0])
-            mapes.append(fold_results[fold_num][value][1])
-            rmses.append(fold_results[fold_num][value][2])
-            maes.append(fold_results[fold_num][value][3])
-    result_df = pd.DataFrame({
-        "Model": models,
-        "City": cities,
-        "Fold": fold_nums,
-        "MAPE": mapes,
-        "RMSE": rmses,
-        "MAE": maes
-    })
+# def extract_results(model_results, city):
+#     # Extract metric results
+#     fold_results = [x['All_Losses'] for x in model_results]
+#     cities = []
+#     models = []
+#     mapes = []
+#     rmses = []
+#     maes = []
+#     fold_nums = []
+#     for fold_num in range(0,len(fold_results)):
+#         for value in range(0,len(fold_results[0])):
+#             cities.append(city)
+#             fold_nums.append(fold_num)
+#             models.append(fold_results[fold_num][value][0])
+#             mapes.append(fold_results[fold_num][value][1])
+#             rmses.append(fold_results[fold_num][value][2])
+#             maes.append(fold_results[fold_num][value][3])
+#     result_df = pd.DataFrame({
+#         "Model": models,
+#         "City": cities,
+#         "Fold": fold_nums,
+#         "MAPE": mapes,
+#         "RMSE": rmses,
+#         "MAE": maes
+#     })
     # # Extract NN loss curves
     # loss_df = []
     # # Iterate folds
@@ -343,82 +384,82 @@ def extract_results(model_results, city):
     #                 loss_df.append(df)
     # loss_df = pd.concat(loss_df)
     # Extract train times
-    names_df = np.array([x['Model_Names'] for x in model_results]).flatten()
-    train_time_df = np.array([x['Train_Times'] for x in model_results]).flatten()
-    folds_df = np.array([np.repeat(i,len(model_results[i]['Model_Names'])) for i in range(len(model_results))]).flatten()
-    city_df = np.array(np.repeat(city,len(folds_df))).flatten()
-    train_time_df = pd.DataFrame({
-        "City": city_df,
-        "Fold": folds_df,
-        "Model":  names_df,
-        "Time": train_time_df
-    })
-    return result_df, train_time_df
+    # names_df = np.array([x['Model_Names'] for x in model_results]).flatten()
+    # train_time_df = np.array([x['Train_Times'] for x in model_results]).flatten()
+    # folds_df = np.array([np.repeat(i,len(model_results[i]['Model_Names'])) for i in range(len(model_results))]).flatten()
+    # city_df = np.array(np.repeat(city,len(folds_df))).flatten()
+    # train_time_df = pd.DataFrame({
+    #     "City": city_df,
+    #     "Fold": folds_df,
+    #     "Model":  names_df,
+    #     "Time": train_time_df
+    # })
+    # return result_df, train_time_df
 
 
-def extract_gen_results(gen_results, city):
-    # Extract generalization results
-    res = []
-    experiments = ["Train_Losses","Test_Losses","Holdout_Losses","Tune_Train_Losses","Tune_Test_Losses"]
-    for ex in experiments:
-        fold_results = [x[ex] for x in gen_results]
-        cities = []
-        models = []
-        mapes = []
-        rmses = []
-        maes = []
-        fold_nums = []
-        for fold_num in range(0,len(fold_results)):
-            for value in range(0,len(fold_results[0])):
-                cities.append(city)
-                fold_nums.append(fold_num)
-                models.append(fold_results[fold_num][value][0])
-                mapes.append(fold_results[fold_num][value][1])
-                rmses.append(fold_results[fold_num][value][2])
-                maes.append(fold_results[fold_num][value][3])
-        gen_df = pd.DataFrame({
-            "Model": models,
-            "City": cities,
-            "Loss": ex,
-            "Fold": fold_nums,
-            "MAPE": mapes,
-            "RMSE": rmses,
-            "MAE": maes
-        })
-        res.append(gen_df)
-    return pd.concat(res, axis=0)
+# def extract_gen_results(gen_results, city):
+#     # Extract generalization results
+#     res = []
+#     experiments = ["Train_Losses","Test_Losses","Holdout_Losses","Tune_Train_Losses","Tune_Test_Losses"]
+#     for ex in experiments:
+#         fold_results = [x[ex] for x in gen_results]
+#         cities = []
+#         models = []
+#         mapes = []
+#         rmses = []
+#         maes = []
+#         fold_nums = []
+#         for fold_num in range(0,len(fold_results)):
+#             for value in range(0,len(fold_results[0])):
+#                 cities.append(city)
+#                 fold_nums.append(fold_num)
+#                 models.append(fold_results[fold_num][value][0])
+#                 mapes.append(fold_results[fold_num][value][1])
+#                 rmses.append(fold_results[fold_num][value][2])
+#                 maes.append(fold_results[fold_num][value][3])
+#         gen_df = pd.DataFrame({
+#             "Model": models,
+#             "City": cities,
+#             "Loss": ex,
+#             "Fold": fold_nums,
+#             "MAPE": mapes,
+#             "RMSE": rmses,
+#             "MAE": maes
+#         })
+#         res.append(gen_df)
+#     return pd.concat(res, axis=0)
 
-def extract_lightning_results(model_name, base_folder, city_name):
-    all_data = []
-    col_names = ["train_loss_epoch","valid_loss","test_loss"]
-    # for model_name in os.listdir(base_folder):
-    #     model_folder = os.path.join(base_folder, model_name)
-    #     if not os.path.isdir(model_folder):
-    #         continue
-    for fold_folder in os.listdir(base_folder):
-        fold_path = os.path.join(base_folder, fold_folder)
-        if not os.path.isdir(fold_path):
-            continue
-        metrics_file = os.path.join(fold_path, "metrics.csv")
-        if not os.path.exists(metrics_file):
-            continue
-        # Read metrics file into a dataframe
-        df = pd.read_csv(metrics_file)
-        # Rename the columns to include model and fold names
-        col_names_mapping = [f"{model_name}_{c}" for c in col_names]
-        for i in range(len(col_names)):
-            df_sub = df[["epoch", col_names_mapping[i]]].dropna()
-            col_remap = {f"{col_names_mapping[i]}": "Loss", "epoch": "Epoch"}
-            df_sub.rename(columns=col_remap, inplace=True)
-            df_sub["Model"] = model_name
-            df_sub["Loss Set"] = col_names[i]
-            df_sub["Fold"] = fold_folder.split("_")[1]
-            df_sub["City"] = city_name
-            df_sub["Loss Set"].replace(to_replace=col_names, value=["Train","Valid","Test"], inplace=True)
-            all_data.append(df_sub)
-    # Concatenate all dataframes into a single dataframe
-    result_df = pd.concat(all_data, axis=0)
-    return result_df
+# def extract_lightning_results(model_name, base_folder, city_name):
+#     all_data = []
+#     col_names = ["train_loss_epoch","valid_loss","test_loss"]
+#     # for model_name in os.listdir(base_folder):
+#     #     model_folder = os.path.join(base_folder, model_name)
+#     #     if not os.path.isdir(model_folder):
+#     #         continue
+#     for fold_folder in os.listdir(base_folder):
+#         fold_path = os.path.join(base_folder, fold_folder)
+#         if not os.path.isdir(fold_path):
+#             continue
+#         metrics_file = os.path.join(fold_path, "metrics.csv")
+#         if not os.path.exists(metrics_file):
+#             continue
+#         # Read metrics file into a dataframe
+#         df = pd.read_csv(metrics_file)
+#         # Rename the columns to include model and fold names
+#         col_names_mapping = [f"{model_name}_{c}" for c in col_names]
+#         for i in range(len(col_names)):
+#             df_sub = df[["epoch", col_names_mapping[i]]].dropna()
+#             col_remap = {f"{col_names_mapping[i]}": "Loss", "epoch": "Epoch"}
+#             df_sub.rename(columns=col_remap, inplace=True)
+#             df_sub["Model"] = model_name
+#             df_sub["Loss Set"] = col_names[i]
+#             df_sub["Fold"] = fold_folder.split("_")[1]
+#             df_sub["City"] = city_name
+#             df_sub["Loss Set"].replace(to_replace=col_names, value=["Train","Valid","Test"], inplace=True)
+#             all_data.append(df_sub)
+#     # Concatenate all dataframes into a single dataframe
+#     result_df = pd.concat(all_data, axis=0)
+#     return result_df
 
 
 # def pad_tensors(tensor_list, pad_dim):

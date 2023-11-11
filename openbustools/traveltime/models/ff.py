@@ -6,12 +6,14 @@ from openbustools.traveltime.models import embedding
 
 
 class FF(pl.LightningModule):
-    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
         super(FF, self).__init__()
+        self.save_hyperparameters()
         self.model_name = model_name
+        self.config = config
+        self.holdout_routes = holdout_routes
         self.input_size = input_size
         self.collate_fn = collate_fn
-        self.save_hyperparameters()
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -79,26 +81,28 @@ class FF(pl.LightningModule):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
-        timeID_embedded = self.timeID_em(x_em[:,0])
-        weekID_embedded = self.weekID_em(x_em[:,1])
-        out = torch.cat([x_ct, timeID_embedded, weekID_embedded], dim=1)
+        # Embed categorical variables
+        x_min_em = self.min_em(x_em[:,0])
+        x_day_em = self.day_em(x_em[:,1])
+        # Combine all variables
+        out = torch.cat([x_ct, x_min_em, x_day_em], dim=1)
         out = self.linear_relu_stack(out)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
-        out  = (out.detach().cpu().numpy() * self.config['time_std']) + self.config['time_mean']
-        y = (y.detach().cpu().numpy() * self.config['time_std']) + self.config['time_mean']
-        return {"out_agg":out, "y_agg":y}
+        return {"preds":out, "labels":y}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
 
 class FF_REALTIME(pl.LightningModule):
-    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
         super(FF_REALTIME, self).__init__()
+        self.save_hyperparameters()
         self.model_name = model_name
+        self.config = config
+        self.holdout_routes = holdout_routes
         self.input_size = input_size
         self.collate_fn = collate_fn
-        self.save_hyperparameters()
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers

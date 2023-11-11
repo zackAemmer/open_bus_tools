@@ -8,12 +8,14 @@ from openbustools.traveltime.models import embedding
 
 
 class GRU(pl.LightningModule):
-    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
         super(GRU, self).__init__()
+        self.save_hyperparameters()
         self.model_name = model_name
+        self.config = config
+        self.holdout_routes = holdout_routes
         self.input_size = input_size
         self.collate_fn = collate_fn
-        self.save_hyperparameters()
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -118,12 +120,14 @@ class GRU(pl.LightningModule):
 
 
 class GRU_REALTIME(pl.LightningModule):
-    def __init__(self, model_name, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
         super(GRU_REALTIME, self).__init__()
+        self.save_hyperparameters()
         self.model_name = model_name
+        self.config = config
+        self.holdout_routes = holdout_routes
         self.input_size = input_size
         self.collate_fn = collate_fn
-        self.save_hyperparameters()
         self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
