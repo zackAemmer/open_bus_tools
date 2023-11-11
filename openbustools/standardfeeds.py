@@ -85,26 +85,26 @@ def extract_operator(old_folder, new_folder, source_col, op_name):
             pickle.dump(data, open(f"{new_folder}{file}", "wb"))
 
 
-def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_stop_times, op_name):
-    """
-    First makes a copy of the GTFS directory, then overwrite the key files.
-    Example SCP with ipv6: scp -6 ./2023_04_21.zip zack@\[address incl brackets]:/home/zack/2023_04_21.zip
-    """
-    gtfs_folders = os.listdir(old_folder)
-    for file in gtfs_folders:
-        if file != ".DS_Store" and len(file)==10:
-            print(f"Extracting {op_name} from {old_folder}{file} to {new_folder}{file}...")
-            # Delete and remake folder if already exists
-            if file in os.listdir(f"{new_folder}"):
-                shutil.rmtree(f"{new_folder}{file}")
-            shutil.copytree(f"{old_folder}{file}", f"{new_folder}{file}")
-            # Read in and overwrite relevant files in new directory
-            z = pd.read_csv(f"{new_folder}{file}/trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
-            st = pd.read_csv(f"{new_folder}{file}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
-            z = z[z[source_col_trips].str[:3]==op_name]
-            st = st[st[source_col_stop_times].str[:3]==op_name]
-            z.to_csv(f"{new_folder}{file}/trips.txt")
-            st.to_csv(f"{new_folder}{file}/stop_times.txt")
+# def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_stop_times, op_name):
+#     """
+#     First makes a copy of the GTFS directory, then overwrite the key files.
+#     Example SCP with ipv6: scp -6 ./2023_04_21.zip zack@\[address incl brackets]:/home/zack/2023_04_21.zip
+#     """
+#     gtfs_folders = os.listdir(old_folder)
+#     for file in gtfs_folders:
+#         if file != ".DS_Store" and len(file)==10:
+#             print(f"Extracting {op_name} from {old_folder}{file} to {new_folder}{file}...")
+#             # Delete and remake folder if already exists
+#             if file in os.listdir(f"{new_folder}"):
+#                 shutil.rmtree(f"{new_folder}{file}")
+#             shutil.copytree(f"{old_folder}{file}", f"{new_folder}{file}")
+#             # Read in and overwrite relevant files in new directory
+#             z = pd.read_csv(f"{new_folder}{file}/trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
+#             st = pd.read_csv(f"{new_folder}{file}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
+#             z = z[z[source_col_trips].str[:3]==op_name]
+#             st = st[st[source_col_stop_times].str[:3]==op_name]
+#             z.to_csv(f"{new_folder}{file}/trips.txt")
+#             st.to_csv(f"{new_folder}{file}/stop_times.txt")
 
 # def apply_gtfs_timetables(data, gtfs_data, gtfs_folder_date):
 #     data['gtfs_folder_date'] = gtfs_folder_date
@@ -157,35 +157,39 @@ def get_scheduled_arrival(realtime, static):
     realtime_coords = np.column_stack([realtime.geometry.x.values, realtime.geometry.y.values])
     static_trips = static.trip_id.values
     static_stops = static.stop_id.values
+    static_stop_seqs = static.stop_sequence.values
     static_coords = np.column_stack([static.geometry.x.values, static.geometry.y.values])
     # Create dictionary mapping trip_ids to lists of stop coordinates
     id_to_stops = {}
     for i, tripid in enumerate(static_trips):
         # If the key does not exist, insert the second argument. Otherwise return the value. Append afterward regardless.
-        id_to_stops.setdefault(tripid,[]).append((static_coords[i], static_stops[i]))
+        id_to_stops.setdefault(tripid,[]).append((static_coords[i], static_stops[i], static_stop_seqs[i]))
     # Repeat for realtime trips
     id_to_data = {}
     for i, tripid in enumerate(realtime_trips):
         id_to_data.setdefault(tripid,[]).append((realtime_coords[i], realtime_order[i]))
     # Iterate over each unique trip, getting closest stops for all points from that trip
     res_counter = 0
-    res = np.zeros((len(realtime),3), dtype=object)
+    res = np.zeros((len(realtime),4), dtype=object)
     for key, value in id_to_data.items():
         realtime_pts = np.vstack([x[0] for x in value])
         realtime_order_i = [x[1] for x in value]
         stop_pts = np.vstack([x[0] for x in id_to_stops[key]])
         all_stop_ids = [x[1] for x in id_to_stops[key]]
+        all_stop_seqs = [x[2] for x in id_to_stops[key]]
         stop_dists, stop_idxs = spatial.get_point_distances(stop_pts, realtime_pts)
         stop_ids = np.array([all_stop_ids[i] for i in stop_idxs], dtype='object')
+        stop_seqs = np.array([all_stop_seqs[i] for i in stop_idxs], dtype='object')
         # Return for each point; stop id, distance to stop
         res[res_counter:res_counter+len(stop_idxs), 0] = realtime_order_i
         res[res_counter:res_counter+len(stop_idxs), 1] = stop_ids
         res[res_counter:res_counter+len(stop_idxs), 2] = stop_dists
+        res[res_counter:res_counter+len(stop_idxs), 3] = stop_seqs
         res_counter += len(stop_idxs)
     # Sort the data points from aggregated trips back into their respective shingles
     original_order = np.argsort(res[:,0])
     res = res[original_order,:]
-    return res[:,1], res[:,2].astype(float)
+    return res[:,1], res[:,2].astype(float), res[:,3]
 
 
 def latest_available_static(day, static_folder):

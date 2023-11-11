@@ -34,8 +34,6 @@ def prepare_run(**kwargs):
         # Avoid sensors recording at regular intervals
         drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
         data = data[~data.index.isin(drop_indices)].reset_index().drop(columns='index')
-        # Ensure correct order
-        data = data.sort_values(['trip_id','locationtime'])
         # Split full trip trajectories into smaller samples
         data = spatial.shingle(data, 2, 5)
         # Project to local coordinate system, apply bounding box, center coords
@@ -95,10 +93,11 @@ def prepare_run(**kwargs):
         static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         # Filter any realtime trips that are not in the schedule
         data.drop(data[~data['trip_id'].isin(static.trip_id)].index, inplace=True)
-        data['stop_id'], data['calc_stop_dist_m'] = standardfeeds.get_scheduled_arrival(data, static)
-        data = data.merge(stop_times, on=['trip_id','stop_id'])
-        data = data.merge(trips, on='trip_id')
-        data['calc_stop_dist_km'] = data['calc_stop_dist_m']/1000.0
+        data['stop_id'], data['calc_stop_dist_m'], data['stop_sequence'] = standardfeeds.get_scheduled_arrival(data, static)
+        # data = data.reset_index().drop(columns='index')
+        data = data.merge(stop_times, on=['trip_id','stop_id','stop_sequence'], how='left')
+        data = data.merge(trips, on='trip_id', how='left')
+        data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         # Passed stops
         data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
         data['pass_stops_n'] = data['pass_stops_n'].fillna(0).clip(lower=0)
@@ -113,8 +112,6 @@ def prepare_run(**kwargs):
         data['cumul_time_s'] = data.cumul_time_s - unique_traj.cumul_time_s.transform('min')
         data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
         data['cumul_pass_stops_n'] = data.cumul_pass_stops_n - unique_traj.cumul_pass_stops_n.transform('min')
-        # Ensure correct order
-        data = data.sort_values(['shingle_id','locationtime'])
         # Save processed date
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")

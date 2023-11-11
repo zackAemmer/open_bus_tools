@@ -1,14 +1,11 @@
 import numpy as np
-from openbustools.traveltime import data_loader
-
-from openbustools import data_utils
 
 
 class PersistentTimeSeqModel:
     def __init__(self, model_name):
         self.model_name = model_name
         self.is_nn = False
-    def evaluate(self, dataloader, config):
+    def evaluate(self, dataloader):
         seq_lens = []
         labels = []
         for i in dataloader:
