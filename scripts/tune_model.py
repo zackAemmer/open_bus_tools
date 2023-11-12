@@ -70,8 +70,8 @@ if __name__=="__main__":
             persistent_workers=True
         )
         trainer = pl.Trainer(
-            max_epochs=10,
-            min_epochs=5,
+            max_epochs=50,
+            min_epochs=1,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{model_folder}{network_name}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.001, patience=3)],

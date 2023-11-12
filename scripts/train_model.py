@@ -81,7 +81,7 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
-            max_epochs=5,
+            max_epochs=50,
             min_epochs=1,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{model_folder}{network_name}", name=model.model_name),
