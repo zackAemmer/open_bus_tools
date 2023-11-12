@@ -279,9 +279,6 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             input_size=4,
             collate_fn=data_loader.collate_deeptte,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="DEEPTTE_STATIC":
         model = DeepTTE.Net(
@@ -291,16 +288,14 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             input_size=8,
             collate_fn=data_loader.collate_deeptte_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
-            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
-            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
-            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     return model
 
 
 def load_model(model_folder, network_name, model_type, fold_num):
     """Load latest checkpoint depending on user chosen model type and fold."""
-    last_version = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}"))[-1]
+    last_version = str(sorted([int(x.split('_')[1]) for x in os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}")])[-1])
+    last_version = f"version_{last_version}"
     last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/"))[-1]
     if model_type=='FF':
         model_cl = ff.FF
@@ -319,47 +314,16 @@ def load_model(model_folder, network_name, model_type, fold_num):
     return model
 
 
-# def pad_sequence(sequences, lengths):
-#     padded = torch.zeros(len(sequences), lengths[0]).float()
-#     for i, seq in enumerate(sequences):
-#         seq = torch.Tensor(seq)
-#         padded[i, :lengths[i]] = seq[:]
-#     return padded
-
-
-# def to_var(var):
-#     if torch.is_tensor(var):
-#         var = Variable(var)
-#         if torch.cuda.is_available():
-#             var = var.cuda()
-#         return var
-#     if isinstance(var, int) or isinstance(var, float):
-#         return var
-#     if isinstance(var, dict):
-#         for key in var:
-#             var[key] = to_var(var[key])
-#         return var
-#     if isinstance(var, list):
-#         var = list(map(lambda x: to_var(x), var))
-#         return var
-
-
-# def get_local_seq(full_seq, kernel_size, mean, std):
-#     seq_len = full_seq.size()[1]
-
-#     if torch.cuda.is_available():
-#         indices = torch.cuda.LongTensor(seq_len)
-#     else:
-#         indices = torch.LongTensor(seq_len)
-
-#     torch.arange(0, seq_len, out = indices)
-#     indices = Variable(indices, requires_grad = False)   ### size [max len of trip in batch, ]
-
-#     first_seq = torch.index_select(full_seq, dim = 1, index = indices[kernel_size - 1:])
-#     second_seq = torch.index_select(full_seq, dim = 1, index = indices[:-kernel_size + 1])
-
-#     local_seq = first_seq - second_seq   ### this is basically a lag operation feature of local path
-
-#     local_seq = (local_seq - mean) / std
-
-#     return local_seq
+def get_local_seq(full_seq, kernel_size, mean, std):
+    seq_len = full_seq.size()[1]
+    if torch.cuda.is_available():
+        indices = torch.cuda.LongTensor(seq_len)
+    else:
+        indices = torch.LongTensor(seq_len)
+    torch.arange(0, seq_len, out = indices)
+    indices = torch.autograd.Variable(indices, requires_grad = False)   ### size [max len of trip in batch, ]
+    first_seq = torch.index_select(full_seq, dim = 1, index = indices[kernel_size - 1:])
+    second_seq = torch.index_select(full_seq, dim = 1, index = indices[:-kernel_size + 1])
+    local_seq = first_seq - second_seq   ### this is basically a lag operation feature of local path
+    local_seq = (local_seq - mean) / std
+    return local_seq

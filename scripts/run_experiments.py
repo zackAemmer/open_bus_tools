@@ -3,6 +3,7 @@ import pickle
 import sys
 
 import lightning.pytorch as pl
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
@@ -74,8 +75,8 @@ if __name__=="__main__":
             logger=False
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
-        preds = torch.concat([x['preds'] for x in preds_and_labels]).numpy()
-        labels = torch.concat([x['labels'] for x in preds_and_labels]).numpy()
+        preds = np.concatenate([x['preds'] for x in preds_and_labels])
+        labels = np.concatenate([x['labels'] for x in preds_and_labels])
         preds = data_loader.denormalize(preds, model.config['cumul_time_s'])
         labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['same_city'] = {'preds':preds, 'labels':labels}
@@ -97,8 +98,8 @@ if __name__=="__main__":
             logger=False
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
-        preds = torch.concat([x['preds'] for x in preds_and_labels]).numpy()
-        labels = torch.concat([x['labels'] for x in preds_and_labels]).numpy()
+        preds = np.concatenate([x['preds'] for x in preds_and_labels])
+        labels = np.concatenate([x['labels'] for x in preds_and_labels])
         preds = data_loader.denormalize(preds, model.config['cumul_time_s'])
         labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['diff_city'] = {'preds':preds, 'labels':labels}
@@ -120,8 +121,8 @@ if __name__=="__main__":
             logger=False
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
-        preds = torch.concat([x['preds'] for x in preds_and_labels]).numpy()
-        labels = torch.concat([x['labels'] for x in preds_and_labels]).numpy()
+        preds = np.concatenate([x['preds'] for x in preds_and_labels])
+        labels = np.concatenate([x['labels'] for x in preds_and_labels])
         preds = data_loader.denormalize(preds, model.config['cumul_time_s'])
         labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
