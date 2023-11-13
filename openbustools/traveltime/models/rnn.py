@@ -109,7 +109,7 @@ class GRU(pl.LightningModule):
         y = y.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y, mask)
-        return {'pred': out_agg, 'label': y_agg}
+        return {'preds': out_agg, 'labels': y_agg}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
