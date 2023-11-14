@@ -312,18 +312,3 @@ def load_model(model_folder, network_name, model_type, fold_num):
     except:
         model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", map_location=torch.device('cpu')).eval()
     return model
-
-
-def get_local_seq(full_seq, kernel_size, mean, std):
-    seq_len = full_seq.size()[1]
-    if torch.cuda.is_available():
-        indices = torch.cuda.LongTensor(seq_len)
-    else:
-        indices = torch.LongTensor(seq_len)
-    torch.arange(0, seq_len, out = indices)
-    indices = torch.autograd.Variable(indices, requires_grad = False)   ### size [max len of trip in batch, ]
-    first_seq = torch.index_select(full_seq, dim = 1, index = indices[kernel_size - 1:])
-    second_seq = torch.index_select(full_seq, dim = 1, index = indices[:-kernel_size + 1])
-    local_seq = first_seq - second_seq   ### this is basically a lag operation feature of local path
-    local_seq = (local_seq - mean) / std
-    return local_seq
