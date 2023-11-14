@@ -33,7 +33,7 @@ def prepare_run(**kwargs):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
         # Avoid sensors recording at regular intervals
         drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
-        data = data[~data.index.isin(drop_indices)].reset_index().drop(columns='index')
+        data = data[~data.index.isin(drop_indices)].reset_index(drop=True)
         # Split full trip trajectories into smaller samples
         data = spatial.shingle(data, 2, 5)
         # Project to local coordinate system, apply bounding box, center coords
@@ -82,9 +82,9 @@ def prepare_run(**kwargs):
         stop_times = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stop_times.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
         trips = pd.read_csv(f"{kwargs['static_folder']}{best_static}/trips.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']]
         # Deal with schedule crossing midnight
-        stop_times['t_sch_hour'] = stop_times['arrival_time'].str.slice(0,2).astype(int)
-        stop_times['t_sch_min'] = stop_times['arrival_time'].str.slice(3,5).astype(int)
-        stop_times['t_sch_sec'] = stop_times['arrival_time'].str.slice(7,9).astype(int)
+        stop_times['t_sch_hour'] = stop_times['arrival_time'].str.split(':').str[0].astype(int)
+        stop_times['t_sch_min'] = stop_times['arrival_time'].str.split(':').str[1].astype(int)
+        stop_times['t_sch_sec'] = stop_times['arrival_time'].str.split(':').str[2].astype(int)
         stop_times['t_sch_min_of_day'] = (stop_times['t_sch_hour']*60) + stop_times['t_sch_min']
         stop_times['t_sch_sec_of_day'] = (stop_times['t_sch_hour']*60*60) + (stop_times['t_sch_min']*60) + stop_times['t_sch_sec']
         stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
@@ -94,7 +94,6 @@ def prepare_run(**kwargs):
         # Filter any realtime trips that are not in the schedule
         data.drop(data[~data['trip_id'].isin(static.trip_id)].index, inplace=True)
         data['stop_id'], data['calc_stop_dist_m'], data['stop_sequence'] = standardfeeds.get_scheduled_arrival(data, static)
-        # data = data.reset_index().drop(columns='index')
         data = data.merge(stop_times, on=['trip_id','stop_id','stop_sequence'], how='left')
         data = data.merge(trips, on='trip_id', how='left')
         data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
@@ -124,27 +123,39 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
+    # prepare_run(
+    #     network_name="kcm",
+    #     dates=data_utils.get_date_list("2023_03_15", 14),
+    #     data_dropout=0.2,
+    #     static_folder="./data/kcm_gtfs/",
+    #     realtime_folder="./data/kcm_realtime/",
+    #     timezone="America/Los_Angeles",
+    #     epsg=32148,
+    #     grid_bounds=[369903,37911,409618,87758],
+    #     coord_ref_center=[386910,69022],
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
+    # prepare_run(
+    #     network_name="atb",
+    #     dates=data_utils.get_date_list("2023_03_15", 14),
+    #     data_dropout=0.2,
+    #     static_folder="./data/atb_gtfs/",
+    #     realtime_folder="./data/atb_realtime/",
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[550869,7012847,579944,7039521],
+    #     coord_ref_center=[569472,7034350],
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
     prepare_run(
-        network_name="kcm",
-        dates=data_utils.get_date_list("2023_03_15", 14),
+        network_name="rut",
+        dates=data_utils.get_date_list("2023_09_15", 14),
         data_dropout=0.2,
-        static_folder="./data/kcm_gtfs/",
-        realtime_folder="./data/kcm_realtime/",
-        timezone="America/Los_Angeles",
-        epsg=32148,
-        grid_bounds=[369903,37911,409618,87758],
-        coord_ref_center=[386910,69022],
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
-    prepare_run(
-        network_name="atb",
-        dates=data_utils.get_date_list("2023_03_15", 14),
-        data_dropout=0.2,
-        static_folder="./data/atb_gtfs/",
-        realtime_folder="./data/atb_realtime/",
+        static_folder="./data/nwy_gtfs/",
+        realtime_folder="./data/nwy_realtime/",
         timezone="Europe/Oslo",
         epsg=32632,
-        grid_bounds=[550869,7012847,579944,7039521],
-        coord_ref_center=[569472,7034350],
+        grid_bounds=[589080,6631314,604705,6648420],
+        coord_ref_center=[597427,6642805],
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
