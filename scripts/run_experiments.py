@@ -1,6 +1,6 @@
+import argparse
 from pathlib import Path
 import pickle
-import sys
 
 import lightning.pytorch as pl
 import numpy as np
@@ -16,14 +16,17 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
-    model_type = sys.argv[1]
-    model_folder = sys.argv[2]
-    network_name = sys.argv[3]
-    train_city_data_folder = sys.argv[4]
-    test_city_data_folder = sys.argv[5]
-    test_date = sys.argv[6]
-    test_n = sys.argv[7]
-    test_dates = data_utils.get_date_list(test_date, int(test_n))
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model_type', required=True)
+    parser.add_argument('-mf', '--model_folder', required=True)
+    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-trdf', '--train_data_folders', nargs='+', required=True)
+    parser.add_argument('-tedf', '--test_data_folders', nargs='+', required=True)
+    parser.add_argument('-td', '--test_date', required=True)
+    parser.add_argument('-tn', '--test_n', required=True)
+    args = parser.parse_args()
+
+    test_dates = data_utils.get_date_list(args.test_date, int(args.test_n))
 
     if torch.cuda.is_available():
         num_workers=4
@@ -36,10 +39,10 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"EXPERIMENTS")
-    print(f"TRAIN CITY DATA: {train_city_data_folder}")
-    print(f"TEST CITY DATA: {test_city_data_folder}")
-    print(f"MODEL: {model_type}")
-    print(f"NETWORK: {network_name}")
+    print(f"TRAIN CITY DATA: {args.train_data_folders}")
+    print(f"TEST CITY DATA: {args.test_data_folders}")
+    print(f"MODEL: {args.model_type}")
+    print(f"NETWORK: {args.network_name}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
@@ -55,11 +58,11 @@ if __name__=="__main__":
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        model = model_utils.load_model(model_folder, network_name, model_type, fold_num)
+        model = model_utils.load_model(args.model_folder, args.network_name, args.model_type, fold_num)
         res[fold_num] = {}
 
         print(f"EXPERIMENT: SAME CITY")
-        test_dataset = data_loader.ContentDataset(train_city_data_folder, test_dates, holdout_type='specify', holdout_routes=model.holdout_routes)
+        test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=model.holdout_routes)
         test_dataset.config = model.config
         test_loader = DataLoader(
             test_dataset,
@@ -82,7 +85,7 @@ if __name__=="__main__":
         res[fold_num]['same_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: DIFFERENT CITY")
-        test_dataset = data_loader.ContentDataset(test_city_data_folder, test_dates)
+        test_dataset = data_loader.ContentDataset(args.test_data_folders, test_dates)
         test_dataset.config = model.config
         test_loader = DataLoader(
             test_dataset,
@@ -105,7 +108,7 @@ if __name__=="__main__":
         res[fold_num]['diff_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: HOLDOUT ROUTES")
-        test_dataset = data_loader.ContentDataset(train_city_data_folder, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=model.holdout_routes)
+        test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=model.holdout_routes)
         test_dataset.config = model.config
         test_loader = DataLoader(
             test_dataset,
@@ -127,7 +130,7 @@ if __name__=="__main__":
         labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
 
-    p = Path('.') / 'results' / network_name
+    p = Path('.') / 'results' / args.network_name
     p.mkdir(exist_ok=True)
-    pickle.dump(res, open(f"./results/{network_name}/{model_type}.pkl", "wb"))
+    pickle.dump(res, open(f"./results/{args.network_name}/{args.model_type}.pkl", "wb"))
     print(f"EXPERIMENTS COMPLETE")

@@ -54,10 +54,11 @@ def create_config(data):
 
 class ContentDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing groups."""
-    def __init__(self, data_folder, dates, holdout_type=None, only_holdout=False, **kwargs):
+    def __init__(self, data_folders, dates, holdout_type=None, only_holdout=False, **kwargs):
         data = []
-        for day in dates:
-            data.append(pd.read_pickle(f"{data_folder}{day}"))
+        for data_folder in data_folders:
+            for day in dates:
+                data.append(pd.read_pickle(f"{data_folder}{day}").to_crs('EPSG:4326'))
         data = pd.concat(data)
         # Deal with different scenarios for holdout route training/testing
         if holdout_type=='create':

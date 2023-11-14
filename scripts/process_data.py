@@ -92,11 +92,20 @@ def prepare_run(**kwargs):
         static = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
         static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         # Filter any realtime trips that are not in the schedule
-        data.drop(data[~data['trip_id'].isin(static.trip_id)].index, inplace=True)
-        data['stop_id'], data['calc_stop_dist_m'], data['stop_sequence'] = standardfeeds.get_scheduled_arrival(data, static)
-        data = data.merge(stop_times, on=['trip_id','stop_id','stop_sequence'], how='left')
-        data = data.merge(trips, on='trip_id', how='left')
-        data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
+        data_filter_static = data.drop(data[~data['trip_id'].isin(static.trip_id)].index)
+        if len(data_filter_static) > 0:
+            data = data.drop(data[~data['trip_id'].isin(static.trip_id)].index)
+            data['stop_id'], data['calc_stop_dist_m'], data['stop_sequence'] = standardfeeds.get_scheduled_arrival(data, static)
+            data = data.merge(stop_times, on=['trip_id','stop_id','stop_sequence'], how='left')
+            data = data.merge(trips, on='trip_id', how='left')
+            data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
+        else:
+            data['stop_id'] = np.nan
+            data['calc_stop_dist_m'] = np.nan
+            data['calc_stop_dist_km'] = np.nan
+            data['stop_sequence'] = np.nan
+            data['trip_id'] = np.nan
+            data['t_sch_sec_of_day'] = np.nan
         # Passed stops
         data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
         data['pass_stops_n'] = data['pass_stops_n'].fillna(0).clip(lower=0)
@@ -123,36 +132,36 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
-    # prepare_run(
-    #     network_name="kcm",
-    #     dates=data_utils.get_date_list("2023_03_15", 14),
-    #     data_dropout=0.2,
-    #     static_folder="./data/kcm_gtfs/",
-    #     realtime_folder="./data/kcm_realtime/",
-    #     timezone="America/Los_Angeles",
-    #     epsg=32148,
-    #     grid_bounds=[369903,37911,409618,87758],
-    #     coord_ref_center=[386910,69022],
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
-    # prepare_run(
-    #     network_name="atb",
-    #     dates=data_utils.get_date_list("2023_03_15", 14),
-    #     data_dropout=0.2,
-    #     static_folder="./data/atb_gtfs/",
-    #     realtime_folder="./data/atb_realtime/",
-    #     timezone="Europe/Oslo",
-    #     epsg=32632,
-    #     grid_bounds=[550869,7012847,579944,7039521],
-    #     coord_ref_center=[569472,7034350],
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
+    prepare_run(
+        network_name="kcm",
+        dates=data_utils.get_date_list("2023_03_15", 14),
+        data_dropout=0.2,
+        static_folder="./data/kcm_gtfs/",
+        realtime_folder="./data/kcm_realtime/",
+        timezone="America/Los_Angeles",
+        epsg=32148,
+        grid_bounds=[369903,37911,409618,87758],
+        coord_ref_center=[386910,69022],
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
+    prepare_run(
+        network_name="atb",
+        dates=data_utils.get_date_list("2023_03_15", 14),
+        data_dropout=0.2,
+        static_folder="./data/atb_gtfs/",
+        realtime_folder="./data/atb_realtime/",
+        timezone="Europe/Oslo",
+        epsg=32632,
+        grid_bounds=[550869,7012847,579944,7039521],
+        coord_ref_center=[569472,7034350],
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
     prepare_run(
         network_name="rut",
-        dates=data_utils.get_date_list("2023_09_15", 14),
+        dates=data_utils.get_date_list("2023_03_15", 14),
         data_dropout=0.2,
-        static_folder="./data/nwy_gtfs/",
-        realtime_folder="./data/nwy_realtime/",
+        static_folder="./data/rut_gtfs/",
+        realtime_folder="./data/rut_realtime/",
         timezone="Europe/Oslo",
         epsg=32632,
         grid_bounds=[589080,6631314,604705,6648420],

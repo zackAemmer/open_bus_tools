@@ -1,6 +1,6 @@
+import argparse
 from pathlib import Path
 import pickle
-import sys
 
 import lightning.pytorch as pl
 import numpy as np
@@ -16,13 +16,16 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
-    model_folder = sys.argv[1]
-    network_name = sys.argv[2]
-    train_city_data_folder = sys.argv[3]
-    test_city_data_folder = sys.argv[4]
-    test_date = sys.argv[5]
-    test_n = sys.argv[6]
-    test_dates = data_utils.get_date_list(test_date, int(test_n))
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-mf', '--model_folder', required=True)
+    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-trdf', '--train_data_folders', nargs='+', required=True)
+    parser.add_argument('-tedf', '--test_data_folders', nargs='+', required=True)
+    parser.add_argument('-td', '--test_date', required=True)
+    parser.add_argument('-tn', '--test_n', required=True)
+    args = parser.parse_args()
+
+    test_dates = data_utils.get_date_list(args.test_date, int(args.test_n))
 
     if torch.cuda.is_available():
         num_workers=4
@@ -35,10 +38,10 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"EXPERIMENTS")
-    print(f"TRAIN CITY DATA: {train_city_data_folder}")
-    print(f"TEST CITY DATA: {test_city_data_folder}")
+    print(f"TRAIN CITY DATA: {args.train_data_folders}")
+    print(f"TEST CITY DATA: {args.test_data_folders}")
     print(f"MODEL: HEURISTICS")
-    print(f"NETWORK: {network_name}")
+    print(f"NETWORK: {args.network_name}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
@@ -49,12 +52,12 @@ if __name__=="__main__":
         print(f"FOLD: {fold_num}")
         for mname in res.keys():
             res[mname][fold_num] = {}
-        avg_model = pickle.load(open(f"{model_folder}{network_name}/AVG_{fold_num}.pkl", 'rb'))
+        avg_model = pickle.load(open(f"{args.model_folder}{args.network_name}/AVG_{fold_num}.pkl", 'rb'))
         per_tim_model = persistent.PersistentTimeModel('PERT')
         sch_model = schedule.ScheduleModel('SCH')
 
         print(f"EXPERIMENT: SAME CITY")
-        test_dataset = data_loader.ContentDataset(train_city_data_folder, test_dates, holdout_type='specify', holdout_routes=avg_model.holdout_routes)
+        test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=avg_model.holdout_routes)
         test_dataset.config = avg_model.config
         preds_and_labels = avg_model.predict(test_dataset, 'h')
         res['AVGH'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
@@ -66,7 +69,7 @@ if __name__=="__main__":
         res['SCH'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
         print(f"EXPERIMENT: DIFFERENT CITY")
-        test_dataset = data_loader.ContentDataset(test_city_data_folder, test_dates)
+        test_dataset = data_loader.ContentDataset(args.test_data_folders, test_dates)
         test_dataset.config = avg_model.config
         preds_and_labels = avg_model.predict(test_dataset, 'h')
         res['AVGH'][fold_num]['diff_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
@@ -78,7 +81,7 @@ if __name__=="__main__":
         res['SCH'][fold_num]['diff_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
         print(f"EXPERIMENT: HOLDOUT ROUTES")
-        test_dataset = data_loader.ContentDataset(train_city_data_folder, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=avg_model.holdout_routes)
+        test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=avg_model.holdout_routes)
         test_dataset.config = avg_model.config
         preds_and_labels = avg_model.predict(test_dataset, 'h')
         res['AVGH'][fold_num]['holdout'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
@@ -89,8 +92,8 @@ if __name__=="__main__":
         preds_and_labels = sch_model.predict(test_dataset)
         res['SCH'][fold_num]['holdout'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
-    p = Path('.') / 'results' / network_name
+    p = Path('.') / 'results' / args.network_name
     p.mkdir(exist_ok=True)
     for model_type in res.keys():
-        pickle.dump(res, open(f"./results/{network_name}/{model_type}.pkl", "wb"))
+        pickle.dump(res, open(f"./results/{args.network_name}/{model_type}.pkl", "wb"))
     print(f"EXPERIMENTS COMPLETE")

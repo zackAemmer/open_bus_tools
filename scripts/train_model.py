@@ -1,4 +1,4 @@
-import sys
+import argparse
 
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -17,13 +17,16 @@ if __name__=="__main__":
     torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
-    model_type = sys.argv[1]
-    model_folder = sys.argv[2]
-    network_name = sys.argv[3]
-    data_folder = sys.argv[4]
-    train_date = sys.argv[5]
-    train_n = sys.argv[6]
-    train_dates = data_utils.get_date_list(train_date, int(train_n))
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model_type', required=True)
+    parser.add_argument('-mf', '--model_folder', required=True)
+    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-df', '--data_folders', nargs='+', required=True)
+    parser.add_argument('-td', '--train_date', required=True)
+    parser.add_argument('-tn', '--train_n', required=True)
+    args = parser.parse_args()
+
+    train_dates = data_utils.get_date_list(args.train_date, int(args.train_n))
 
     if torch.cuda.is_available():
         num_workers=4
@@ -36,14 +39,14 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"TRAINING")
-    print(f"DATA: {data_folder}")
-    print(f"MODEL: {model_type}")
-    print(f"NETWORK: {network_name}")
+    print(f"DATA: {args.data_folders}")
+    print(f"MODEL: {args.model_type}")
+    print(f"NETWORK: {args.network_name}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.ContentDataset(data_folder, train_dates, holdout_type='create')
+    train_dataset = data_loader.ContentDataset(args.data_folders, train_dates, holdout_type='create')
 
     # print(f"Building grid on fold training data")
     # train_dataset = data_loader.LoadSliceDataset(f"{base_folder}deeptte_formatted/train", config, holdout_routes=holdout_routes, skip_gtfs=skip_gtfs)
@@ -56,7 +59,7 @@ if __name__=="__main__":
         print("="*30)
         print(f"FOLD: {fold_num}")
         train_dataset.config = data_loader.create_config(train_dataset.data.loc[train_idx])
-        model = model_utils.make_model(model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
+        model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
         train_loader = DataLoader(
@@ -81,10 +84,10 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
-            max_epochs=50,
+            max_epochs=3,
             min_epochs=1,
             accelerator=accelerator,
-            logger=TensorBoardLogger(save_dir=f"{model_folder}{network_name}", name=model.model_name),
+            logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.network_name}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.001, patience=3)],
             # profiler=pl.profilers.AdvancedProfiler(filename='profiler_results'),
             # limit_train_batches=2,
