@@ -125,8 +125,8 @@ class TRSF(pl.LightningModule):
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
         y = y.detach().cpu().numpy()
-        out_agg = data_utils.aggregate_tts(out, mask)
-        y_agg = data_utils.aggregate_tts(y, mask)
+        out_agg = model_utils.aggregate_tts(out, mask)
+        y_agg = model_utils.aggregate_tts(y, mask)
         return {'preds': out_agg, 'labels': y_agg}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)

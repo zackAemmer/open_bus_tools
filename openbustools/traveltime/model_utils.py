@@ -308,7 +308,7 @@ def load_model(model_folder, network_name, model_type, fold_num):
     elif model_type=='DEEPTTE':
         model_cl = DeepTTE.Net
     try:
-        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}").eval()
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False).eval()
     except:
-        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", map_location=torch.device('cpu')).eval()
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
     return model
