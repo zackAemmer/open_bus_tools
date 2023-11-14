@@ -9,16 +9,14 @@ import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger
 from sklearn import metrics
 from sklearn.model_selection import KFold
 from tabulate import tabulate
 from torch.utils.data import DataLoader, SequentialSampler, SubsetRandomSampler
 
+from openbustools import standardfeeds
 from openbustools.traveltime import data_loader, grids, model_utils
 from openbustools.traveltime.models import avg_speed
-from openbustools import data_utils
 
 
 if __name__=="__main__":
@@ -33,7 +31,7 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    train_dates = data_utils.get_date_list(args.train_date, int(args.train_n))
+    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
 
     print("="*30)
     print(f"TRAINING")

@@ -8,8 +8,8 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from tabulate import tabulate
 from torch.utils.data import DataLoader, SequentialSampler
 
+from openbustools import standardfeeds
 from openbustools.traveltime import data_loader, model_utils
-from openbustools import data_utils
 
 
 if __name__=="__main__":
@@ -26,7 +26,7 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    train_dates = data_utils.get_date_list(args.train_date, int(args.train_n))
+    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
 
     if torch.cuda.is_available():
         num_workers=4

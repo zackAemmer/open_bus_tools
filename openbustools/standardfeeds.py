@@ -1,4 +1,4 @@
-import datetime
+from datetime import date, datetime, timedelta
 import os
 import pickle
 import shutil
@@ -20,6 +20,19 @@ GTFSRT_LOOKUP = dict(zip(GTFSRT_NAMES, GTFSRT_TYPES))
 GTFS_NAMES = ['trip_id','route_id','stop_id','stop_lat','stop_lon','arrival_time']
 GTFS_TYPES = [str,str,str,float,float,str]
 GTFS_LOOKUP = dict(zip(GTFS_NAMES, GTFS_TYPES))
+
+
+def get_date_list(start, n_days):
+    """
+    Get a list of date strings starting at a given day and continuing for n days.
+    start: date string formatted as 'yyyy_mm_dd'
+    n_days: int number of days forward to include from start day
+    Returns: list of date strings
+    """
+    year, month, day = start.split("_")
+    base = date(int(year), int(month), int(day))
+    date_list = [base + timedelta(days=x) for x in range(n_days)]
+    return [f"{date.strftime('%Y_%m_%d')}.pkl" for date in date_list]
 
 
 def get_gtfs_shapes_lookup(gtfs_folder):
@@ -149,18 +162,18 @@ def get_scheduled_arrival(realtime, static):
 def latest_available_static(day, static_folder):
     """Find the latest possible static data that is less than the realtime date."""
     static_available = [f for f in os.listdir(static_folder) if not f.startswith('.')]
-    static_available = [datetime.datetime.strptime(x, "%Y_%m_%d") for x in static_available]
-    static_needed = datetime.datetime.strptime(day, "%Y_%m_%d")
+    static_available = [datetime.strptime(x, "%Y_%m_%d") for x in static_available]
+    static_needed = datetime.strptime(day, "%Y_%m_%d")
     static_possible = [sp for sp in static_available if sp < static_needed]
     static_best = max(static_possible)
-    return datetime.datetime.strftime(static_best, "%Y_%m_%d")
+    return datetime.strftime(static_best, "%Y_%m_%d")
 
 
 def date_to_service_id(date_str, gtfs_folder):
     """Get a list of valid service ids for the given day of week and month."""
     calendar = pd.read_csv(f"{gtfs_folder}calendar.txt")
     weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
-    obs_date = datetime.datetime.strptime(date_str, "%Y_%m_%d")
+    obs_date = datetime.strptime(date_str, "%Y_%m_%d")
     obs_dow = weekdays[obs_date.weekday()]
     valid_service_ids = calendar[calendar[obs_dow]==1].copy()
     # Filter start/end

@@ -7,8 +7,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from openbustools import standardfeeds
 from openbustools.traveltime import data_loader, model_utils
-from openbustools import data_utils
 
 
 if __name__=="__main__":
@@ -26,7 +26,7 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--test_n', required=True)
     args = parser.parse_args()
 
-    test_dates = data_utils.get_date_list(args.test_date, int(args.test_n))
+    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
 
     if torch.cuda.is_available():
         num_workers=4

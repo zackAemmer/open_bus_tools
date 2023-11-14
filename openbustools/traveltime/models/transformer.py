@@ -3,7 +3,6 @@ import torch
 from torch import nn
 import lightning.pytorch as pl
 
-from openbustools import data_utils
 from openbustools.traveltime import masked_loss, model_utils, pos_encodings
 from openbustools.traveltime.models import embedding
 
