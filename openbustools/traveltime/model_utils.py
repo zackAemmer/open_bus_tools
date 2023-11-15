@@ -14,25 +14,33 @@ HYPERPARAM_DICT = {
         'batch_size': 64,
         'hidden_size': 32,
         'num_layers': 2,
-        'dropout_rate': .1
+        'dropout_rate': .1,
+        'grid_input_size': 8*4,
+        'grid_compression_size': 16
     },
     'CONV': {
         'batch_size': 64,
         'hidden_size': 32,
         'num_layers': 2,
-        'dropout_rate': .1
+        'dropout_rate': .1,
+        'grid_input_size': 8*4,
+        'grid_compression_size': 16
     },
     'GRU': {
         'batch_size': 64,
         'hidden_size': 32,
         'num_layers': 2,
-        'dropout_rate': .1
+        'dropout_rate': .1,
+        'grid_input_size': 8*4,
+        'grid_compression_size': 16
     },
     'TRSF': {
         'batch_size': 64,
         'hidden_size': 32,
         'num_layers': 2,
-        'dropout_rate': .1
+        'dropout_rate': .1,
+        'grid_input_size': 8*4,
+        'grid_compression_size': 16
     },
     'DEEPTTE': {
         'batch_size': 64
@@ -143,18 +151,18 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="FF_REALTIME":
-        model = ff.FF_REALTIME(
+        model = ff.FFRealtime(
             f"FF_REALTIME_{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=18,
-            n_grid_features=3*3*1,
-            grid_compression_size=8,
+            input_size=16,
             collate_fn=data_loader.collate_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+            grid_input_size=HYPERPARAM_DICT[model_archetype]['grid_input_size'],
+            grid_compression_size=HYPERPARAM_DICT[model_archetype]['grid_compression_size']
         )
     elif model_type=="CONV":
         model = conv.CONV(
@@ -181,18 +189,18 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="CONV_REALTIME":
-        model = conv.CONV_REALTIME(
+        model = conv.CONVRealtime(
             f"CONV_REALTIME_{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=9,
-            n_grid_features=3*3*1,
-            grid_compression_size=8,
+            input_size=8,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+            grid_input_size=HYPERPARAM_DICT[model_archetype]['grid_input_size'],
+            grid_compression_size=HYPERPARAM_DICT[model_archetype]['grid_compression_size']
         )
     elif model_type=="GRU":
         model = rnn.GRU(
@@ -219,18 +227,18 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="GRU_REALTIME":
-        model = rnn.GRU_REALTIME(
+        model = rnn.GRURealtime(
             f"GRU_REALTIME_{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=9,
-            n_grid_features=3*3*1,
-            grid_compression_size=8,
+            input_size=8,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+            grid_input_size=HYPERPARAM_DICT[model_archetype]['grid_input_size'],
+            grid_compression_size=HYPERPARAM_DICT[model_archetype]['grid_compression_size']
         )
     elif model_type=="TRSF":
         model = transformer.TRSF(
@@ -257,18 +265,18 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
     elif model_type=="TRSF_REALTIME":
-        model = transformer.TRSF_REALTIME(
+        model = transformer.TRSFRealtime(
             f"TRSF_REALTIME_{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=9,
-            n_grid_features=3*3*1,
-            grid_compression_size=8,
+            input_size=8,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+            grid_input_size=HYPERPARAM_DICT[model_archetype]['grid_input_size'],
+            grid_compression_size=HYPERPARAM_DICT[model_archetype]['grid_compression_size']
         )
     elif model_type=="DEEPTTE":
         model = DeepTTE.Net(
@@ -298,12 +306,20 @@ def load_model(model_folder, network_name, model_type, fold_num):
     last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/"))[-1]
     if model_type=='FF':
         model_cl = ff.FF
+    elif model_type=='FF_REALTIME':
+        model_cl = ff.FFRealtime
     elif model_type=='GRU':
         model_cl = rnn.GRU
+    elif model_type=='GRU_REALTIME':
+        model_cl = rnn.GRURealtime
     elif model_type=='CONV':
         model_cl = conv.CONV
+    elif model_type=='CONV_REALTIME':
+        model_cl = conv.CONVRealtime
     elif model_type=='TRSF':
         model_cl = transformer.TRSF
+    elif model_type=='TRSF_REALTIME':
+        model_cl = transformer.TRSFRealtime
     elif model_type=='DEEPTTE':
         model_cl = DeepTTE.Net
     try:

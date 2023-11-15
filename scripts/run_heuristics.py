@@ -18,7 +18,7 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-mf', '--model_folder', required=True)
-    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-r', '--run_label', required=True)
     parser.add_argument('-trdf', '--train_data_folders', nargs='+', required=True)
     parser.add_argument('-tedf', '--test_data_folders', nargs='+', required=True)
     parser.add_argument('-td', '--test_date', required=True)

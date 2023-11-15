@@ -19,7 +19,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
     parser.add_argument('-mf', '--model_folder', required=True)
-    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-r', '--run_label', required=True)
     parser.add_argument('-trdf', '--train_data_folders', nargs='+', required=True)
     parser.add_argument('-tedf', '--test_data_folders', nargs='+', required=True)
     parser.add_argument('-td', '--test_date', required=True)
@@ -46,13 +46,6 @@ if __name__=="__main__":
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
-    # print(f"Building grid on fold testing data")
-    # test_dataset = data_loader.LoadSliceDataset(f"{base_folder}deeptte_formatted/test", config, holdout_routes=holdout_routes, skip_gtfs=skip_gtfs)
-    # test_ngrid = grids.NGridBetter(config['grid_bounds'][0], grid_s_size)
-    # test_ngrid.add_grid_content(test_dataset.get_all_samples(keep_cols=['shingle_id','locationtime','x','y','speed_m_s','bearing']), trace_format=True)
-    # test_ngrid.build_cell_lookup()
-    # test_dataset.grid = test_ngrid
-
     res = {}
     n_folds = 5
     for fold_num in range(n_folds):
@@ -64,6 +57,7 @@ if __name__=="__main__":
         print(f"EXPERIMENT: SAME CITY")
         test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=model.holdout_routes)
         test_dataset.config = model.config
+        test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
             test_dataset,
             collate_fn=model.collate_fn,
@@ -87,6 +81,7 @@ if __name__=="__main__":
         print(f"EXPERIMENT: DIFFERENT CITY")
         test_dataset = data_loader.ContentDataset(args.test_data_folders, test_dates)
         test_dataset.config = model.config
+        test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
             test_dataset,
             collate_fn=model.collate_fn,
@@ -110,6 +105,7 @@ if __name__=="__main__":
         print(f"EXPERIMENT: HOLDOUT ROUTES")
         test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=model.holdout_routes)
         test_dataset.config = model.config
+        test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
             test_dataset,
             collate_fn=model.collate_fn,

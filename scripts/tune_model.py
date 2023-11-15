@@ -20,7 +20,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
     parser.add_argument('-mf', '--model_folder', required=True)
-    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-r', '--run_label', required=True)
     parser.add_argument('-df', '--data_folders', nargs='+', required=True)
     parser.add_argument('-td', '--train_date', required=True)
     parser.add_argument('-tn', '--train_n', required=True)
@@ -45,13 +45,6 @@ if __name__=="__main__":
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
-    # print(f"Building grid on fold training data")
-    # train_dataset = data_loader.LoadSliceDataset(f"{base_folder}deeptte_formatted/train", config, holdout_routes=holdout_routes, skip_gtfs=skip_gtfs)
-    # train_ngrid = grids.NGridBetter(config['grid_bounds'][0], grid_s_size)
-    # train_ngrid.add_grid_content(train_dataset.get_all_samples(keep_cols=['shingle_id','locationtime','x','y','speed_m_s','bearing']), trace_format=True)
-    # train_ngrid.build_cell_lookup()
-    # train_dataset.grid = train_ngrid
-
     n_folds = 5
     for fold_num in range(n_folds):
         print("="*30)
@@ -61,6 +54,7 @@ if __name__=="__main__":
         train_dataset = data_loader.ContentDataset(args.data_folders, train_dates)
         train_idx = np.random.choice(np.arange(train_dataset.__len__()), 100)
         train_dataset.config = model.config
+        train_dataset.include_grid = model.include_grid
         train_sampler = SequentialSampler(train_idx)
         train_loader = DataLoader(
             train_dataset,

@@ -25,7 +25,7 @@ if __name__=="__main__":
     pl.seed_everything(42, workers=True)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--network_name', required=True)
+    parser.add_argument('-r', '--run_label', required=True)
     parser.add_argument('-df', '--data_folders', nargs='+', required=True)
     parser.add_argument('-td', '--train_date', required=True)
     parser.add_argument('-tn', '--train_n', required=True)

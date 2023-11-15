@@ -33,7 +33,8 @@ class RealtimeGrid:
         order_dict = defaultdict(list)
         dim_feats = self.cell_lookup[list(self.cell_lookup.keys())[0]].shape[1]
         x_idx, y_idx = self.digitize_points(sample_df['x'], sample_df['y'])
-        locationtimes = sample_df['locationtime'].to_numpy()
+        # Only get points before the timestamp of the first point in trajectory
+        locationtimes = np.repeat(sample_df['locationtime'].to_numpy()[0],len(sample_df))
         # Create lookup for unique cells, to time values that will be searched
         for i, (x, y, time) in enumerate(zip(x_idx, y_idx, locationtimes)):
             locationtime_dict[(x,y)].append(time)
