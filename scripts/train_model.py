@@ -9,7 +9,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 
 from openbustools import standardfeeds
-from openbustools.traveltime import data_loader, model_utils
+from openbustools.traveltime import data_loader, grid, model_utils
 
 
 if __name__=="__main__":
@@ -47,19 +47,12 @@ if __name__=="__main__":
 
     k_fold = KFold(5, shuffle=True, random_state=42)
     train_dataset = data_loader.ContentDataset(args.data_folders, train_dates, holdout_type='create')
-
-    # print(f"Building grid on fold training data")
-    # train_dataset = data_loader.LoadSliceDataset(f"{base_folder}deeptte_formatted/train", config, holdout_routes=holdout_routes, skip_gtfs=skip_gtfs)
-    # train_ngrid = grids.NGridBetter(config['grid_bounds'][0], grid_s_size)
-    # train_ngrid.add_grid_content(train_dataset.get_all_samples(keep_cols=['shingle_id','locationtime','x','y','speed_m_s','bearing']), trace_format=True)
-    # train_ngrid.build_cell_lookup()
-    # train_dataset.grid = train_ngrid
-
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
         train_dataset.config = data_loader.create_config(train_dataset.data.loc[train_idx])
         model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
+        train_dataset.include_grid = model.include_grid
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
         train_loader = DataLoader(

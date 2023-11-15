@@ -125,6 +125,27 @@ def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowes
     return smoothed, bottom, top
 
 
+# def save_grid_anim(data, file_name):
+#     # Plot first 4 channels of second axis
+#     fig, axes = plt.subplots(1, data.shape[1])
+#     axes = axes.reshape(-1)
+#     fig.tight_layout()
+#     # Define the update function that will be called for each frame of the animation
+#     def update(frame):
+#         fig.suptitle(f"Frame {frame}")
+#         for i in range(data.shape[1]):
+#             d = data[:,i,:,:]
+#             vmin=np.min(d[~np.isnan(d)])
+#             vmax=np.max(d[~np.isnan(d)])
+#             ax = axes[i]
+#             ax.clear()
+#             im = ax.imshow(data[frame,i,:,:], cmap='plasma', vmin=vmin, vmax=vmax, origin="lower")
+#     # Create the animation object
+#     ani = animation.FuncAnimation(fig, update, frames=data.shape[0])
+#     # Save the animation object
+#     ani.save(f"../plots/{file_name}", fps=10, dpi=300)
+
+
 # def formatted_barplot(plot_df):
 #     fig, axes = plt.subplots(1,1)
 #     fig.set_figheight(HEIGHT)

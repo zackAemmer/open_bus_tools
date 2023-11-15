@@ -4,10 +4,9 @@ import numpy as np
 from sklearn import metrics
 import torch
 
-from openbustools.traveltime.models import embedding, transformer
+from openbustools.traveltime.models import transformer
 from openbustools.traveltime.models.deeptte import DeepTTE
 from openbustools.traveltime import data_loader
-from openbustools import data_utils
 from openbustools.traveltime.models import avg_speed, conv, ff, persistent, rnn, schedule
 
 HYPERPARAM_DICT = {

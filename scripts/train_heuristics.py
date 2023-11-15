@@ -15,7 +15,7 @@ from tabulate import tabulate
 from torch.utils.data import DataLoader, SequentialSampler, SubsetRandomSampler
 
 from openbustools import standardfeeds
-from openbustools.traveltime import data_loader, grids, model_utils
+from openbustools.traveltime import data_loader, grid, model_utils
 from openbustools.traveltime.models import avg_speed
 
 

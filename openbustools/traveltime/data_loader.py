@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pandas as pd
 import torch
@@ -29,6 +31,13 @@ REALTIME_FEATS = [
 DEEPTTE_FEATS = [
     "cumul_dist_km",
 ]
+MISC_FEATS = [
+    "file",
+    "data_folder",
+    "x",
+    "y",
+    "locationtime"
+]
 
 
 def normalize(x, config_entry):
@@ -56,9 +65,15 @@ class ContentDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing groups."""
     def __init__(self, data_folders, dates, holdout_type=None, only_holdout=False, **kwargs):
         data = []
+        self.grids = {}
         for data_folder in data_folders:
+            self.grids[data_folder] = {}
             for day in dates:
-                data.append(pd.read_pickle(f"{data_folder}{day}").to_crs('EPSG:4326'))
+                d = pd.read_pickle(f"{data_folder}{day}").to_crs('EPSG:4326')
+                d['data_folder'] = data_folder
+                data.append(d)
+                with open(f"{data_folder}/grid/{day}", 'rb') as f:
+                    self.grids[data_folder][day.split('.')[0]] = pickle.load(f)
         data = pd.concat(data)
         # Deal with different scenarios for holdout route training/testing
         if holdout_type=='create':
@@ -77,9 +92,10 @@ class ContentDataset(Dataset):
         data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
         data = data.set_index('shingle_id')
         self.data = data
-        self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+REALTIME_FEATS+DEEPTTE_FEATS]
+        self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+REALTIME_FEATS+DEEPTTE_FEATS+MISC_FEATS]
         self.groupdata = self.feat_data.groupby('shingle_id')
         self.config = None
+        self.include_grid = None
     def __getitem__(self, index):
         sample_df = self.groupdata.get_group(index)
         sample = {}
@@ -87,6 +103,10 @@ class ContentDataset(Dataset):
             sample[k] = normalize(sample_df[k].to_numpy(), self.config[k])
         for k in EMBED_FEATS:
             sample[k] = sample_df[k].to_numpy()[0]
+        if self.include_grid:
+            sample_file = sample_df['file'].iloc[0]
+            sample_folder = sample_df['data_folder'].iloc[0]
+            sample['grid'] = self.grids[sample_folder][sample_file].get_recent_points(sample_df[['x','y','locationtime']], 4)
         return sample
     def __len__(self):
         return np.max(self.data.index.to_numpy())

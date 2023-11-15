@@ -21,6 +21,7 @@ class GRU(pl.LightningModule):
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
         self.is_nn = True
+        self.include_grid = False
         self.loss_fn = masked_loss.MaskedHuberLoss()
         # Embeddings
         self.min_em = embedding.MinuteEmbedding()

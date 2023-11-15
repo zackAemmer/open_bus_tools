@@ -5,6 +5,7 @@ class PersistentTimeModel:
     def __init__(self, model_name):
         self.model_name = model_name
         self.is_nn = False
+        self.include_grid = False
     def predict(self, dataset):
         data_df = dataset.data
         res = data_df.groupby('shingle_id')[['cumul_dist_km']].count()

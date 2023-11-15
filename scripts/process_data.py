@@ -1,4 +1,5 @@
 import datetime
+import pickle
 from zoneinfo import ZoneInfo
 
 import geopandas as gpd
@@ -7,7 +8,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from openbustools import data_utils, spatial, standardfeeds
+from openbustools import spatial, standardfeeds
+from openbustools.traveltime import grid
 
 
 def prepare_run(**kwargs):
@@ -39,8 +41,10 @@ def prepare_run(**kwargs):
         # Project to local coordinate system, apply bounding box, center coords
         data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         data = data.cx[kwargs['grid_bounds'][0]:kwargs['grid_bounds'][2], kwargs['grid_bounds'][1]:kwargs['grid_bounds'][3]].copy()
-        data['x_cent'] = data.geometry.x - kwargs['coord_ref_center'][0]
-        data['y_cent'] = data.geometry.y - kwargs['coord_ref_center'][1]
+        data['x'] = data.geometry.x
+        data['y'] = data.geometry.y
+        data['x_cent'] = data['x'] - kwargs['coord_ref_center'][0]
+        data['y_cent'] = data['y'] - kwargs['coord_ref_center'][1]
         # Calculate geometry features
         data['calc_time_s'], data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'locationtime')
         # Drop consecutive points where bus did not move, re-calculate features
@@ -120,10 +124,15 @@ def prepare_run(**kwargs):
         data['cumul_time_s'] = data.cumul_time_s - unique_traj.cumul_time_s.transform('min')
         data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
         data['cumul_pass_stops_n'] = data.cumul_pass_stops_n - unique_traj.cumul_pass_stops_n.transform('min')
+        # Realtime grid features
+        data_grid = grid.RealtimeGrid(kwargs['grid_bounds'], 500)
+        data_grid.build_cell_lookup(data[['locationtime','x','y','calc_speed_m_s','calc_bear_d']].copy())
         # Save processed date
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
         data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
+        with open(f"{kwargs['realtime_folder']}processed/grid/{day}", 'wb') as f:
+            pickle.dump(data_grid, f)
     print(f"PROCESSING COMPLETED: {kwargs['network_name']}")
 
 
@@ -134,7 +143,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=data_utils.get_date_list("2023_03_15", 14),
+        dates=standardfeeds.get_date_list("2023_03_15", 14),
         data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
@@ -146,7 +155,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=data_utils.get_date_list("2023_03_15", 14),
+        dates=standardfeeds.get_date_list("2023_03_15", 14),
         data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
@@ -158,7 +167,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="rut",
-        dates=data_utils.get_date_list("2023_03_15", 14),
+        dates=standardfeeds.get_date_list("2023_03_15", 14),
         data_dropout=0.2,
         static_folder="./data/rut_gtfs/",
         realtime_folder="./data/rut_realtime/",
