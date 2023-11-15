@@ -39,10 +39,10 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"EXPERIMENTS")
+    print(f"RUN: {args.run_label}")
+    print(f"MODEL: {args.model_type}")
     print(f"TRAIN CITY DATA: {args.train_data_folders}")
     print(f"TEST CITY DATA: {args.test_data_folders}")
-    print(f"MODEL: {args.model_type}")
-    print(f"NETWORK: {args.network_name}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
@@ -51,7 +51,7 @@ if __name__=="__main__":
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        model = model_utils.load_model(args.model_folder, args.network_name, args.model_type, fold_num)
+        model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
         res[fold_num] = {}
 
         print(f"EXPERIMENT: SAME CITY")
@@ -126,7 +126,7 @@ if __name__=="__main__":
         labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
 
-    p = Path('.') / 'results' / args.network_name
+    p = Path('.') / 'results' / args.run_label
     p.mkdir(exist_ok=True)
-    pickle.dump(res, open(f"./results/{args.network_name}/{args.model_type}.pkl", "wb"))
+    pickle.dump(res, open(f"./results/{args.run_label}/{args.model_type}.pkl", 'wb'))
     print(f"EXPERIMENTS COMPLETE")

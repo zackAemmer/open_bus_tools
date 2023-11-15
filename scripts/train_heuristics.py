@@ -35,8 +35,9 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"TRAINING")
-    print(f"DATA: '{args.data_folders}'")
+    print(f"RUN: {args.run_label}")
     print(f"MODEL: HEURISTICS")
+    print(f"DATA: {args.data_folders}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
     train_dataset = data_loader.ContentDataset(args.data_folders, train_dates, holdout_type='create')

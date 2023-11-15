@@ -39,9 +39,9 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"TRAINING")
-    print(f"DATA: {args.data_folders}")
+    print(f"RUN: {args.run_label}")
     print(f"MODEL: {args.model_type}")
-    print(f"NETWORK: {args.network_name}")
+    print(f"DATA: {args.data_folders}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
@@ -80,7 +80,7 @@ if __name__=="__main__":
             max_epochs=3,
             min_epochs=1,
             accelerator=accelerator,
-            logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.network_name}", name=model.model_name),
+            logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.001, patience=3)],
             # profiler=pl.profilers.AdvancedProfiler(filename='profiler_results'),
             # limit_train_batches=2,

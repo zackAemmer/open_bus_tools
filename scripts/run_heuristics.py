@@ -27,23 +27,12 @@ if __name__=="__main__":
 
     test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
 
-    if torch.cuda.is_available():
-        num_workers=4
-        pin_memory=True
-        accelerator="auto"
-    else:
-        num_workers=4
-        pin_memory=False
-        accelerator="cpu"
-
     print("="*30)
     print(f"EXPERIMENTS")
+    print(f"RUN: {args.run_label}")
+    print(f"MODEL: HEURISTICS")
     print(f"TRAIN CITY DATA: {args.train_data_folders}")
     print(f"TEST CITY DATA: {args.test_data_folders}")
-    print(f"MODEL: HEURISTICS")
-    print(f"NETWORK: {args.network_name}")
-    print(f"num_workers: {num_workers}")
-    print(f"pin_memory: {pin_memory}")
 
     res = {'AVGH':{}, 'AVGM':{}, 'PERT':{}, 'SCH':{}}
     n_folds = 5

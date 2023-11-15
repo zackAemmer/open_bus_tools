@@ -39,9 +39,9 @@ if __name__=="__main__":
 
     print("="*30)
     print(f"TUNING")
-    print(f"DATA: {args.data_folders}")
+    print(f"RUN: {args.run_label}")
     print(f"MODEL: {args.model_type}")
-    print(f"NETWORK: {args.network_name}")
+    print(f"DATA: {args.data_folders}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
@@ -49,8 +49,8 @@ if __name__=="__main__":
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        model = model_utils.load_model(args.model_folder, args.network_name, args.model_type, fold_num)
-        model.model_name = f"{args.model_type}TUNED_{fold_num}"
+        model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
+        model.model_name = f"{args.model_type}_TUNED-{fold_num}"
         train_dataset = data_loader.ContentDataset(args.data_folders, train_dates)
         train_idx = np.random.choice(np.arange(train_dataset.__len__()), 100)
         train_dataset.config = model.config
@@ -70,7 +70,7 @@ if __name__=="__main__":
             max_epochs=50,
             min_epochs=1,
             accelerator=accelerator,
-            logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.network_name}", name=model.model_name),
+            logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.001, patience=3)],
         )
         trainer.fit(model=model, train_dataloaders=train_loader)

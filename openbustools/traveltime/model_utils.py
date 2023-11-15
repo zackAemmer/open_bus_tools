@@ -128,7 +128,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
     model_archetype = model_type.split('_')[0]
     if model_type=="FF":
         model = ff.FF(
-            f"FF_{fold_num}",
+            f"FF-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -140,7 +140,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="FF_STATIC":
         model = ff.FF(
-            f"FF_STATIC_{fold_num}",
+            f"FF_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=16,
@@ -152,7 +152,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="FF_REALTIME":
         model = ff.FFRealtime(
-            f"FF_REALTIME_{fold_num}",
+            f"FF_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=16,
@@ -166,7 +166,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="CONV":
         model = conv.CONV(
-            f"CONV_{fold_num}",
+            f"CONV-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=4,
@@ -178,7 +178,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="CONV_STATIC":
         model = conv.CONV(
-            f"CONV_STATIC_{fold_num}",
+            f"CONV_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -190,7 +190,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="CONV_REALTIME":
         model = conv.CONVRealtime(
-            f"CONV_REALTIME_{fold_num}",
+            f"CONV_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -204,7 +204,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="GRU":
         model = rnn.GRU(
-            f"GRU_{fold_num}",
+            f"GRU-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=4,
@@ -216,7 +216,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="GRU_STATIC":
         model = rnn.GRU(
-            f"GRU_STATIC_{fold_num}",
+            f"GRU_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -228,7 +228,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="GRU_REALTIME":
         model = rnn.GRURealtime(
-            f"GRU_REALTIME_{fold_num}",
+            f"GRU_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -242,7 +242,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="TRSF":
         model = transformer.TRSF(
-            f"TRSF_{fold_num}",
+            f"TRSF-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=4,
@@ -254,7 +254,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="TRSF_STATIC":
         model = transformer.TRSF(
-            f"TRSF_STATIC_{fold_num}",
+            f"TRSF_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -266,7 +266,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="TRSF_REALTIME":
         model = transformer.TRSFRealtime(
-            f"TRSF_REALTIME_{fold_num}",
+            f"TRSF_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
@@ -280,7 +280,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="DEEPTTE":
         model = DeepTTE.Net(
-            f"DEEPTTE_{fold_num}",
+            f"DEEPTTE-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=4,
@@ -289,7 +289,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
         )
     elif model_type=="DEEPTTE_STATIC":
         model = DeepTTE.Net(
-            f"DEEPTTE_STATIC_{fold_num}",
+            f"DEEPTTE_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
             input_size=8,
