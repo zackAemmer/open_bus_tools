@@ -63,6 +63,7 @@ class Net(pl.LightningModule):
         self.collate_fn = collate_fn
         self.batch_size = batch_size
         self.is_nn = True
+        self.include_grid = False
         # Parameter of attribute / spatio-temporal component
         self.kernel_size = kernel_size
         self.num_filter = num_filter
