@@ -32,9 +32,9 @@ class RealtimeGrid:
         locationtime_dict = defaultdict(list)
         order_dict = defaultdict(list)
         dim_feats = self.cell_lookup[list(self.cell_lookup.keys())[0]].shape[1]
-        x_idx, y_idx = self.digitize_points(sample_df['x'], sample_df['y'])
+        x_idx, y_idx = self.digitize_points(sample_df[:,0], sample_df[:,1])
         # Only get points before the timestamp of the first point in trajectory
-        locationtimes = np.repeat(sample_df['locationtime'].to_numpy()[0],len(sample_df))
+        locationtimes = np.repeat(sample_df[0,2], sample_df.shape[0])
         # Create lookup for unique cells, to time values that will be searched
         for i, (x, y, time) in enumerate(zip(x_idx, y_idx, locationtimes)):
             locationtime_dict[(x,y)].append(time)
@@ -48,7 +48,7 @@ class RealtimeGrid:
             cell = self.cell_lookup.get(k, np.array([]))
             if len(cell)!=0:
                 # Get the index of each locationtime that we need for this grid cell
-                t_idxs = np.searchsorted(cell[:,0], np.array(locationtime_dict[k]))
+                t_idxs = np.searchsorted(cell[:,0], np.array(locationtime_dict[k])) - 1
                 # Record the index through index-n_points for each locationtime that we need for this grid cell
                 for i,n_back in enumerate(range(n_points)):
                     idx_back = t_idxs - n_back
@@ -62,14 +62,21 @@ class RealtimeGrid:
                 # Save all cell results
             res_dict[k] = cell_res
         # Reconstruct final result in the correct order (original locationtimes have been split among dict keys)
-        cell_points = np.full((len(sample_df), n_points, dim_feats+1), np.nan)
+        cell_points = np.full((sample_df.shape[0], n_points, dim_feats+1), np.nan)
         for k in order_dict.keys():
             loc_order = order_dict[k]
             results = res_dict[k]
             cell_points[loc_order,:,:-1] = results
         # Time difference between starting point and grid observations
         # This requires locationtime to be the first column
-        cell_points[:,:,-1] = np.repeat(np.expand_dims(np.array(locationtimes),1),n_points,1) - cell_points[:,:,0]
+        cell_points[:,:,-1] = cell_points[:,:,0] - np.repeat(np.expand_dims(np.array(locationtimes),1),n_points,1)
+        # Fill nans w/feature averages
+        if np.isnan(cell_points).all():
+            cell_points = np.nan_to_num(cell_points, nan=0.0)
+        elif np.isnan(cell_points).any():
+            feat_means = np.nanmean(cell_points, axis=(0,1))
+            for i, val in enumerate(feat_means):
+                cell_points[:,:,i] = np.nan_to_num(cell_points[:,:,i], nan=val)
         # Sample x Channels x Points
         cell_points = np.swapaxes(cell_points, 1, 2)
         return cell_points

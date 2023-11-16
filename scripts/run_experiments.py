@@ -55,7 +55,7 @@ if __name__=="__main__":
         res[fold_num] = {}
 
         print(f"EXPERIMENT: SAME CITY")
-        test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=model.holdout_routes)
+        test_dataset = data_loader.DictDataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=model.holdout_routes)
         test_dataset.config = model.config
         test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
@@ -79,7 +79,7 @@ if __name__=="__main__":
         res[fold_num]['same_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: DIFFERENT CITY")
-        test_dataset = data_loader.ContentDataset(args.test_data_folders, test_dates)
+        test_dataset = data_loader.DictDataset(args.test_data_folders, test_dates)
         test_dataset.config = model.config
         test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
@@ -103,7 +103,7 @@ if __name__=="__main__":
         res[fold_num]['diff_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: HOLDOUT ROUTES")
-        test_dataset = data_loader.ContentDataset(args.train_data_folders, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=model.holdout_routes)
+        test_dataset = data_loader.DictDataset(args.train_data_folders, test_dates, holdout_type='specify', only_holdout=True, holdout_routes=model.holdout_routes)
         test_dataset.config = model.config
         test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(

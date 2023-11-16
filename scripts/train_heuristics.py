@@ -40,7 +40,7 @@ if __name__=="__main__":
     print(f"DATA: {args.data_folders}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.ContentDataset(args.data_folders, train_dates, holdout_type='create')
+    train_dataset = data_loader.DictDataset(args.data_folders, train_dates, holdout_type='create')
 
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
