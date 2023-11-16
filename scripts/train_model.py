@@ -77,7 +77,7 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
-            max_epochs=3,
+            max_epochs=50,
             min_epochs=1,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),

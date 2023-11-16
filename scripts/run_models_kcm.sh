@@ -2,23 +2,23 @@
 set -e
 
 # Choose training and testing dates
-TRAIN_DATE_START = 2023_03_15
-TRAIN_NUM_DAYS = 3
-TEST_DATE_START = 2023_03_22
-TEST_NUM_DAYS = 3
+TRAIN_DATE_START=2023_03_15
+TRAIN_NUM_DAYS=3
+TEST_DATE_START=2023_03_22
+TEST_NUM_DAYS=3
 
 # Choose training and testing bus networks
-RUN_LABEL = kcm
-TRAIN_NETWORK = './data/kcm_realtime/processed/'
-TEST_NETWORK = './data/atb_realtime/processed/'
+RUN_LABEL=kcm
+TRAIN_NETWORK='./data/kcm_realtime/processed/'
+TEST_NETWORK='./data/atb_realtime/processed/'
 
-# RUN_LABEL = atb
-# TRAIN_NETWORK = './data/atb_realtime/processed/'
-# TEST_NETWORK = './data/kcm_realtime/processed/'
+# RUN_LABEL=atb
+# TRAIN_NETWORK='./data/atb_realtime/processed/'
+# TEST_NETWORK='./data/kcm_realtime/processed/'
 
-# RUN_LABEL = mix
-# TRAIN_NETWORK = './data/kcm_realtime/processed/ ./data/atb_realtime/processed/'
-# TEST_NETWORK = './data/rut_realtime/processed/'
+# RUN_LABEL=mix
+# TRAIN_NETWORK='./data/kcm_realtime/processed/ ./data/atb_realtime/processed/'
+# TEST_NETWORK='./data/rut_realtime/processed/'
 
 
 cd ~/Desktop/open_bus_tools
