@@ -61,57 +61,6 @@ def create_config(data):
     return config
 
 
-# class ContentDataset(Dataset):
-#     """Load all data into memory as dataframe, provide samples by indexing groups."""
-#     def __init__(self, data_folders, dates, holdout_type=None, only_holdout=False, **kwargs):
-#         data = []
-#         self.grids = {}
-#         for data_folder in data_folders:
-#             self.grids[data_folder] = {}
-#             for day in dates:
-#                 d = pd.read_pickle(f"{data_folder}{day}").to_crs('EPSG:4326')
-#                 d['data_folder'] = data_folder
-#                 data.append(d)
-#                 with open(f"{data_folder}/grid/{day}", 'rb') as f:
-#                     self.grids[data_folder][day.split('.')[0]] = pickle.load(f)
-#         data = pd.concat(data)
-#         # Deal with different scenarios for holdout route training/testing
-#         if holdout_type=='create':
-#             unique_routes = pd.unique(data['route_id'])
-#             self.holdout_routes = np.random.choice(pd.unique(data['route_id']), int(len(unique_routes)*.05))
-#             if only_holdout:
-#                 data = data[data['route_id'].isin(self.holdout_routes)]
-#             else:
-#                 data = data[~data['route_id'].isin(self.holdout_routes)]
-#         elif holdout_type=='specify':
-#             self.holdout_routes = kwargs['holdout_routes']
-#             if only_holdout:
-#                 data = data[data['route_id'].isin(self.holdout_routes)]
-#             else:
-#                 data = data[~data['route_id'].isin(self.holdout_routes)]
-#         data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
-#         data = data.set_index('shingle_id')
-#         self.data = data
-#         self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS]
-#         self.groupdata = self.feat_data.groupby('shingle_id')
-#         self.config = None
-#         self.include_grid = False
-#     def __getitem__(self, index):
-#         sample_df = self.groupdata.get_group(index)
-#         sample = {}
-#         for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
-#             sample[k] = normalize(sample_df[k].to_numpy(), self.config[k])
-#         for k in EMBED_FEATS:
-#             sample[k] = sample_df[k].to_numpy()[0]
-#         if self.include_grid:
-#             sample_file = sample_df['file'].iloc[0]
-#             sample_folder = sample_df['data_folder'].iloc[0]
-#             sample['grid'] = self.grids[sample_folder][sample_file].get_recent_points(sample_df[['x','y','locationtime']].to_numpy(), 4)
-#         return sample
-#     def __len__(self):
-#         return np.max(self.data.index.to_numpy())
-
-
 class DictDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing groups."""
     def __init__(self, data_folders, dates, holdout_type=None, only_holdout=False, **kwargs):

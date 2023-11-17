@@ -3,6 +3,8 @@ import os
 import contextily as cx
 import geopandas
 import matplotlib.pyplot as plt
+from matplotlib import animation
+from matplotlib.ticker import FormatStrFormatter
 import numpy as np
 import pandas as pd
 import plotly
@@ -63,9 +65,9 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
     fig.set_figheight(HEIGHT_SQ)
     fig.set_figwidth(WIDTH_SQ)
-    plot_gdf.plot(ax=axes, markersize=5, column='shingle_id')
-    plot_gdf.iloc[0:1].plot(ax=axes, markersize=100, color='green', marker='x')
-    plot_gdf.iloc[-1:].plot(ax=axes, markersize=100, color='red', marker='x')
+    plot_gdf.plot(ax=axes, column='shingle_id', cmap='Set2')
+    plot_gdf.iloc[0:1].plot(ax=axes, markersize=1000, color='green', marker='x')
+    plot_gdf.iloc[-1:].plot(ax=axes, markersize=1000, color='red', marker='x')
     cx.add_basemap(ax=axes, crs=plot_gdf.crs.to_string(), alpha=0.4, source=cx.providers.MapBox(accessToken=os.getenv(key="MAPBOX_TOKEN")))
     fig.tight_layout()
     plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
@@ -75,27 +77,41 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
 
 def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
     """Plot distributions of labels and key features."""
-    fig, axes = plt.subplots(2,2)
+    data_folder_list = list(pd.unique(plot_df['data_folder']))
+    fig, axes = plt.subplots(3,2)
     axes = axes.flatten()
+    [ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f')) for ax in axes]
     fig.set_figheight(HEIGHT)
     fig.set_figwidth(WIDTH)
-    sample_groups = plot_df.groupby('shingle_id')
-    metric = sample_groups.count()['locationtime']
-    sns.histplot(metric, ax=axes[0])
-    axes[0].set_xlabel("Observations (n)")
-    axes[0].set_xlim(0,70)
-    metric = sample_groups.last()['cumul_dist_km']
-    sns.histplot(metric, ax=axes[1])
-    axes[1].set_xlabel("Travel Dist (km)")
-    axes[1].set_xlim(0,20)
-    metric = sample_groups.last()['cumul_time_s']
-    sns.histplot(metric, ax=axes[2])
-    axes[2].set_xlabel("Travel Time (s)")
-    axes[2].set_xlim(-300,3000)
-    metric = sample_groups.last()['sch_time_s']
-    sns.histplot(metric, ax=axes[3])
-    axes[3].set_xlabel("Scheduled Time (s)")
-    axes[3].set_xlim(-300,3000)
+    for i, data_folder in enumerate(data_folder_list):
+        plot_df_folder = plot_df[plot_df['data_folder']==data_folder]
+        sample_groups = plot_df_folder.groupby('shingle_id')
+        metric = sample_groups.count()['locationtime']
+        sns.histplot(metric, ax=axes[0], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        axes[0].set_xlabel("Points per Sample (n)")
+        axes[0].set_xlim(0,70)
+        axes[0].legend(["Seattle (KCM)", "Trondheim (AtB)"])
+        metric = sample_groups.last()['cumul_dist_km']
+        sns.histplot(metric, ax=axes[1], stat='density', binwidth=.5, color=sns.color_palette("Set2")[i])
+        axes[1].set_xlabel("Sample Travel Dist (km)")
+        axes[1].set_xlim(0,20)
+        metric = sample_groups.last()['cumul_time_s']
+        sns.histplot(metric, ax=axes[2], stat='density', binwidth=50, color=sns.color_palette("Set2")[i])
+        axes[2].set_xlabel("Sample Travel Time (s)")
+        axes[2].set_xlim(-300,3000)
+        metric = sample_groups.last()['sch_time_s']
+        sns.histplot(metric, ax=axes[3], stat='density', binwidth=100, color=sns.color_palette("Set2")[i])
+        axes[3].set_xlabel("Sample Scheduled Time (s)")
+        axes[3].set_xlim(-300,3000)
+        metric = plot_df_folder['x_cent']/1000
+        sns.histplot(metric, ax=axes[4], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        axes[4].set_xlabel("Point CBD-X (km)")
+        axes[4].set_xlim(-20,20)
+        metric = plot_df_folder['y_cent']/1000
+        sns.histplot(metric, ax=axes[5], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        axes[5].set_xlabel("Point CBD-Y (km)")
+        axes[5].set_xlim(-20,20)
+        # axes[5].xticks(np.arange(min(-30000), max(x)+1, 1.0))
     fig.tight_layout()
     plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
     plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
@@ -125,25 +141,23 @@ def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowes
     return smoothed, bottom, top
 
 
-# def save_grid_anim(data, file_name):
-#     # Plot first 4 channels of second axis
-#     fig, axes = plt.subplots(1, data.shape[1])
-#     axes = axes.reshape(-1)
-#     fig.tight_layout()
-#     # Define the update function that will be called for each frame of the animation
-#     def update(frame):
-#         fig.suptitle(f"Frame {frame}")
-#         for i in range(data.shape[1]):
-#             d = data[:,i,:,:]
-#             vmin=np.min(d[~np.isnan(d)])
-#             vmax=np.max(d[~np.isnan(d)])
-#             ax = axes[i]
-#             ax.clear()
-#             im = ax.imshow(data[frame,i,:,:], cmap='plasma', vmin=vmin, vmax=vmax, origin="lower")
-#     # Create the animation object
-#     ani = animation.FuncAnimation(fig, update, frames=data.shape[0])
-#     # Save the animation object
-#     ani.save(f"../plots/{file_name}", fps=10, dpi=300)
+def formatted_grid_animation(data, title_text="throwaway"):
+    fig, axes = plt.subplots(1, 1)
+    fig.tight_layout()
+    # Define the update function that will be called for each frame of the animation
+    def update(frame):
+        fig.suptitle(f"Frame {frame}")
+        for i in range(1):
+            d = data[:,:,:]
+            vmin=np.min(d[~np.isnan(d)])
+            vmax=np.max(d[~np.isnan(d)])
+            axes.clear()
+            im = axes.imshow(data[frame,:,:], cmap='plasma', vmin=vmin, vmax=vmax, origin="lower")
+    # Create the animation object
+    ani = animation.FuncAnimation(fig, update, frames=data.shape[0])
+    writergif = animation.PillowWriter(fps=30)
+    # Save the animation object
+    ani.save(f"../plots/{title_text}.gif", writer=writergif)
 
 
 # def formatted_barplot(plot_df):

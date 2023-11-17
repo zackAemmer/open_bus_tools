@@ -1,3 +1,5 @@
+import datetime
+
 import numpy as np
 from collections import defaultdict
 import pandas as pd
@@ -80,3 +82,28 @@ class RealtimeGrid:
         # Sample x Channels x Points
         cell_points = np.swapaxes(cell_points, 1, 2)
         return cell_points
+
+
+def convert_to_frames(g):
+    # Cell lookup to dataframe of points
+    all = []
+    for k,val in g.cell_lookup.items():
+        all.append(val)
+    all = np.concatenate(all, axis=0)
+    all = pd.DataFrame(all)
+    all.columns = g.column_names[:-1]
+    # Dataframe of points to grouped tbin/xbin/ybins
+    t_bins = np.arange(0,1*60*24)
+    timestamps = [datetime.datetime.fromtimestamp(x) for x in all['locationtime'].to_numpy().astype(int)]
+    timestamps = [t.hour*60+t.minute for t in timestamps]
+    t_idxs = np.digitize(timestamps, t_bins)
+    all['tbin'] = t_idxs
+    all = all.sort_values('locationtime')
+    all = all.groupby(['tbin','ybin','xbin']).mean()[['calc_speed_m_s']].reset_index()
+    all = all.to_numpy()
+    # Grouped bins to sparse 3d array
+    res = np.full((len(t_bins)+1,g.ybins.shape[0]+1,g.xbins.shape[0]+1), np.nan)
+    for i in range(all.shape[0]):
+        row = all[i,:]
+        res[row[0].astype(int),row[1].astype(int),row[2].astype(int)] = row[3]
+    return res
