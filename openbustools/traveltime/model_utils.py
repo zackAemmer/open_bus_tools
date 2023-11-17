@@ -301,29 +301,32 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
 
 def load_model(model_folder, network_name, model_type, fold_num):
     """Load latest checkpoint depending on user chosen model type and fold."""
-    last_version = str(sorted([int(x.split('_')[1]) for x in os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}")])[-1])
+    last_version = str(sorted([int(x.split('_')[1]) for x in os.listdir(f"{model_folder}{network_name}/{model_type}-{fold_num}")])[-1])
     last_version = f"version_{last_version}"
-    last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/"))[-1]
-    if model_type=='FF':
+    last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/"))[-1]
+    model_archetype = model_type.split('_')
+    model_archetype = list(filter(lambda a: a != 'TUNED', model_archetype))
+    model_archetype = '_'.join(model_archetype[:2])
+    if model_archetype in ['FF', 'FF_STATIC']:
         model_cl = ff.FF
-    elif model_type=='FF_REALTIME':
+    elif model_archetype=='FF_REALTIME':
         model_cl = ff.FFRealtime
-    elif model_type=='GRU':
+    elif model_archetype in ['GRU', 'GRU_STATIC']:
         model_cl = rnn.GRU
-    elif model_type=='GRU_REALTIME':
+    elif model_archetype=='GRU_REALTIME':
         model_cl = rnn.GRURealtime
-    elif model_type=='CONV':
+    elif model_archetype in ['CONV', 'CONV_STATIC']:
         model_cl = conv.CONV
-    elif model_type=='CONV_REALTIME':
+    elif model_archetype=='CONV_REALTIME':
         model_cl = conv.CONVRealtime
-    elif model_type=='TRSF':
+    elif model_archetype in ['TRSF', 'TRSF_STATIC']:
         model_cl = transformer.TRSF
-    elif model_type=='TRSF_REALTIME':
+    elif model_archetype=='TRSF_REALTIME':
         model_cl = transformer.TRSFRealtime
-    elif model_type=='DEEPTTE':
+    elif model_archetype in ['DEEPTTE', 'DEEPTTE_STATIC']:
         model_cl = DeepTTE.Net
     try:
-        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False).eval()
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False).eval()
     except:
-        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}_{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
     return model

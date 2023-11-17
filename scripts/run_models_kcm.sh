@@ -24,24 +24,24 @@ TEST_NETWORK='./data/atb_realtime/processed/'
 cd ~/Desktop/open_bus_tools
 
 # Train
-python ./scripts/train_model.py -m FF -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m FF_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m FF_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m FF -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m FF_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m FF_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
 
-python ./scripts/train_model.py -m CONV -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m CONV_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m CONV_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m CONV -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m CONV_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m CONV_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
 
-python ./scripts/train_model.py -m GRU -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m GRU_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m GRU_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m GRU -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m GRU_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m GRU_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
 
-python ./scripts/train_model.py -m TRSF -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m TRSF_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m TRSF_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m TRSF -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m TRSF_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m TRSF_REALTIME -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
 
-python ./scripts/train_model.py -m DEEPTTE -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-python ./scripts/train_model.py -m DEEPTTE_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m DEEPTTE -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
+# python ./scripts/train_model.py -m DEEPTTE_STATIC -mf ./logs/ -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
 
 # # Tune
 # python ./scripts/tune_model.py -m FF -mf ./logs/ -r $RUN_LABEL -df $TEST_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
@@ -83,6 +83,26 @@ python ./scripts/train_model.py -m DEEPTTE_STATIC -mf ./logs/ -r $RUN_LABEL -df 
 # python ./scripts/run_experiments.py -m DEEPTTE -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
 # python ./scripts/run_experiments.py -m DEEPTTE_STATIC -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
 
-# # Heuristic
+# # Experiment Tuned
+# python ./scripts/run_experiments.py -m FF_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m FF_STATIC_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m FF_REALTIME_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+
+# python ./scripts/run_experiments.py -m CONV_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m CONV_STATIC_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m CONV_REALTIME_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+
+# python ./scripts/run_experiments.py -m GRU_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m GRU_STATIC_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m GRU_REALTIME_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+
+# python ./scripts/run_experiments.py -m TRSF_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m TRSF_STATIC_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m TRSF_REALTIME_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+
+# python ./scripts/run_experiments.py -m DEEPTTE_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+# python ./scripts/run_experiments.py -m DEEPTTE_STATIC_TUNED -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+
+# # Heuristics
 # python ./scripts/train_heuristics.py -r $RUN_LABEL -df $TRAIN_NETWORK -td $TRAIN_DATE_START -tn $TRAIN_NUM_DAYS
-# python ./scripts/run_heuristics.py -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS
+python ./scripts/run_heuristics.py -mf ./logs/ -r $RUN_LABEL -trdf $TRAIN_NETWORK -tedf $TEST_NETWORK -td $TEST_DATE_START -tn $TEST_NUM_DAYS

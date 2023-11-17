@@ -41,7 +41,7 @@ if __name__=="__main__":
         print(f"FOLD: {fold_num}")
         for mname in res.keys():
             res[mname][fold_num] = {}
-        avg_model = pickle.load(open(f"{args.model_folder}{args.network_name}/AVG_{fold_num}.pkl", 'rb'))
+        avg_model = pickle.load(open(f"{args.model_folder}{args.run_label}/AVG_{fold_num}.pkl", 'rb'))
         per_tim_model = persistent.PersistentTimeModel('PERT')
         sch_model = schedule.ScheduleModel('SCH')
 
@@ -81,8 +81,8 @@ if __name__=="__main__":
         preds_and_labels = sch_model.predict(test_dataset)
         res['SCH'][fold_num]['holdout'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
-    p = Path('.') / 'results' / args.network_name
+    p = Path('.') / 'results' / args.run_label
     p.mkdir(exist_ok=True)
     for model_type in res.keys():
-        pickle.dump(res, open(f"./results/{args.network_name}/{model_type}.pkl", "wb"))
+        pickle.dump(res, open(f"./results/{args.run_label}/{model_type}.pkl", "wb"))
     print(f"EXPERIMENTS COMPLETE")

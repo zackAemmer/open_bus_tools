@@ -185,7 +185,7 @@ class FFRealtime(pl.LightningModule):
         x_gr = self.grid_stack(x_gr)
         x_gr = x_gr.view(x_gr.shape[0], x_gr.shape[1]*x_gr.shape[2])
         # Combine all variables
-        out = torch.cat([x_ct, x_min_em, x_day_em], dim=1)
+        out = torch.cat([x_ct, x_min_em, x_day_em, x_gr], dim=1)
         out = self.linear_relu_stack(out)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
         out = out.detach().cpu().numpy()
