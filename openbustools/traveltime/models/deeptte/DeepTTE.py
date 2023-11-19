@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import lightning.pytorch as pl
 
-from openbustools.traveltime import model_utils
+from openbustools.traveltime import model_utils, data_loader
 from openbustools.traveltime.models.deeptte import Attr, SpatioTemporal, deeptte_utils
 
 
@@ -97,6 +97,7 @@ class Net(pl.LightningModule):
     def training_step(self, batch):
         attr = batch[0]
         traj = batch[1]
+        labels = batch[2]
         # Estimates for full trajectory and individual points
         entire_out, (local_out, local_length) = self(attr, traj)
         _, entire_loss = self.entire_estimate.eval_on_batch(entire_out.squeeze(), attr['cumul_time_s'])
@@ -118,6 +119,7 @@ class Net(pl.LightningModule):
     def validation_step(self, batch):
         attr = batch[0]
         traj = batch[1]
+        labels = batch[2]
         entire_out = self(attr, traj).squeeze()
         pred_dict, entire_loss = self.entire_estimate.eval_on_batch(entire_out, attr['cumul_time_s'])
         self.log_dict(
@@ -131,9 +133,10 @@ class Net(pl.LightningModule):
     def predict_step(self, batch):
         attr = batch[0]
         traj = batch[1]
+        labels = batch[2]
         entire_out = self(attr, traj).squeeze()
         pred_dict, entire_loss = self.entire_estimate.eval_on_batch(entire_out, attr['cumul_time_s'])
-        return {'preds': pred_dict['pred'], 'labels': pred_dict['label']}
+        return {'preds': data_loader.denormalize(pred_dict['pred'], self.config['cumul_time_s']), 'labels': labels}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer

@@ -1,11 +1,10 @@
 import argparse
 
 import lightning.pytorch as pl
-import numpy as np
-import torch
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
-from tabulate import tabulate
+import numpy as np
+import torch
 from torch.utils.data import DataLoader, SequentialSampler
 
 from openbustools import standardfeeds
@@ -68,10 +67,10 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             max_epochs=50,
-            min_epochs=1,
+            min_epochs=5,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.001, patience=3)],
+            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=3)],
         )
         trainer.fit(model=model, train_dataloaders=train_loader)
     print(f"TUNING COMPLETE")

@@ -108,8 +108,8 @@ class CONV(pl.LightningModule):
         # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
-        y_no_norm = y_no_norm.detach().cpu().numpy()
         out = data_loader.denormalize(out, self.config['calc_time_s'])
+        y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)
         return {'preds': out_agg, 'labels': y_agg}
@@ -230,6 +230,7 @@ class CONVRealtime(pl.LightningModule):
         # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['calc_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)

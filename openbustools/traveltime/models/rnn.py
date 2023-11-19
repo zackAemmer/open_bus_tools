@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import lightning.pytorch as pl
 
-from openbustools.traveltime import masked_loss, model_utils
+from openbustools.traveltime import masked_loss, model_utils, data_loader
 from openbustools.traveltime.models import embedding, realtime
 
 
@@ -71,7 +71,7 @@ class GRU(pl.LightningModule):
         x_sl = x[2]
         y_norm = y[0]
         y_no_norm = y[1]
-        out = self.forward(x_em, x_ct, x_sl)
+        out = self.forward(x_em, x_ct)
         # Masked loss; init mask here since module knows device
         mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
         mask = model_utils.fill_tensor_mask(mask, x_sl)
@@ -91,13 +91,14 @@ class GRU(pl.LightningModule):
         x_sl = x[2]
         y_norm = y[0]
         y_no_norm = y[1]
-        out = self.forward(x_em, x_ct, x_sl)
+        out = self.forward(x_em, x_ct)
         # Masked loss; init mask here since module knows device
         mask = torch.zeros(max(x_sl), len(x_sl), dtype=torch.bool, device=self.device)
         mask = model_utils.fill_tensor_mask(mask, x_sl)
         # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['calc_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)
@@ -209,6 +210,7 @@ class GRURealtime(pl.LightningModule):
         # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['calc_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)

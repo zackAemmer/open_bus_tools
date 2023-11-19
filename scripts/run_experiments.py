@@ -74,8 +74,6 @@ if __name__=="__main__":
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
-        preds = data_loader.denormalize(preds, model.config['cumul_time_s'])
-        labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['same_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: DIFFERENT CITY")
@@ -98,8 +96,6 @@ if __name__=="__main__":
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
-        preds = data_loader.denormalize(preds, model.config['cumul_time_s'])
-        labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['diff_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: HOLDOUT ROUTES")
@@ -122,8 +118,6 @@ if __name__=="__main__":
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
-        preds = data_loader.denormalize(preds, model.config['cumul_time_s'])
-        labels = data_loader.denormalize(labels, model.config['cumul_time_s'])
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
 
     p = Path('.') / 'results' / args.run_label

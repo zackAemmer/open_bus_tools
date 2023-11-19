@@ -3,13 +3,13 @@ import argparse
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, SequentialSampler, SubsetRandomSampler
-import numpy as np
 from sklearn.model_selection import KFold
 
 from openbustools import standardfeeds
-from openbustools.traveltime import data_loader, grid, model_utils
+from openbustools.traveltime import data_loader, model_utils
 
 
 if __name__=="__main__":
@@ -78,10 +78,10 @@ if __name__=="__main__":
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
             max_epochs=50,
-            min_epochs=1,
+            min_epochs=5,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.001, patience=3)],
+            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
             # profiler=pl.profilers.AdvancedProfiler(filename='profiler_results'),
             # limit_train_batches=2,
             # limit_val_batches=2,

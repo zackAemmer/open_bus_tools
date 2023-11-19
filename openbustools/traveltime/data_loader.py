@@ -210,13 +210,14 @@ def collate_deeptte(batch):
     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
     traj['X_sl'] = X_sl
     traj['calc_time_s'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    labels = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
     for k in stat_attrs:
         attr[k] = torch.tensor([b[k][-1] for b in batch], dtype=torch.float)
     for k in info_attrs:
         attr[k] = torch.tensor([b[k] for b in batch], dtype=torch.int)
     for k in traj_attrs:
         traj[k] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[k], dtype=torch.float) for b in batch])
-    return (attr, traj)
+    return (attr, traj, labels)
 
 
 def collate_deeptte_static(batch):
@@ -227,10 +228,11 @@ def collate_deeptte_static(batch):
     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
     traj['X_sl'] = X_sl
     traj['calc_time_s'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    labels = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
     for k in stat_attrs:
         attr[k] = torch.tensor([b[k][-1] for b in batch], dtype=torch.float)
     for k in info_attrs:
         attr[k] = torch.tensor([b[k] for b in batch], dtype=torch.int)
     for k in traj_attrs:
         traj[k] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[k], dtype=torch.float) for b in batch])
-    return (attr, traj)
+    return (attr, traj, labels)

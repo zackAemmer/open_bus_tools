@@ -53,7 +53,7 @@ HYPERPARAM_DICT = {
 def aggregate_tts(tts, mask):
     """Convert a sequence of predicted travel times to total travel time."""
     masked_tts = (tts*mask)
-    total_tts = np.sum(masked_tts, axis=1)
+    total_tts = np.sum(masked_tts, axis=0)
     return total_tts
 
 
@@ -86,23 +86,21 @@ def format_model_res(model_res_file):
 
 def performance_metrics(labels, preds, print_res=False):
     # Summary statistics
-    label_min=min(labels)
-    label_max=max(labels)
-    pred_min=min(preds)
-    pred_max=max(preds)
-    label_mean=np.mean(labels)
-    pred_mean=np.mean(preds)
-    label_med=np.median(labels)
-    pred_med=np.median(preds)
+    label_min = min(labels)
+    label_max = max(labels)
+    pred_min = min(preds)
+    pred_max = max(preds)
+    label_mean = np.mean(labels)
+    pred_mean = np.mean(preds)
     # Performance metrics
-    mae=metrics.mean_absolute_error(labels, preds)
-    mse=metrics.mean_squared_error(labels, preds)
-    mape=metrics.mean_absolute_percentage_error(labels, preds)
-    ev=metrics.explained_variance_score(labels, preds)
-    r2=metrics.r2_score(labels, preds)
+    mae = metrics.mean_absolute_error(labels, preds)
+    mse = metrics.mean_squared_error(labels, preds)
+    mape = metrics.mean_absolute_percentage_error(labels, preds)
+    ev = metrics.explained_variance_score(labels, preds)
+    r2 = metrics.r2_score(labels, preds)
     if print_res:
-        print(f"Label min: {round(label_min,1)}, mean: {round(label_mean,1)}, median: {round(label_med,1)}, max: {round(label_max,1)}")
-        print(f"Pred min: {round(pred_min,1)}, mean: {round(pred_mean,1)}, median: {round(pred_med,1)}, max: {round(pred_max,1)}")
+        print(f"Label min: {round(label_min,1)}, mean: {round(label_mean,1)}, max: {round(label_max,1)}")
+        print(f"Pred min: {round(pred_min,1)}, mean: {round(pred_mean,1)}, max: {round(pred_max,1)}")
         print(f"MAE: {round(mae)}")
         print(f"RMSE: {round(np.sqrt(mse))}")
         print(f"MAPE: {round(mape,3)}")
@@ -112,11 +110,9 @@ def performance_metrics(labels, preds, print_res=False):
         'label_min': label_min,
         'label_max': label_max,
         'label_mean': label_mean,
-        'label_med': label_med,
         'pred_min': pred_min,
         'pred_max': pred_max,
         'pred_mean': pred_mean,
-        'pred_med': pred_med,
         'mae': mae,
         'rmse': np.sqrt(mae),
         'mape': mape,

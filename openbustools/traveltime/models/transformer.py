@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import lightning.pytorch as pl
 
-from openbustools.traveltime import masked_loss, model_utils, pos_encodings
+from openbustools.traveltime import masked_loss, model_utils, pos_encodings, data_loader
 from openbustools.traveltime.models import embedding, realtime
 
 
@@ -107,6 +107,7 @@ class TRSF(pl.LightningModule):
         # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['calc_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)
@@ -227,6 +228,7 @@ class TRSFRealtime(pl.LightningModule):
         # Move to cpu and return predictions, labels
         mask = mask.detach().cpu().numpy()
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['calc_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)

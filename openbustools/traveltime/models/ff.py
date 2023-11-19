@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import lightning.pytorch as pl
 
+from openbustools.traveltime import data_loader
 from openbustools.traveltime.models import embedding, realtime
 
 
@@ -83,6 +84,7 @@ class FF(pl.LightningModule):
         y_no_norm = y[1]
         out = self.forward(x_em, x_ct)
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['cumul_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         return {'preds':out, 'labels':y_no_norm}
     def configure_optimizers(self):
@@ -178,6 +180,7 @@ class FFRealtime(pl.LightningModule):
         y_no_norm = y[1]
         out = self.forward(x_em, x_ct, x_gr)
         out = out.detach().cpu().numpy()
+        out = data_loader.denormalize(out, self.config['cumul_time_s'])
         y_no_norm = y_no_norm.detach().cpu().numpy()
         return {'preds':out, 'labels':y_no_norm}
     def configure_optimizers(self):
