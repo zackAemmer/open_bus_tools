@@ -100,6 +100,8 @@ class DictDataset(Dataset):
         sample_df = self.data_lookup[index]
         sample = {}
         col_idxs = LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS
+        for i,k in enumerate(LABEL_FEATS):
+            sample[f"{k}_no_norm"] = sample_df[:,col_idxs.index(k)].astype(float)
         for i,k in enumerate(LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS):
             sample[k] = normalize(sample_df[:,col_idxs.index(k)].astype(float), self.config[k])
         for k in EMBED_FEATS:
@@ -116,6 +118,7 @@ class DictDataset(Dataset):
 
 def collate(batch):
     y = torch.tensor([b['cumul_time_s'][-1] for b in batch], dtype=torch.float)
+    y_no_norm = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
     X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
@@ -123,11 +126,12 @@ def collate(batch):
     for i,col in enumerate(GPS_FEATS):
         X_ct[:,i] = torch.tensor([b[col][0] for b in batch], dtype=torch.float)
         X_ct[:,i+len(GPS_FEATS)] = torch.tensor([b[col][-1] for b in batch], dtype=torch.float)
-    return (X_em, X_ct), y
+    return (X_em, X_ct), (y, y_no_norm)
 
 
 def collate_static(batch):
     y = torch.tensor([b['cumul_time_s'][-1] for b in batch], dtype=torch.float)
+    y_no_norm = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
     X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
@@ -135,11 +139,12 @@ def collate_static(batch):
     for i,col in enumerate(GPS_FEATS+STATIC_FEATS):
         X_ct[:,i] = torch.tensor([b[col][0] for b in batch], dtype=torch.float)
         X_ct[:,i+len(GPS_FEATS)+len(STATIC_FEATS)] = torch.tensor([b[col][-1] for b in batch], dtype=torch.float)
-    return (X_em, X_ct), y
+    return (X_em, X_ct), (y, y_no_norm)
 
 
 def collate_realtime(batch):
     y = torch.tensor([b['cumul_time_s'][-1] for b in batch], dtype=torch.float)
+    y_no_norm = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
     X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em = torch.concat([X_em_mod, X_em_dow], axis=1)
@@ -152,11 +157,12 @@ def collate_realtime(batch):
     X_gr = torch.zeros((len(batch), grid_channels, grid_n, 2))
     X_gr[:,:,:,0] = torch.concat([torch.tensor(b['grid'][0,:,:], dtype=torch.float).unsqueeze(0) for b in batch], dim=0)
     X_gr[:,:,:,1] = torch.concat([torch.tensor(b['grid'][-1,:,:], dtype=torch.float).unsqueeze(0) for b in batch], dim=0)
-    return (X_em, X_ct, X_gr), y
+    return (X_em, X_ct, X_gr), (y, y_no_norm)
 
 
 def collate_seq(batch):
     y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    y_no_norm = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s_no_norm'], dtype=torch.float) for b in batch])
     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
     X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
@@ -164,11 +170,12 @@ def collate_seq(batch):
     X_ct = torch.zeros((torch.max(X_sl), len(batch), len(GPS_FEATS)))
     for i,col in enumerate(GPS_FEATS):
         X_ct[:,:,i] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[col], dtype=torch.float) for b in batch])
-    return (X_em, X_ct, X_sl), y
+    return (X_em, X_ct, X_sl), (y, y_no_norm)
 
 
 def collate_seq_static(batch):
     y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    y_no_norm = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s_no_norm'], dtype=torch.float) for b in batch])
     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
     X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
@@ -176,11 +183,12 @@ def collate_seq_static(batch):
     X_ct = torch.zeros((torch.max(X_sl), len(batch), len(GPS_FEATS+STATIC_FEATS)))
     for i,col in enumerate(GPS_FEATS+STATIC_FEATS):
         X_ct[:,:,i] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[col], dtype=torch.float) for b in batch])
-    return (X_em, X_ct, X_sl), y
+    return (X_em, X_ct, X_sl), (y, y_no_norm)
 
 
 def collate_seq_realtime(batch):
     y = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
+    y_no_norm = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s_no_norm'], dtype=torch.float) for b in batch])
     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.int)
     X_em_dow = torch.tensor([b['t_day_of_week'] for b in batch], dtype=torch.int).unsqueeze(-1)
     X_em_mod = torch.tensor([b['t_min_of_day'] for b in batch], dtype=torch.int).unsqueeze(-1)
@@ -191,7 +199,7 @@ def collate_seq_realtime(batch):
     X_gr = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['grid'], dtype=torch.float) for b in batch], batch_first=True)
     X_gr = torch.swapaxes(X_gr, 1, 3)
     X_gr = torch.swapaxes(X_gr, 1, 2)
-    return (X_em, X_ct, X_sl, X_gr), y
+    return (X_em, X_ct, X_sl, X_gr), (y, y_no_norm)
 
 
 def collate_deeptte(batch):

@@ -36,10 +36,7 @@ class FF(pl.LightningModule):
         # Linear compression/feature extraction
         self.feature_extract = torch.nn.Linear(self.hidden_size, 1)
         self.feature_extract_activation = torch.nn.ReLU()
-    def training_step(self, batch):
-        x,y = batch
-        x_em = x[0]
-        x_ct = x[1]
+    def forward(self, x_em, x_ct):
         # Embed categorical variables
         x_min_em = self.min_em(x_em[:,0])
         x_day_em = self.day_em(x_em[:,1])
@@ -47,7 +44,15 @@ class FF(pl.LightningModule):
         out = torch.cat([x_ct, x_min_em, x_day_em], dim=1)
         out = self.linear_relu_stack(out)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
-        loss = self.loss_fn(out, y)
+        return out
+    def training_step(self, batch):
+        x,y = batch
+        x_em = x[0]
+        x_ct = x[1]
+        y_norm = y[0]
+        y_no_norm = y[1]
+        out = self.forward(x_em, x_ct)
+        loss = self.loss_fn(out, y_norm)
         self.log_dict(
             {'train_loss': loss},
             on_step=False,
@@ -59,14 +64,10 @@ class FF(pl.LightningModule):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
-        # Embed categorical variables
-        x_min_em = self.min_em(x_em[:,0])
-        x_day_em = self.day_em(x_em[:,1])
-        # Combine all variables
-        out = torch.cat([x_ct, x_min_em, x_day_em], dim=1)
-        out = self.linear_relu_stack(out)
-        out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
-        loss = self.loss_fn(out, y)
+        y_norm = y[0]
+        y_no_norm = y[1]
+        out = self.forward(x_em, x_ct)
+        loss = self.loss_fn(out, y_norm)
         self.log_dict(
             {'valid_loss': loss},
             on_step=False,
@@ -78,15 +79,12 @@ class FF(pl.LightningModule):
         x,y = batch
         x_em = x[0]
         x_ct = x[1]
-        # Embed categorical variables
-        x_min_em = self.min_em(x_em[:,0])
-        x_day_em = self.day_em(x_em[:,1])
-        # Combine all variables
-        out = torch.cat([x_ct, x_min_em, x_day_em], dim=1)
-        out = self.linear_relu_stack(out)
-        out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
+        y_norm = y[0]
+        y_no_norm = y[1]
+        out = self.forward(x_em, x_ct)
         out = out.detach().cpu().numpy()
-        return {'preds':out, 'labels':y}
+        y_no_norm = y_no_norm.detach().cpu().numpy()
+        return {'preds':out, 'labels':y_no_norm}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
@@ -127,11 +125,7 @@ class FFRealtime(pl.LightningModule):
         self.feature_extract_activation = torch.nn.ReLU()
         # Grid
         self.grid_stack = realtime.GridFeedForward(self.grid_input_size, self.grid_compression_size, self.hidden_size)
-    def training_step(self, batch):
-        x,y = batch
-        x_em = x[0]
-        x_ct = x[1]
-        x_gr = x[2]
+    def forward(self, x_em, x_ct, x_gr):
         # Embed categorical variables
         x_min_em = self.min_em(x_em[:,0])
         x_day_em = self.day_em(x_em[:,1])
@@ -142,7 +136,16 @@ class FFRealtime(pl.LightningModule):
         out = torch.cat([x_ct, x_min_em, x_day_em, x_gr], dim=1)
         out = self.linear_relu_stack(out)
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
-        loss = self.loss_fn(out, y)
+        return out
+    def training_step(self, batch):
+        x,y = batch
+        x_em = x[0]
+        x_ct = x[1]
+        x_gr = x[2]
+        y_norm = y[0]
+        y_no_norm = y[1]
+        out = self.forward(x_em, x_ct, x_gr)
+        loss = self.loss_fn(out, y_norm)
         self.log_dict(
             {'train_loss': loss},
             on_step=False,
@@ -155,17 +158,10 @@ class FFRealtime(pl.LightningModule):
         x_em = x[0]
         x_ct = x[1]
         x_gr = x[2]
-        # Embed categorical variables
-        x_min_em = self.min_em(x_em[:,0])
-        x_day_em = self.day_em(x_em[:,1])
-        # Grid
-        x_gr = self.grid_stack(x_gr)
-        x_gr = x_gr.view(x_gr.shape[0], x_gr.shape[1]*x_gr.shape[2])
-        # Combine all variables
-        out = torch.cat([x_ct, x_min_em, x_day_em, x_gr], dim=1)
-        out = self.linear_relu_stack(out)
-        out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
-        loss = self.loss_fn(out, y)
+        y_norm = y[0]
+        y_no_norm = y[1]
+        out = self.forward(x_em, x_ct, x_gr)
+        loss = self.loss_fn(out, y_norm)
         self.log_dict(
             {'valid_loss': loss},
             on_step=False,
@@ -178,18 +174,12 @@ class FFRealtime(pl.LightningModule):
         x_em = x[0]
         x_ct = x[1]
         x_gr = x[2]
-        # Embed categorical variables
-        x_min_em = self.min_em(x_em[:,0])
-        x_day_em = self.day_em(x_em[:,1])
-        # Grid
-        x_gr = self.grid_stack(x_gr)
-        x_gr = x_gr.view(x_gr.shape[0], x_gr.shape[1]*x_gr.shape[2])
-        # Combine all variables
-        out = torch.cat([x_ct, x_min_em, x_day_em, x_gr], dim=1)
-        out = self.linear_relu_stack(out)
-        out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
+        y_norm = y[0]
+        y_no_norm = y[1]
+        out = self.forward(x_em, x_ct, x_gr)
         out = out.detach().cpu().numpy()
-        return {'preds':out, 'labels':y}
+        y_no_norm = y_no_norm.detach().cpu().numpy()
+        return {'preds':out, 'labels':y_no_norm}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer

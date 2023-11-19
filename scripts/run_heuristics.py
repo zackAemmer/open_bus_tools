@@ -83,6 +83,6 @@ if __name__=="__main__":
 
     p = Path('.') / 'results' / args.run_label
     p.mkdir(exist_ok=True)
-    for model_type in res.keys():
-        pickle.dump(res, open(f"./results/{args.run_label}/{model_type}.pkl", "wb"))
+    for model_name, model_res in res.items():
+        pickle.dump(model_type, open(f"./results/{args.run_label}/{model_name}.pkl", "wb"))
     print(f"EXPERIMENTS COMPLETE")

@@ -1,6 +1,8 @@
 import os
+import pickle
 
 import numpy as np
+import pandas as pd
 from sklearn import metrics
 import torch
 
@@ -62,6 +64,24 @@ def fill_tensor_mask(mask, x_sl, drop_first=True):
     if drop_first:
         mask[0,:] = 0
     return mask
+
+
+def format_model_res(model_res_file):
+    model_res = pickle.load(open(model_res_file, 'rb'))
+    all_res = []
+    for fold_num, experiment_res in model_res.items():
+        for experiment_name, preds_and_labels in experiment_res.items():
+            reg = performance_metrics(preds_and_labels['labels'], preds_and_labels['preds'])
+            res_df = pd.DataFrame({
+                'model': model_res_file.split('.')[-2].split('/')[-1],
+                'experiment_name': experiment_name,
+                'fold': fold_num,
+                'metric': list(reg.keys()),
+                'value': list(reg.values())
+            })
+            all_res.append(res_df)
+    all_res = pd.concat(all_res).reset_index(drop=True)
+    return all_res
 
 
 def performance_metrics(labels, preds, print_res=False):
