@@ -34,9 +34,23 @@ MISC_CON_FEATS = [
 MISC_CAT_FEATS = [
     "file",
     "data_folder",
+    "shingle_id",
     "x",
     "y",
-    "locationtime"
+    "locationtime",
+    "route_id"
+]
+HOLDOUT_ROUTES = [
+    100252,
+    100139,
+    102581,
+    100341,
+    102720,
+    "ATB:Line:2_28",
+    "ATB:Line:2_3",
+    "ATB:Line:2_9",
+    "ATB:Line:2_340",
+    "ATB:Line:2_299"
 ]
 
 
@@ -52,48 +66,51 @@ def denormalize(x, config_entry):
     return x * std + mean
 
 
-def create_config(data):
+def create_config(data_lookup, idx):
+    data = [data_lookup[x] for x in idx]
     config = {}
-    for col in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
-        col_mean = np.mean(data[col].to_numpy())
-        col_sd = np.std(data[col].to_numpy())
-        config[col] = (col_mean, col_sd)
+    for i,col in enumerate(LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS):
+        if col in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
+            col_data = np.concatenate([samp[:,i] for samp in data])
+            col_mean = np.mean(col_data)
+            col_sd = np.std(col_data)
+            config[col] = (col_mean, col_sd)
     return config
 
 
 class DictDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing groups."""
     def __init__(self, data_folders, dates, holdout_type=None, only_holdout=False, **kwargs):
-        data = []
         self.grids = {}
+        self.data_lookup = {}
+        last_key = 0
         for data_folder in data_folders:
             self.grids[data_folder] = {}
             for day in dates:
-                d = pd.read_pickle(f"{data_folder}{day}").to_crs('EPSG:4326')
+                d = pd.read_pickle(f"{data_folder}{day}")
                 d['data_folder'] = data_folder
-                data.append(d)
+                d = d[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS]
+                # Deal with different scenarios for holdout route training/testing
+                if holdout_type=='create':
+                    self.holdout_routes = HOLDOUT_ROUTES
+                    if only_holdout:
+                        d = d[d['route_id'].isin(self.holdout_routes)]
+                    else:
+                        d = d[~d['route_id'].isin(self.holdout_routes)]
+                elif holdout_type=='specify':
+                    self.holdout_routes = kwargs['holdout_routes']
+                    if only_holdout:
+                        d = d[d['route_id'].isin(self.holdout_routes)]
+                    else:
+                        d = d[~d['route_id'].isin(self.holdout_routes)]
+                d['shingle_id'] = d.groupby('shingle_id').ngroup()
+                d = d.set_index('shingle_id')
+                d.index = d.index + last_key
+                x = {key: group.to_numpy() for key, group in d.groupby('shingle_id')}
+                self.data_lookup.update(x)
                 with open(f"{data_folder}/grid/{day}", 'rb') as f:
                     self.grids[data_folder][day.split('.')[0]] = pickle.load(f)
-        data = pd.concat(data)
-        # Deal with different scenarios for holdout route training/testing
-        if holdout_type=='create':
-            unique_routes = pd.unique(data['route_id'])
-            self.holdout_routes = np.random.choice(pd.unique(data['route_id']), int(len(unique_routes)*.05))
-            if only_holdout:
-                data = data[data['route_id'].isin(self.holdout_routes)]
-            else:
-                data = data[~data['route_id'].isin(self.holdout_routes)]
-        elif holdout_type=='specify':
-            self.holdout_routes = kwargs['holdout_routes']
-            if only_holdout:
-                data = data[data['route_id'].isin(self.holdout_routes)]
-            else:
-                data = data[~data['route_id'].isin(self.holdout_routes)]
-        data['shingle_id'] = data.groupby(['file','shingle_id']).ngroup()
-        data = data.set_index('shingle_id')
-        self.data = data
-        self.feat_data = self.data[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS]
-        self.data_lookup = self.feat_data.groupby('shingle_id').apply(lambda x: x.to_numpy()).to_dict()
+                last_key = sorted(self.data_lookup)[-1] + 1
         self.config = None
         self.include_grid = False
     def __getitem__(self, index):
@@ -113,7 +130,7 @@ class DictDataset(Dataset):
             sample['grid'] = self.grids[sample_folder][sample_file].get_recent_points(sample_df[:,feat_idxs], 4)
         return sample
     def __len__(self):
-        return np.max(self.data.index.to_numpy())
+        return len(self.data_lookup)
 
 
 def collate(batch):

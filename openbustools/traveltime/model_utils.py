@@ -13,7 +13,7 @@ from openbustools.traveltime.models import avg_speed, conv, ff, persistent, rnn,
 
 HYPERPARAM_DICT = {
     'FF': {
-        'batch_size': 64,
+        'batch_size': 512,
         'hidden_size': 32,
         'num_layers': 2,
         'dropout_rate': .1,
@@ -21,7 +21,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16
     },
     'CONV': {
-        'batch_size': 64,
+        'batch_size': 512,
         'hidden_size': 32,
         'num_layers': 2,
         'dropout_rate': .1,
@@ -29,7 +29,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16
     },
     'GRU': {
-        'batch_size': 64,
+        'batch_size': 512,
         'hidden_size': 32,
         'num_layers': 2,
         'dropout_rate': .1,
@@ -37,7 +37,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16
     },
     'TRSF': {
-        'batch_size': 64,
+        'batch_size': 512,
         'hidden_size': 32,
         'num_layers': 2,
         'dropout_rate': .1,
@@ -45,7 +45,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16
     },
     'DEEPTTE': {
-        'batch_size': 64
+        'batch_size': 512
     }
 }
 
