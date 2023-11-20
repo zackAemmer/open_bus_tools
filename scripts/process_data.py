@@ -30,6 +30,7 @@ def prepare_run(**kwargs):
         data['locationtime'] = data['locationtime'].astype(float)
         data = data.astype(standardfeeds.GTFSRT_LOOKUP)
         # Sensors seem to hold old positions right at start/end of trip
+        data = data.reset_index(drop=True)
         for _ in range(4):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
@@ -143,7 +144,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 14),
+        dates=standardfeeds.get_date_list("2023_03_15", 270),
         data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
@@ -155,7 +156,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 14),
+        dates=standardfeeds.get_date_list("2023_10_15", 60),
         data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
@@ -167,7 +168,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 14),
+        dates=standardfeeds.get_date_list("2023_03_15", 270),
         data_dropout=0.2,
         static_folder="./data/rut_gtfs/",
         realtime_folder="./data/rut_realtime/",
