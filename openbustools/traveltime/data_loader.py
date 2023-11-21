@@ -1,3 +1,4 @@
+import gc
 import pickle
 
 import numpy as np
@@ -14,31 +15,29 @@ EMBED_FEATS = [
     "t_day_of_week",
 ]
 GPS_FEATS = [
-    "calc_dist_km",
+    "calc_dist_m",
     "calc_bear_d",
     "x_cent",
     "y_cent",
 ]
 STATIC_FEATS = [
-    "calc_stop_dist_km",
+    "calc_stop_dist_m",
     "sch_time_s",
     "pass_stops_n",
     "cumul_pass_stops_n",
 ]
 DEEPTTE_FEATS = [
-    "cumul_dist_km",
+    "cumul_dist_m",
 ]
 MISC_CON_FEATS = [
-    "calc_speed_m_s"
+    "x",
+    "y",
+    "locationtime",
+    "calc_speed_m_s",
 ]
 MISC_CAT_FEATS = [
     "file",
     "data_folder",
-    "shingle_id",
-    "x",
-    "y",
-    "locationtime",
-    "route_id"
 ]
 HOLDOUT_ROUTES = [
     100252,
@@ -50,7 +49,7 @@ HOLDOUT_ROUTES = [
     "ATB:Line:2_3",
     "ATB:Line:2_9",
     "ATB:Line:2_340",
-    "ATB:Line:2_299"
+    "ATB:Line:2_299",
 ]
 
 
@@ -81,16 +80,21 @@ def create_config(data_lookup, idx):
 class DictDataset(Dataset):
     """Load all data into memory as dataframe, provide samples by indexing groups."""
     def __init__(self, data_folders, dates, holdout_type=None, only_holdout=False, **kwargs):
+        self.data_folder_codes = {}
+        self.file_codes = {}
         self.grids = {}
-        self.data_lookup = {}
+        self.data = {}
         last_key = 0
-        for data_folder in data_folders:
-            self.grids[data_folder] = {}
-            for day in dates:
+        for n_df, data_folder in enumerate(data_folders):
+            self.data_folder_codes[n_df] = data_folder
+            self.file_codes[n_df] = {}
+            self.grids[n_df] = {}
+            for n_f, day in enumerate(dates):
+                self.file_codes[n_df][n_f] = day.split('.')[0]
                 d = pd.read_pickle(f"{data_folder}{day}")
-                d['data_folder'] = data_folder
-                d = d[LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS]
-                # Deal with different scenarios for holdout route training/testing
+                d['data_folder'] = n_df
+                d['file'] = n_f
+                d['cumul_dist_m'] = d['cumul_dist_km'] * 1000
                 if holdout_type=='create':
                     self.holdout_routes = HOLDOUT_ROUTES
                     if only_holdout:
@@ -106,31 +110,41 @@ class DictDataset(Dataset):
                 d['shingle_id'] = d.groupby('shingle_id').ngroup()
                 d = d.set_index('shingle_id')
                 d.index = d.index + last_key
-                x = {key: group.to_numpy() for key, group in d.groupby('shingle_id')}
-                self.data_lookup.update(x)
+                self.data_colnames = LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS
+                d = d[self.data_colnames]
+                x = {key: group.to_numpy().astype('int32') for key, group in d.groupby('shingle_id')}
+                self.data.update(x)
                 with open(f"{data_folder}/grid/{day}", 'rb') as f:
-                    self.grids[data_folder][day.split('.')[0]] = pickle.load(f)
-                last_key = sorted(self.data_lookup)[-1] + 1
+                    self.grids[n_df][n_f] = pickle.load(f)
+                last_key = sorted(self.data)[-1] + 1
         self.config = None
         self.include_grid = False
     def __getitem__(self, index):
-        sample_df = self.data_lookup[index]
+        sample_data = self.data[index]
         sample = {}
-        col_idxs = LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+MISC_CAT_FEATS
         for i,k in enumerate(LABEL_FEATS):
-            sample[f"{k}_no_norm"] = sample_df[:,col_idxs.index(k)].astype(float)
+            sample[f"{k}_no_norm"] = sample_data[:,self.data_colnames.index(k)].astype(float)
         for i,k in enumerate(LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS):
-            sample[k] = normalize(sample_df[:,col_idxs.index(k)].astype(float), self.config[k])
+            sample[k] = normalize(sample_data[:,self.data_colnames.index(k)].astype(float), self.config[k])
         for k in EMBED_FEATS:
-            sample[k] = sample_df[:,col_idxs.index(k)].astype(int)[0]
+            sample[k] = sample_data[:,self.data_colnames.index(k)].astype(int)[0]
         if self.include_grid:
-            sample_file = sample_df[:,col_idxs.index('file')][0]
-            sample_folder = sample_df[:,col_idxs.index('data_folder')][0]
-            feat_idxs = (col_idxs.index('x'), col_idxs.index('y'), col_idxs.index('locationtime'))
-            sample['grid'] = self.grids[sample_folder][sample_file].get_recent_points(sample_df[:,feat_idxs], 4)
+            sample_file = sample_data[:,self.data_colnames.index('file')][0]
+            sample_folder = sample_data[:,self.data_colnames.index('data_folder')][0]
+            feat_idxs = (self.data_colnames.index('x'), self.data_colnames.index('y'), self.data_colnames.index('locationtime'))
+            sample['grid'] = self.grids[sample_folder][sample_file].get_recent_points(sample_data[:,feat_idxs], 4)
         return sample
     def __len__(self):
-        return len(self.data_lookup)
+        return len(self.data)
+    def create_config(self, idxs):
+        data = [self.data[x] for x in idxs]
+        config = {}
+        for i,col in enumerate(self.data_colnames):
+            col_data = np.concatenate([samp[:,i] for samp in data])
+            col_mean = np.mean(col_data)
+            col_sd = np.std(col_data)
+            config[col] = (col_mean, col_sd)
+        return config
 
 
 def collate(batch):

@@ -50,7 +50,7 @@ if __name__=="__main__":
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        train_dataset.config = data_loader.create_config(train_dataset.data_lookup, train_idx)
+        train_dataset.config = train_dataset.create_config(train_idx)
         model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
         train_dataset.include_grid = model.include_grid
         train_sampler = SubsetRandomSampler(train_idx)

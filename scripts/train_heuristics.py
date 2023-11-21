@@ -1,21 +1,14 @@
 import argparse
-import json
-import os
 import pickle
-import shutil
-import time
 
 import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
-from sklearn import metrics
 from sklearn.model_selection import KFold
-from tabulate import tabulate
-from torch.utils.data import DataLoader, SequentialSampler, SubsetRandomSampler
 
 from openbustools import standardfeeds
-from openbustools.traveltime import data_loader, grid, model_utils
+from openbustools.traveltime import data_loader
 from openbustools.traveltime.models import avg_speed
 
 
