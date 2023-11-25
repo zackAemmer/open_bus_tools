@@ -50,7 +50,7 @@ if __name__=="__main__":
         print(f"FOLD: {fold_num}")
         model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
         model.model_name = f"{args.model_type}_TUNED-{fold_num}"
-        train_dataset = data_loader.DictDataset(args.data_folders, train_dates)
+        train_dataset = data_loader.H5Dataset(args.data_folders, train_dates)
         train_idx = np.random.choice(np.arange(train_dataset.__len__()), 100)
         train_dataset.config = model.config
         train_dataset.include_grid = model.include_grid

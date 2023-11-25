@@ -3,13 +3,17 @@ import pickle
 from zoneinfo import ZoneInfo
 
 import geopandas as gpd
+import h5py
 import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
 import torch
 
 from openbustools import spatial, standardfeeds
-from openbustools.traveltime import grid
+from openbustools.traveltime import data_loader, grid
+
+data_num_feat_cols = data_loader.LABEL_FEATS+data_loader.EMBED_FEATS+data_loader.GPS_FEATS+data_loader.STATIC_FEATS+data_loader.DEEPTTE_FEATS+data_loader.MISC_CON_FEATS
+data_cat_feat_cols = data_loader.MISC_CAT_FEATS
 
 
 def prepare_run(**kwargs):
@@ -24,6 +28,8 @@ def prepare_run(**kwargs):
             print(f"File failed to load: {day}")
             continue
         num_pts_initial = len(data)
+        if num_pts_initial == 0:
+            continue
         data['file'] = day[:10]
         data = data[kwargs['given_names']]
         data.columns = standardfeeds.GTFSRT_LOOKUP.keys()
@@ -105,11 +111,12 @@ def prepare_run(**kwargs):
             data = data.merge(trips, on='trip_id', how='left')
             data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         else:
+            continue
             data['stop_id'] = np.nan
             data['calc_stop_dist_m'] = np.nan
             data['calc_stop_dist_km'] = np.nan
             data['stop_sequence'] = np.nan
-            data['trip_id'] = np.nan
+            data['route_id'] = np.nan
             data['t_sch_sec_of_day'] = np.nan
         # Passed stops
         data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
@@ -121,19 +128,36 @@ def prepare_run(**kwargs):
         unique_traj = data.groupby('shingle_id')
         data['cumul_time_s'] = unique_traj['calc_time_s'].cumsum()
         data['cumul_dist_km'] = unique_traj['calc_dist_km'].cumsum()
+        data['cumul_dist_m'] = data['cumul_dist_km'] * 1000
         data['cumul_pass_stops_n'] = unique_traj['pass_stops_n'].cumsum()
         data['cumul_time_s'] = data.cumul_time_s - unique_traj.cumul_time_s.transform('min')
         data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
         data['cumul_pass_stops_n'] = data.cumul_pass_stops_n - unique_traj.cumul_pass_stops_n.transform('min')
+        data['data_folder'] = kwargs['realtime_folder']
         # Realtime grid features
         data_grid = grid.RealtimeGrid(kwargs['grid_bounds'], 500)
         data_grid.build_cell_lookup(data[['locationtime','x','y','calc_speed_m_s','calc_bear_d']].copy())
         # Save processed date
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
+        # Save the full geodataframe
         data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
+        # Save the grid object
         with open(f"{kwargs['realtime_folder']}processed/grid/{day}", 'wb') as f:
             pickle.dump(data_grid, f)
+        # Save only the minimal training features
+        data_id = data['shingle_id'].to_numpy().astype('int32')
+        data_n = data[data_num_feat_cols].to_numpy().astype('int32')
+        data_c = data[data_cat_feat_cols].to_numpy().astype('S10')
+        data_g = data_grid.get_recent_points(data[['x','y','locationtime']].to_numpy(), 4).astype('int32')
+        with h5py.File(f"{kwargs['realtime_folder']}processed/samples.hdf5", 'a') as f:
+            if day in f.keys():
+                del f[day]
+            g = f.create_group(day)
+            g.create_dataset('shingle_ids', data=data_id)
+            g.create_dataset('feats_n', data=data_n)
+            g.create_dataset('feats_g', data=data_g)
+            g.create_dataset('feats_c', data=data_c)
     print(f"PROCESSING COMPLETED: {kwargs['network_name']}")
 
 
@@ -144,7 +168,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 270),
+        dates=standardfeeds.get_date_list("2023_03_15", 90),
         data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
@@ -156,7 +180,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_10_15", 60),
+        dates=standardfeeds.get_date_list("2023_03_15", 90),
         data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
@@ -166,15 +190,15 @@ if __name__=="__main__":
         coord_ref_center=[569472,7034350],
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
-    prepare_run(
-        network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 270),
-        data_dropout=0.2,
-        static_folder="./data/rut_gtfs/",
-        realtime_folder="./data/rut_realtime/",
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[589080,6631314,604705,6648420],
-        coord_ref_center=[597427,6642805],
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
+    # prepare_run(
+    #     network_name="rut",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 90),
+    #     data_dropout=0.2,
+    #     static_folder="./data/rut_gtfs/",
+    #     realtime_folder="./data/rut_realtime/",
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[589080,6631314,604705,6648420],
+    #     coord_ref_center=[597427,6642805],
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )

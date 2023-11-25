@@ -27,5 +27,5 @@ class Net(nn.Module):
             if len(attr_t.shape)==1:
                 attr_t = attr_t.view(1,-1)
             em_list.append(attr_t)
-        em_list.append(attr['cumul_dist_km'].view(-1, 1))
+        em_list.append(attr['cumul_dist_m'].view(-1, 1))
         return torch.cat(em_list, dim=1)

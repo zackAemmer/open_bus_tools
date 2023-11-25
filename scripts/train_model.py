@@ -31,9 +31,9 @@ if __name__=="__main__":
     if torch.cuda.is_available():
         num_workers=4
         pin_memory=True
-        accelerator="auto"
+        accelerator="cuda"
     else:
-        num_workers=4
+        num_workers=0
         pin_memory=False
         accelerator="cpu"
 
@@ -46,11 +46,10 @@ if __name__=="__main__":
     print(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.DictDataset(args.data_folders, train_dates, holdout_type='create')
+    train_dataset = data_loader.H5Dataset(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        train_dataset.config = train_dataset.create_config(train_idx)
         model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
         train_dataset.include_grid = model.include_grid
         train_sampler = SubsetRandomSampler(train_idx)
@@ -63,7 +62,6 @@ if __name__=="__main__":
             drop_last=True,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            persistent_workers=True
         )
         val_loader = DataLoader(
             train_dataset,
@@ -73,7 +71,6 @@ if __name__=="__main__":
             drop_last=True,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            persistent_workers=True
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,

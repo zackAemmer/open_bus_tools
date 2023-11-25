@@ -46,7 +46,7 @@ if __name__=="__main__":
         sch_model = schedule.ScheduleModel('SCH')
 
         print(f"EXPERIMENT: SAME CITY")
-        test_dataset = data_loader.DictDataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=avg_model.holdout_routes)
+        test_dataset = data_loader.H5Dataset(args.train_data_folders, test_dates, holdout_type='specify', holdout_routes=avg_model.holdout_routes)
         test_dataset.config = avg_model.config
         preds_and_labels = avg_model.predict(test_dataset, 'h')
         res['AVGH'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}

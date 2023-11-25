@@ -33,11 +33,14 @@ if __name__=="__main__":
     print(f"DATA: {args.data_folders}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.DictDataset(args.data_folders, train_dates, holdout_type='create')
+    train_dataset = data_loader.H5Dataset(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
 
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
+        data = np.concatenate([train_dataset.data[i]['feats_n'][:,train_dataset.colnames.index('calc_speed_m_s')] for i in train_idx])
+        data = np.concatenate([train_dataset.data[i]['feats_n'][:,train_dataset.colnames.index('t_hour')] for i in train_idx])
+
         model = avg_speed.AvgSpeedModel('AVG', train_dataset.data.loc[train_idx])
         model.config = train_dataset.config
         model.holdout_routes = train_dataset.holdout_routes

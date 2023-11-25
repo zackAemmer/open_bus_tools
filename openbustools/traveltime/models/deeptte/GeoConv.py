@@ -26,6 +26,6 @@ class Net(nn.Module):
         conv_locs = torch.swapaxes(conv_locs, 0, 1)
         conv_locs = torch.swapaxes(conv_locs, 0, 2)
         # Calculate the dist for local paths
-        local_dist = torch.unsqueeze(traj['calc_dist_km'], dim=2)
+        local_dist = torch.unsqueeze(traj['calc_dist_m'], dim=2)
         conv_locs = torch.cat((conv_locs, local_dist), dim=2)
         return conv_locs
