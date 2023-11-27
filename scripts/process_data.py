@@ -70,6 +70,11 @@ def prepare_run(**kwargs):
         toss_ids.extend(list(data[data['calc_speed_m_s']>30]['shingle_id']))
         toss_ids.extend(list(data[data['calc_dist_m']>mins_keep*60*30]['shingle_id']))
         toss_ids.extend(list(data[data['calc_time_s']>mins_keep*60]['shingle_id']))
+        # Calculate elevation, filter trips not found in DEM
+        data['elev_m'] = spatial.sample_raster(data[['x','y']].values, kwargs['dem_file'])
+        toss_ids.extend(list(data[data['elev_m']<-300].index))
+        toss_ids.extend(list(data[data['elev_m']>5000].index))
+        # Filter the list of full shingles w/invalid points
         toss_ids = np.unique(toss_ids)
         data = data[~data['shingle_id'].isin(toss_ids)].copy()
         # Calculate time features
@@ -168,7 +173,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 90),
+        dates=standardfeeds.get_date_list("2023_03_15", 7),
         data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
@@ -176,11 +181,12 @@ if __name__=="__main__":
         epsg=32148,
         grid_bounds=[369903,37911,409618,87758],
         coord_ref_center=[386910,69022],
+        dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 90),
+        dates=standardfeeds.get_date_list("2023_03_15", 7),
         data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
@@ -188,6 +194,7 @@ if __name__=="__main__":
         epsg=32632,
         grid_bounds=[550869,7012847,579944,7039521],
         coord_ref_center=[569472,7034350],
+        dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
     # prepare_run(

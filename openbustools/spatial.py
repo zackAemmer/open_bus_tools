@@ -2,6 +2,9 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyproj
+import rasterio
+from rasterio.sample import sample_gen
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from scipy.spatial import KDTree
 
 
@@ -171,3 +174,35 @@ def create_grid_of_shingles(point_resolution, grid_bounds, coord_ref_center):
         res_dict[cname].extend(vals)
     res = pd.DataFrame(res_dict)
     return res
+
+
+def reproject_raster(in_file, out_file, dst_crs):
+    dst_crs = f"EPSG:{dst_crs}"
+    with rasterio.open(in_file) as src:
+        transform, width, height = calculate_default_transform(
+            src.crs, dst_crs, src.width, src.height, *src.bounds)
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': dst_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+        with rasterio.open(out_file, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest)
+        return None
+
+
+def sample_raster(points, dem_file):
+    """Sample a raster at a set of points, used for elevation."""
+    with rasterio.open(dem_file, "r") as src:
+        z = np.array(list(sample_gen(src, points))).flatten()
+    return z
