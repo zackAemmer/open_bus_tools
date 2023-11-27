@@ -55,8 +55,8 @@ if __name__=="__main__":
         res[fold_num] = {}
 
         print(f"EXPERIMENT: SAME CITY")
-        test_dataset = data_loader.H5Dataset(args.train_data_folders, test_dates, holdout_routes=model.holdout_routes)
-        test_dataset.config = model.config
+        test_data, holdout_routes, test_config = data_loader.load_h5(args.train_data_folders, test_dates, holdout_routes=model.holdout_routes, config=model.config)
+        test_dataset = data_loader.H5Dataset(test_data)
         test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
             test_dataset,
@@ -77,8 +77,8 @@ if __name__=="__main__":
         res[fold_num]['same_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: DIFFERENT CITY")
-        test_dataset = data_loader.H5Dataset(args.test_data_folders, test_dates, holdout_routes=model.holdout_routes)
-        test_dataset.config = model.config
+        test_data, holdout_routes, test_config = data_loader.load_h5(args.test_data_folders, test_dates, holdout_routes=model.holdout_routes, config=model.config)
+        test_dataset = data_loader.H5Dataset(test_data)
         test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
             test_dataset,
@@ -99,8 +99,8 @@ if __name__=="__main__":
         res[fold_num]['diff_city'] = {'preds':preds, 'labels':labels}
 
         print(f"EXPERIMENT: HOLDOUT ROUTES")
-        test_dataset = data_loader.H5Dataset(args.train_data_folders, test_dates, only_holdout=True, holdout_routes=model.holdout_routes)
-        test_dataset.config = model.config
+        test_data, holdout_routes, test_config = data_loader.load_h5(args.train_data_folders, test_dates, only_holdout=True, holdout_routes=model.holdout_routes, config=model.config)
+        test_dataset = data_loader.H5Dataset(test_data)
         test_dataset.include_grid = model.include_grid
         test_loader = DataLoader(
             test_dataset,

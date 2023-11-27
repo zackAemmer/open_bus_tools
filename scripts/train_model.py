@@ -46,11 +46,12 @@ if __name__=="__main__":
     print(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.H5Dataset(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
+    train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
+    train_dataset = data_loader.H5Dataset(train_data)
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
+        model = model_utils.make_model(args.model_type, fold_num, train_config, holdout_routes)
         train_dataset.include_grid = model.include_grid
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)

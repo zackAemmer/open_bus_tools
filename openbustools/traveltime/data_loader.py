@@ -60,69 +60,71 @@ def denormalize(x, config_entry):
     return x * std + mean
 
 
-def create_config(dataset, idxs):
-    data = [dataset.data[x]['feats_n'] for x in idxs]
+def create_config(data, colnames, idxs):
+    ext_data = [data[x]['feats_n'] for x in idxs]
     config = {}
-    for i,col in enumerate(dataset.colnames):
-        col_data = np.concatenate([samp[:,i] for samp in data])
+    for i,col in enumerate(colnames):
+        col_data = np.concatenate([samp[:,i] for samp in ext_data])
         col_mean = np.mean(col_data)
         col_sd = np.std(col_data)
         config[col] = (col_mean, col_sd)
     return config
 
+def load_h5(data_folders, dates, only_holdout=False, **kwargs):
+    """Preload all samples from an h5py file into memory, outside of dataset."""
+    data = {}
+    # Set holdout routes, variable names
+    if 'holdout_routes' in kwargs:
+        holdout_routes = kwargs['holdout_routes']
+    else:
+        holdout_routes = []
+    colnames = LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS
+    current_max_key = 0
+    # Load all of the folder/day data into one dictionary, reindexing along way
+    for data_folder in data_folders:
+        with h5py.File(f"{data_folder}/samples.hdf5", 'r') as f:
+            for day in dates:
+                sids, sidxs = np.unique(f[day]['shingle_ids'], return_index=True)
+                feats_n = np.split(f[day]['feats_n'], sidxs[1:], axis=0)
+                feats_g = np.split(f[day]['feats_g'], sidxs[1:], axis=0)
+                feats_c = np.split(f[day]['feats_c'], sidxs[1:], axis=0)
+                # Keep either all but, or only samples from holdout routes
+                if len(holdout_routes)>0:
+                    is_not_holdout = np.array([x[0].astype(str)[0] not in holdout_routes for x in feats_c])
+                    if only_holdout:
+                        is_not_holdout = np.invert(is_not_holdout)
+                    sids = sids[is_not_holdout]
+                    feats_n = list(compress(feats_n, is_not_holdout))
+                    feats_g = list(compress(feats_g, is_not_holdout))
+                    feats_c = list(compress(feats_c, is_not_holdout))
+                sids = np.arange(current_max_key, current_max_key+len(sids))
+                sample = {fs:{'feats_n':fn,'feats_g':fg,'feats_c':fc} for fs,fn,fg,fc in zip(sids,feats_n,feats_g,feats_c)}
+                data.update(sample)
+                current_max_key = sorted(data.keys())[-1]+1
+    # Add sample key to all data entries that has normalized data
+    if 'config' in kwargs:
+        config = kwargs['config']
+    else:
+        config = create_config(data, colnames, list(data.keys()))
+    for data_idx in list(data.keys()):
+        sample_data = data[data_idx]['feats_n']
+        data[data_idx]['sample'] = {}
+        for k in LABEL_FEATS:
+            data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,colnames.index(k)].astype(float)
+        for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
+            data[data_idx]['sample'][k] = normalize(sample_data[:,colnames.index(k)].astype(float), config[k])
+        for k in EMBED_FEATS:
+            data[data_idx]['sample'][k] = sample_data[:,colnames.index(k)].astype(int)[0]
+    return (data, holdout_routes, config)
+
 
 class H5Dataset(Dataset):
-    """Load all data into memory as dataframe, provide samples by indexing groups."""
-    def __init__(self, data_folders, dates, only_holdout=False, **kwargs):
-        if 'holdout_routes' in kwargs:
-            self.holdout_routes = kwargs['holdout_routes']
-        else:
-            self.holdout_routes = []
-        self.data = {}
-        self.colnames = LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS
-        current_max_key = 0
-        for data_folder in data_folders:
-            with h5py.File(f"{data_folder}/samples.hdf5", 'r') as f:
-                for day in dates:
-                    sids, sidxs = np.unique(f[day]['shingle_ids'], return_index=True)
-                    feats_n = np.split(f[day]['feats_n'], sidxs[1:], axis=0)
-                    feats_g = np.split(f[day]['feats_g'], sidxs[1:], axis=0)
-                    feats_c = np.split(f[day]['feats_c'], sidxs[1:], axis=0)
-                    if len(self.holdout_routes)>0:
-                        is_not_holdout = np.array([x[0].astype(str)[0] not in self.holdout_routes for x in feats_c])
-                        if only_holdout:
-                            is_not_holdout = np.invert(is_not_holdout)
-                        sids = sids[is_not_holdout]
-                        feats_n = list(compress(feats_n, is_not_holdout))
-                        feats_g = list(compress(feats_g, is_not_holdout))
-                        feats_c = list(compress(feats_c, is_not_holdout))
-                    sids = np.arange(current_max_key, current_max_key+len(sids))
-                    sample = {fs:{'feats_n':fn,'feats_g':fg,'feats_c':fc} for fs,fn,fg,fc in zip(sids,feats_n,feats_g,feats_c)}
-                    self.data.update(sample)
-                    current_max_key = sorted(self.data.keys())[-1]+1
-        # Normalize the data: TODO: Allow passing config from model for models already created
-        self.config = create_config(self, list(self.data.keys()))
-        for data_idx in list(self.data.keys()):
-            sample_data = self.data[data_idx]['feats_n']
-            self.data[data_idx]['sample'] = {}
-            for k in LABEL_FEATS:
-                self.data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,self.colnames.index(k)].astype(float)
-            for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
-                self.data[data_idx]['sample'][k] = normalize(sample_data[:,self.colnames.index(k)].astype(float), self.config[k])
-            for k in EMBED_FEATS:
-                self.data[data_idx]['sample'][k] = sample_data[:,self.colnames.index(k)].astype(int)[0]
+    """Provide samples by indexing dict."""
+    def __init__(self, data):
+        self.data = data
         self.include_grid = False
     def __getitem__(self, index):
         sample = self.data[index]['sample']
-        # sample_data = s['feats_n']
-        # sample_grid = s['feats_g']
-        # sample = {}
-        # for i,k in enumerate(LABEL_FEATS):
-        #     sample[f"{k}_no_norm"] = sample_data[:,self.colnames.index(k)].astype(float)
-        # for i,k in enumerate(LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS):
-        #     sample[k] = normalize(sample_data[:,self.colnames.index(k)].astype(float), self.config[k])
-        # for k in EMBED_FEATS:
-        #     sample[k] = sample_data[:,self.colnames.index(k)].astype(int)[0]
         if self.include_grid:
             sample['grid'] = self.data[index]['feats_g']
         return sample
