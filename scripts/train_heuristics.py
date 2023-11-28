@@ -33,16 +33,14 @@ if __name__=="__main__":
     print(f"DATA: {args.data_folders}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
-    train_dataset = data_loader.H5Dataset(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
+    train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
+    train_dataset = data_loader.H5Dataset(train_data)
 
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        data = np.concatenate([train_dataset.data[i]['feats_n'][:,train_dataset.colnames.index('calc_speed_m_s')] for i in train_idx])
-        data = np.concatenate([train_dataset.data[i]['feats_n'][:,train_dataset.colnames.index('t_hour')] for i in train_idx])
-
-        model = avg_speed.AvgSpeedModel('AVG', train_dataset.data.loc[train_idx])
-        model.config = train_dataset.config
-        model.holdout_routes = train_dataset.holdout_routes
+        model = avg_speed.AvgSpeedModel('AVG', train_dataset, idx=train_idx)
+        model.config = train_config
+        model.holdout_routes = holdout_routes
         pickle.dump(model, open(f"./logs/{args.run_label}/AVG_{fold_num}.pkl", 'wb'))
     print(f"TRAINING COMPLETE")
