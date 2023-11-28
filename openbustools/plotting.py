@@ -20,6 +20,7 @@ ASPECT_WIDE=4
 HEIGHT_SQ=12
 WIDTH_SQ=12
 PLOT_FOLDER="../plots/"
+PALETTE="Set2"
 
 
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
