@@ -78,7 +78,7 @@ def load_h5(data_folders, dates, only_holdout=False, **kwargs):
         holdout_routes = kwargs['holdout_routes']
     else:
         holdout_routes = []
-    colnames = LABEL_FEATS+EMBED_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS
+    colnames = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+EMBED_FEATS
     current_max_key = 0
     # Load all of the folder/day data into one dictionary, reindexing along way
     for data_folder in data_folders:
@@ -106,16 +106,35 @@ def load_h5(data_folders, dates, only_holdout=False, **kwargs):
         config = kwargs['config']
     else:
         config = create_config(data, colnames, list(data.keys()))
+    normalize_samples(data, config, colnames, LABEL_FEATS, GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS, EMBED_FEATS)
+    return (data, holdout_routes, config)
+
+
+# def normalize_samples(data, config, colnames):
+#     for data_idx in list(data.keys()):
+#         sample_data = data[data_idx]['feats_n']
+#         data[data_idx]['sample'] = {}
+#         for k in LABEL_FEATS:
+#             data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,colnames.index(k)].astype(float)
+#         for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
+#             data[data_idx]['sample'][k] = normalize(sample_data[:,colnames.index(k)].astype(float), config[k])
+#         for k in EMBED_FEATS:
+#             data[data_idx]['sample'][k] = sample_data[:,colnames.index(k)].astype(int)[0]
+#     return None
+
+
+def normalize_samples(data, config, all_colnames, label_colnames, con_colnames, cat_colnames):
     for data_idx in list(data.keys()):
         sample_data = data[data_idx]['feats_n']
         data[data_idx]['sample'] = {}
-        for k in LABEL_FEATS:
-            data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,colnames.index(k)].astype(float)
-        for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
-            data[data_idx]['sample'][k] = normalize(sample_data[:,colnames.index(k)].astype(float), config[k])
-        for k in EMBED_FEATS:
-            data[data_idx]['sample'][k] = sample_data[:,colnames.index(k)].astype(int)[0]
-    return (data, holdout_routes, config)
+        for k in label_colnames:
+            data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,all_colnames.index(k)].astype(float)
+            data[data_idx]['sample'][k] = normalize(sample_data[:,all_colnames.index(k)].astype(float), config[k])
+        for k in con_colnames:
+            data[data_idx]['sample'][k] = normalize(sample_data[:,all_colnames.index(k)].astype(float), config[k])
+        for k in cat_colnames:
+            data[data_idx]['sample'][k] = sample_data[:,all_colnames.index(k)].astype(int)[0]
+    return None
 
 
 class H5Dataset(Dataset):

@@ -43,6 +43,7 @@ def get_gtfs_shapes_lookup(gtfs_folder):
     data = data[['service_id','route_id','direction_id','trip_id']].drop_duplicates().sort_values(['service_id','route_id','direction_id','trip_id'])
     return data
 
+
 def get_gtfs_shapes(gtfs_folder):
     """Use stop locations to create unique shapes from GTFS files."""
     stops = pd.read_csv(f"{gtfs_folder}stops.txt", low_memory=False, dtype=GTFS_LOOKUP)
@@ -208,3 +209,7 @@ def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):
     print(f"Filtered down to {len(remaining_trip_ids)} possible trip_ids; returning the first one ({keep_trip_id}).")
     filtered_df = filtered_df[filtered_df['trip_id']==keep_trip_id]
     return filtered_df.copy(), remaining_trip_ids
+
+
+def aggregate_realtime_drivecycle():
+    return None

@@ -31,7 +31,7 @@ def download_dem(endpoint, data_folder, grid_bounds, epsg, out_file):
 
 
 if __name__ == "__main__":
-    # download_dem("https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m", "./data/kcm_spatial/", [369903,37911,409618,87758], 32148, "usgs10m_dem.tif")
-    # spatial.reproject_raster("./data/kcm_spatial/usgs10m_dem.tif", "./data/kcm_spatial/usgs10m_dem_32148.tif", 32148)
+    download_dem("https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m", "./data/kcm_spatial/", [369903,37911,409618,87758], 32148, "usgs10m_dem.tif")
+    spatial.reproject_raster("./data/kcm_spatial/usgs10m_dem.tif", "./data/kcm_spatial/usgs10m_dem_32148.tif", 32148)
     download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", "./data/atb_spatial/", [550869,7012847,579944,7039521], 32632, "eudtm30m_dem.tif")
     spatial.reproject_raster("./data/atb_spatial/eudtm30m_dem.tif", "./data/atb_spatial/eudtm30m_dem_32632.tif", 32632)

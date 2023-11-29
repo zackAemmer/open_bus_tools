@@ -112,7 +112,7 @@ class CONV(pl.LightningModule):
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)
-        return {'preds': out_agg, 'labels': y_agg}
+        return {'preds': out_agg, 'labels': y_agg, 'preds_raw': out, 'labels_raw': y_no_norm, 'mask': mask}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
@@ -234,7 +234,7 @@ class CONVRealtime(pl.LightningModule):
         y_no_norm = y_no_norm.detach().cpu().numpy()
         out_agg = model_utils.aggregate_tts(out, mask)
         y_agg = model_utils.aggregate_tts(y_no_norm, mask)
-        return {'preds': out_agg, 'labels': y_agg}
+        return {'preds': out_agg, 'labels': y_agg, 'preds_raw': out, 'labels_raw': y_no_norm, 'mask': mask}
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer

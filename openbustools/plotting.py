@@ -30,8 +30,7 @@ def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
     sns.lineplot(plot_df, x=x_var, y=y_var, ax=axes)
     fig.suptitle(title_text, fontsize=16)
     fig.tight_layout()
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
+    plt.savefig(f"{PLOT_FOLDER}{title_text}.jpg", format='jpg', dpi=600, bbox_inches='tight')
     return None
 
 
@@ -41,8 +40,7 @@ def formatted_rel_lineplot(plot_df, x_var, y_var, rel_var, title_text="throwaway
         g.set(xlim=xlim)
     if ylim:
         g.set(ylim=ylim)
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
+    plt.savefig(f"{PLOT_FOLDER}{title_text}.jpg", format='jpg', dpi=600, bbox_inches='tight')
     return None
 
 
@@ -56,8 +54,7 @@ def formatted_basemap_scatterplot(plot_gdf, title_text="throwaway"):
     plot_gdf.iloc[-1:].plot(ax=axes, markersize=100, color='red', marker='x')
     cx.add_basemap(ax=axes, crs=plot_gdf.crs.to_string(), alpha=0.6, source=cx.providers.MapBox(accessToken=os.getenv(key="MAPBOX_TOKEN")))
     fig.tight_layout()
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
+    plt.savefig(f"{PLOT_FOLDER}{title_text}.jpg", format='jpg', dpi=600, bbox_inches='tight')
     return fig, axes
 
 
@@ -71,8 +68,7 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
     plot_gdf.iloc[-1:].plot(ax=axes, markersize=1000, color='red', marker='x')
     cx.add_basemap(ax=axes, crs=plot_gdf.crs.to_string(), alpha=0.4, source=cx.providers.MapBox(accessToken=os.getenv(key="MAPBOX_TOKEN")))
     fig.tight_layout()
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
+    plt.savefig(f"{PLOT_FOLDER}{title_text}.jpg", format='jpg', dpi=600, bbox_inches='tight')
     return fig, axes
 
 
@@ -114,9 +110,15 @@ def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
         axes[5].set_xlim(-20,20)
         # axes[5].xticks(np.arange(min(-30000), max(x)+1, 1.0))
     fig.tight_layout()
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.eps", format='eps', dpi=600, bbox_inches='tight')
-    plt.savefig(f"{PLOT_FOLDER}{title_text}.png", format='png', dpi=600, bbox_inches='tight')
+    plt.savefig(f"{PLOT_FOLDER}{title_text}.jpg", format='jpg', dpi=600, bbox_inches='tight')
     return fig, axes
+
+
+def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
+    plot_df = traj_df.reset_index().melt(id_vars="index")
+    fig = sns.FacetGrid(plot_df, row='variable', height=1.7, aspect=4, sharey=False)
+    fig.map(sns.lineplot, 'index', 'value')
+    return fig
 
 
 def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowess_kw=None):
@@ -169,8 +171,7 @@ def formatted_grid_animation(data, title_text="throwaway"):
 #     axes.set_xlim([0, 0.5])
 #     fig.suptitle('KCM Model Performance', fontsize=16)
 #     fig.tight_layout()
-#     plt.savefig("{PLOT_FOLDER}model_performances_kcm.eps", format='eps', dpi=600, bbox_inches='tight')
-#     plt.savefig("{PLOT_FOLDER}model_performances_kcm.png", format='png', dpi=600, bbox_inches='tight')
+#     plt.savefig("{PLOT_FOLDER}model_performances_kcm.jpg", format='jpg', dpi=600, bbox_inches='tight')
 #     return None
 
 # Annotated geopandas plots

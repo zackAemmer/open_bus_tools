@@ -53,10 +53,12 @@ def prepare_run(**kwargs):
         data['x_cent'] = data['x'] - kwargs['coord_ref_center'][0]
         data['y_cent'] = data['y'] - kwargs['coord_ref_center'][1]
         # Calculate geometry features
-        data['calc_time_s'], data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'locationtime')
+        data['calc_time_s'] = data['locationtime'] - data['locationtime'].shift(1)
+        data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'lon', 'lat')
         # Drop consecutive points where bus did not move, re-calculate features
         data = data[data['calc_dist_m']>0].copy()
-        data['calc_time_s'], data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'locationtime')
+        data['calc_time_s'] = data['locationtime'] - data['locationtime'].shift(1)
+        data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'lon', 'lat')
         # First pt of each trip (not shingle) is dependent on prev trip metrics
         data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
         data['calc_speed_m_s'] = data['calc_dist_m'] / data['calc_time_s']
