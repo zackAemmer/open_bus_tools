@@ -69,6 +69,7 @@ def fill_tensor_mask(mask, x_sl, drop_first=True):
 def format_model_res(model_res_file):
     model_res = pickle.load(open(model_res_file, 'rb'))
     all_res = []
+    all_outputs = []
     for fold_num, experiment_res in model_res.items():
         for experiment_name, preds_and_labels in experiment_res.items():
             reg = performance_metrics(preds_and_labels['labels'], preds_and_labels['preds'])
@@ -79,9 +80,19 @@ def format_model_res(model_res_file):
                 'metric': list(reg.keys()),
                 'value': list(reg.values())
             })
+            out_df = pd.DataFrame({
+                'model': model_res_file.split('.')[-2].split('/')[-1],
+                'experiment_name': experiment_name,
+                'fold': fold_num,
+                'preds': preds_and_labels['preds'],
+                'labels': preds_and_labels['labels'],
+                'residuals': preds_and_labels['labels'] - preds_and_labels['preds']
+            })
             all_res.append(res_df)
+            all_outputs.append(out_df)
     all_res = pd.concat(all_res).reset_index(drop=True)
-    return all_res
+    all_outputs = pd.concat(all_outputs).reset_index(drop=True)
+    return (all_res, all_outputs)
 
 
 def performance_metrics(labels, preds, print_res=False):

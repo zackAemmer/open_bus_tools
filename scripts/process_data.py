@@ -35,29 +35,29 @@ def prepare_run(**kwargs):
         data.columns = standardfeeds.GTFSRT_LOOKUP.keys()
         data['locationtime'] = data['locationtime'].astype(float)
         data = data.astype(standardfeeds.GTFSRT_LOOKUP)
+
         # Sensors seem to hold old positions right at start/end of trip
         data = data.reset_index(drop=True)
-        for _ in range(4):
+        for _ in range(3):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
+
         # # Avoid sensors recording at regular intervals
         # drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
         # data = data[~data.index.isin(drop_indices)].reset_index(drop=True)
+
         # Split full trip trajectories into smaller samples, resample
         data = spatial.shingle(data, 2, 5, 2, 60)
 
         # Project to local coordinate system, apply bounding box, center coords
-        data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
-        data = data.cx[kwargs['grid_bounds'][0]:kwargs['grid_bounds'][2], kwargs['grid_bounds'][1]:kwargs['grid_bounds'][3]].copy()
-        data['x'] = data.geometry.x
-        data['y'] = data.geometry.y
-        data['x_cent'] = data['x'] - kwargs['coord_ref_center'][0]
-        data['y_cent'] = data['y'] - kwargs['coord_ref_center'][1]
+        data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
+
         # Calculate geometry features
         data['calc_time_s'] = data['locationtime'] - data['locationtime'].shift(1)
         data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'lon', 'lat')
-        # Drop consecutive points where bus did not move, re-calculate features
-        data = data[data['calc_dist_m']>0].copy()
+        # If time between points is too long, or distance is too short, or not found in DEM, drop
+        data = data[(data['calc_dist_m']>0) & (data['calc_time_s']>=1) & (data['elev_m']>-400)].copy()
+        # Re-calculate geometry features w/o missing points
         data['calc_time_s'] = data['locationtime'] - data['locationtime'].shift(1)
         data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'lon', 'lat')
         # First pt of each trip (not shingle) is dependent on prev trip metrics
@@ -74,10 +74,6 @@ def prepare_run(**kwargs):
         toss_ids.extend(list(data[data['calc_speed_m_s']>30]['shingle_id']))
         toss_ids.extend(list(data[data['calc_dist_m']>mins_keep*60*30]['shingle_id']))
         toss_ids.extend(list(data[data['calc_time_s']>mins_keep*60]['shingle_id']))
-        # Calculate elevation, filter trips not found in DEM
-        data['elev_m'] = spatial.sample_raster(data[['x','y']].values, kwargs['dem_file'])
-        toss_ids.extend(list(data[data['elev_m']<-300].index))
-        toss_ids.extend(list(data[data['elev_m']>5000].index))
         # Filter the list of full shingles w/invalid points
         toss_ids = np.unique(toss_ids)
         data = data[~data['shingle_id'].isin(toss_ids)].copy()
@@ -96,6 +92,7 @@ def prepare_run(**kwargs):
         # For calculating absolute time differences in trips (midnight crossover)
         data['t_sec_of_day'] = data['t'] - datetime.datetime(min(data['t_year']), min(data['t_month']), min(data['t_day']), 0, tzinfo=ZoneInfo(kwargs['timezone']))
         data['t_sec_of_day'] = data['t_sec_of_day'].dt.total_seconds()
+
         # Get GTFS features
         best_static = standardfeeds.latest_available_static(day[:10], kwargs['static_folder'])
         data['best_static'] = best_static
@@ -134,6 +131,7 @@ def prepare_run(**kwargs):
         # Scheduled time
         data['t_sec_of_day_start'] = data.groupby('shingle_id')[['t_sec_of_day']].transform('min')
         data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
+
         # Cumulative values
         unique_traj = data.groupby('shingle_id')
         data['cumul_time_s'] = unique_traj['calc_time_s'].cumsum()
@@ -144,18 +142,20 @@ def prepare_run(**kwargs):
         data['cumul_dist_km'] = data.cumul_dist_km - unique_traj.cumul_dist_km.transform('min')
         data['cumul_pass_stops_n'] = data.cumul_pass_stops_n - unique_traj.cumul_pass_stops_n.transform('min')
         data['data_folder'] = kwargs['realtime_folder']
+
         # Realtime grid features
         data_grid = grid.RealtimeGrid(kwargs['grid_bounds'], 500)
         data_grid.build_cell_lookup(data[['locationtime','x','y','calc_speed_m_s','calc_bear_d']].copy())
-        # Save processed date
+
+        # Save processed data
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
-        # Save the full geodataframe
+        # Full geodataframe
         data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
-        # Save the grid object
+        # Grid object
         with open(f"{kwargs['realtime_folder']}processed/grid/{day}", 'wb') as f:
             pickle.dump(data_grid, f)
-        # Save only the minimal training features
+        # Minimal training features
         data_id = data['shingle_id'].to_numpy().astype('int32')
         data_n = data[data_num_feat_cols].to_numpy().astype('int32')
         data_c = data[data_cat_feat_cols].to_numpy().astype('S10')
@@ -179,7 +179,7 @@ if __name__=="__main__":
     prepare_run(
         network_name="kcm",
         dates=standardfeeds.get_date_list("2023_03_15", 7),
-        data_dropout=0.2,
+        # data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
         timezone="America/Los_Angeles",
@@ -192,7 +192,7 @@ if __name__=="__main__":
     prepare_run(
         network_name="atb",
         dates=standardfeeds.get_date_list("2023_03_15", 7),
-        data_dropout=0.2,
+        # data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
         timezone="Europe/Oslo",

@@ -8,6 +8,7 @@ from matplotlib.ticker import FormatStrFormatter
 import numpy as np
 import pandas as pd
 import plotly
+import scipy.stats as stats
 import seaborn as sns
 import statsmodels.api as sm
 
@@ -17,10 +18,10 @@ HEIGHT=6
 WIDTH=8
 HEIGHT_WIDE=3
 ASPECT_WIDE=4
-HEIGHT_SQ=12
-WIDTH_SQ=12
+HEIGHT_SQ=6
+WIDTH_SQ=6
 PLOT_FOLDER="../plots/"
-PALETTE="Set2"
+PALETTE="Set1"
 
 
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
@@ -119,6 +120,24 @@ def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
     fig = sns.FacetGrid(plot_df, row='variable', height=1.7, aspect=4, sharey=False)
     fig.map(sns.lineplot, 'index', 'value')
     return fig
+
+
+def formatted_residuals_plot(plot_df, title_text="throwaway"):
+    """Plot residuals of a model."""
+    fig, axes = plt.subplots(3,1)
+    fig.set_figheight(HEIGHT_SQ)
+    fig.set_figwidth(WIDTH_SQ)
+    sns.residplot(plot_df, ax=axes[0], x='labels', y='preds', lowess=True, scatter_kws={'marker': '.'}, line_kws={'color': 'red'})
+    sm.qqplot(plot_df['residuals'], ax=axes[1], dist=stats.t, distargs=(len(plot_df)-1,), line='45', fit=True)
+    sns.histplot(plot_df['residuals'], ax=axes[2], bins=100)
+    # axes.set_xlabel("Predicted Travel Time (s)")
+    # axes.set_ylabel("Residual (s)")
+    # axes.set_xlim(0,5000)
+    # axes.set_ylim(-5000,5000)
+    fig.suptitle(title_text, fontsize=16)
+    fig.tight_layout()
+    plt.savefig(f"{PLOT_FOLDER}{title_text}.jpg", format='jpg', dpi=600, bbox_inches='tight')
+    return None
 
 
 def lowess_with_confidence_bounds(x, y, eval_x, N=200, conf_interval=0.95, lowess_kw=None):

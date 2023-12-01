@@ -99,6 +99,18 @@ def shingle(trace_df, min_chunks, max_chunks, min_len, max_len, **kwargs):
     return z
 
 
+def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_bounds, dem_file):
+    """Create a geodataframe matching a grid and network."""
+    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data[lon_col].to_numpy(), data[lat_col].to_numpy()), crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
+    data = data.cx[grid_bounds[0]:grid_bounds[2], grid_bounds[1]:grid_bounds[3]].copy()
+    data['x'] = data.geometry.x
+    data['y'] = data.geometry.y
+    data['x_cent'] = data['x'] - coord_ref_center[0]
+    data['y_cent'] = data['y'] - coord_ref_center[1]
+    data['elev_m'] = sample_raster(data[['x','y']].values, dem_file)
+    return data
+
+
 # def get_adjacent_metric(shingle_group, adj_traces, d_buffer, t_buffer, b_buffer=None, orthogonal=False):
 #     """Calculate adjacent metric for each shingle from all other shingles in adj_traces."""
 #     # Set up spatial index for the traces
