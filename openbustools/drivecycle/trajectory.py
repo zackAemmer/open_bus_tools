@@ -13,8 +13,8 @@ class Trajectory():
         self.coord_ref_center = coord_ref_center
         self.epsg = epsg
         if resample_len:
-            lon_resamp = spatial.resample_cumul(lon, resample_len)
-            lat_resamp = spatial.resample_cumul(lat, resample_len)
+            lon_resamp = spatial.resample_to_len(lon, resample_len)
+            lat_resamp = spatial.resample_to_len(lat, resample_len)
             self.gdf = gpd.GeoDataFrame({
                 'geometry':gpd.points_from_xy(lon_resamp, lat_resamp),
                 'lon': lon_resamp,

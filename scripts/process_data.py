@@ -12,7 +12,7 @@ import torch
 from openbustools import spatial, standardfeeds
 from openbustools.traveltime import data_loader, grid
 
-data_num_feat_cols = data_loader.LABEL_FEATS+data_loader.EMBED_FEATS+data_loader.GPS_FEATS+data_loader.STATIC_FEATS+data_loader.DEEPTTE_FEATS+data_loader.MISC_CON_FEATS
+data_num_feat_cols = data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.STATIC_FEATS+data_loader.DEEPTTE_FEATS+data_loader.MISC_CON_FEATS+data_loader.EMBED_FEATS
 data_cat_feat_cols = data_loader.MISC_CAT_FEATS
 
 
@@ -40,11 +40,12 @@ def prepare_run(**kwargs):
         for _ in range(4):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
-        # Avoid sensors recording at regular intervals
-        drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
-        data = data[~data.index.isin(drop_indices)].reset_index(drop=True)
-        # Split full trip trajectories into smaller samples
-        data = spatial.shingle(data, 2, 5)
+        # # Avoid sensors recording at regular intervals
+        # drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
+        # data = data[~data.index.isin(drop_indices)].reset_index(drop=True)
+        # Split full trip trajectories into smaller samples, resample
+        data = spatial.shingle(data, 2, 5, 2, 60)
+
         # Project to local coordinate system, apply bounding box, center coords
         data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         data = data.cx[kwargs['grid_bounds'][0]:kwargs['grid_bounds'][2], kwargs['grid_bounds'][1]:kwargs['grid_bounds'][3]].copy()
@@ -63,6 +64,7 @@ def prepare_run(**kwargs):
         data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
         data['calc_speed_m_s'] = data['calc_dist_m'] / data['calc_time_s']
         data['calc_dist_km'] = data['calc_dist_m'] / 1000.0
+
         # Filter trips with less than 2 points
         toss_ids = []
         pt_counts = data.groupby('shingle_id')[['calc_dist_m']].count()
@@ -79,6 +81,7 @@ def prepare_run(**kwargs):
         # Filter the list of full shingles w/invalid points
         toss_ids = np.unique(toss_ids)
         data = data[~data['shingle_id'].isin(toss_ids)].copy()
+
         # Calculate time features
         data['t'] = pd.to_datetime(data['locationtime'], unit='s', utc=True).dt.tz_convert(kwargs['timezone'])
         data['t_year'] = data['t'].dt.year
