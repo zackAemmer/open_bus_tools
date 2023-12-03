@@ -51,8 +51,8 @@ class Trajectory():
         )
         trainer = pl.Trainer(logger=False)
         preds_and_labels = trainer.predict(model=model, dataloaders=loader)
-        preds = np.repeat(np.concatenate([x['preds'] for x in preds_and_labels]), len(self.gdf))
-        self.predicted_time_s = preds
+        preds = [x['preds_raw'] for x in preds_and_labels]
+        self.predicted_time_s = preds[0].flatten()
     def to_torch(self):
         feats_n = self.gdf[data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.EMBED_FEATS].to_numpy().astype('int32')
         return {0: {'feats_n': feats_n}}
