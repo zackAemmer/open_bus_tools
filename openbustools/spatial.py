@@ -111,6 +111,18 @@ def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_boun
     return data
 
 
+# def poly_locate_line_points(poly_geo, line_geo):
+#     if line_geo.intersects(poly_geo):
+#         intersection = line_geo.intersection(poly_geo)
+#         first_point = intersection.boundary.geoms[0]
+#         last_point = intersection.boundary.geoms[-1]
+#         res = (line_geo.project(first_point)*111111, line_geo.project(last_point)*111111)
+#         return res
+#     else:
+#         return None
+# intersected_trips['line_locs'] = intersected_trips.apply(lambda x: poly_locate_line_points(x['geometry_x'], x['geometry_y']), axis=1)
+
+
 # def get_adjacent_metric(shingle_group, adj_traces, d_buffer, t_buffer, b_buffer=None, orthogonal=False):
 #     """Calculate adjacent metric for each shingle from all other shingles in adj_traces."""
 #     # Set up spatial index for the traces
