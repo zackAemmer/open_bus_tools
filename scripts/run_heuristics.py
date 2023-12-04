@@ -41,7 +41,7 @@ if __name__=="__main__":
         print(f"FOLD: {fold_num}")
         for mname in res.keys():
             res[mname][fold_num] = {}
-        avg_model = pickle.load(open(f"{args.model_folder}{args.run_label}/AVG_{fold_num}.pkl", 'rb'))
+        avg_model = pickle.load(open(f"{args.model_folder}{args.run_label}/AVG-{fold_num}.pkl", 'rb'))
         per_tim_model = persistent.PersistentTimeModel('PERT')
         sch_model = schedule.ScheduleModel('SCH')
 

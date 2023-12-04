@@ -91,7 +91,7 @@ def shingle(trace_df, min_chunks, max_chunks, min_len, max_len, **kwargs):
     resample_lens = np.random.randint(min_len, max_len, len(shingles))
     resampled= []
     for i in range(len(shingles)):
-        resampled.append(resample_to_len(shingles[i], resample_lens[i], xp=shingles[i][:,0]))
+        resampled.append(resample_to_len(shingles[i], resample_lens[i]))
     sids = np.repeat(sids,resample_lens).astype(int)
     z = pd.DataFrame(np.concatenate(resampled), columns=['locationtime','lon','lat'])
     z['shingle_id'] = sids

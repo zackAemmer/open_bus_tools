@@ -38,19 +38,22 @@ class Trajectory():
         self.gdf['calc_time_s'] = 0
         self.gdf['cumul_time_s'] = 0
         self.predicted_time_s = known_times
-    def update_predicted_time(self, model):
+    def update_predicted_time(self, model, is_nn=True):
         samples = self.to_torch()
         data_loader.normalize_samples(samples, model.config, data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.EMBED_FEATS, data_loader.LABEL_FEATS, data_loader.GPS_FEATS, data_loader.EMBED_FEATS)
         dataset = data_loader.H5Dataset(samples)
-        loader = DataLoader(
-            dataset,
-            collate_fn=model.collate_fn,
-            batch_size=model.batch_size,
-            shuffle=False,
-            drop_last=False
-        )
-        trainer = pl.Trainer(logger=False)
-        preds_and_labels = trainer.predict(model=model, dataloaders=loader)
+        if is_nn:
+            loader = DataLoader(
+                dataset,
+                collate_fn=model.collate_fn,
+                batch_size=model.batch_size,
+                shuffle=False,
+                drop_last=False
+            )
+            trainer = pl.Trainer(logger=False)
+            preds_and_labels = trainer.predict(model=model, dataloaders=loader)
+        else:
+            preds_and_labels = model.predict(dataset, 'h')
         preds = [x['preds_raw'] for x in preds_and_labels]
         self.predicted_time_s = preds[0].flatten()
     def to_torch(self):

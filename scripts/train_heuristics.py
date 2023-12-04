@@ -42,5 +42,5 @@ if __name__=="__main__":
         model = avg_speed.AvgSpeedModel('AVG', train_dataset, idx=train_idx)
         model.config = train_config
         model.holdout_routes = holdout_routes
-        pickle.dump(model, open(f"./logs/{args.run_label}/AVG_{fold_num}.pkl", 'wb'))
+        pickle.dump(model, open(f"./logs/{args.run_label}/AVG-{fold_num}.pkl", 'wb'))
     print(f"TRAINING COMPLETE")

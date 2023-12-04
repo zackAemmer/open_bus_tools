@@ -47,7 +47,7 @@ def prepare_run(**kwargs):
         # data = data[~data.index.isin(drop_indices)].reset_index(drop=True)
 
         # Split full trip trajectories into smaller samples, resample
-        data = spatial.shingle(data, 2, 5, 2, 60)
+        data = spatial.shingle(data, 2, 5, 3, 60)
 
         # Project to local coordinate system, apply bounding box, center coords
         data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
