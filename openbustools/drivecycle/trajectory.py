@@ -13,7 +13,7 @@ class Trajectory():
         self.coord_ref_center = coord_ref_center
         self.epsg = epsg
         self.predicted_time_s = None
-        if resample_len:
+        if resample_len is not None:
             lon = spatial.resample_to_len(lon, resample_len)
             lat = spatial.resample_to_len(lat, resample_len)
         self.gdf = gpd.GeoDataFrame({
@@ -27,6 +27,11 @@ class Trajectory():
         self.gdf['y'] = self.gdf.geometry.y
         self.gdf['x_cent'] = self.gdf['x'] - coord_ref_center[0]
         self.gdf['y_cent'] = self.gdf['y'] - coord_ref_center[1]
+        if known_times is not None:
+            if resample_len is not None:
+                known_times = spatial.resample_to_len(known_times, resample_len)
+            self.gdf['cumul_time_s'] = known_times
+            self.gdf['calc_time_s'] = self.gdf['cumul_time_s'].diff()
         self.gdf['calc_dist_m'], self.gdf['calc_bear_d'] = spatial.calculate_gps_metrics(self.gdf, 'lon', 'lat')
         self.gdf = self.gdf.drop(index=0)
     def update_predicted_time(self, model):
@@ -46,7 +51,7 @@ class Trajectory():
         else:
             preds_and_labels = model.predict(dataset, 'h')
         preds = [x['preds_raw'] for x in preds_and_labels]
-        self.predicted_time_s = preds[0].flatten()
+        self.gdf['calc_time_s'] = preds[0].flatten()
     def to_torch(self):
         gdf = self.gdf.copy()
         # Fill modeling features with -1 if not added to trajectory gdf
@@ -67,17 +72,14 @@ class DriveCycle():
         self.elev = elev
         self.vel = self.dist / self.tim
         # Measured between each point
-        self.acc = (np.roll(self.vel, -1) - self.vel) / np.roll(self.tim, -1)
-        self.slope = (np.roll(self.elev, -1) - self.elev) / np.clip(np.roll(self.dist, -1), .001, None)
+        self.acc = np.diff(self.vel) / self.tim[1:]
+        self.slope = np.diff(self.elev) / np.clip(self.dist[1:], .001, None)
         self.theta = np.arctan(self.slope)
         # Calculated new avg values; lose first point
-        self.dist = self.dist[:-1]
-        self.tim = self.tim[:-1]
-        self.elev = self.elev[:-1]
-        self.vel = self.vel[:-1]
-        self.acc = self.acc[:-1]
-        self.slope = self.slope[:-1]
-        self.theta = self.theta[:-1]
+        self.dist = self.dist[1:]
+        self.tim = self.tim[1:]
+        self.elev = self.elev[1:]
+        self.vel = self.vel[1:]
         self.traj_len = len(self.dist)
     def to_df(self):
         df = pd.DataFrame({

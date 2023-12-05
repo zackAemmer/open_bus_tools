@@ -175,7 +175,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 7),
+        dates=standardfeeds.get_date_list("2023_03_15", 15),
         # data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
@@ -188,7 +188,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 7),
+        dates=standardfeeds.get_date_list("2023_03_15", 15),
         # data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
