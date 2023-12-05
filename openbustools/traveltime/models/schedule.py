@@ -13,4 +13,5 @@ class ScheduleModel:
         labels = np.array([dataset.data[x]['feats_n'][:,self.colnames.index('cumul_time_s')][-1] for x in np.arange(len(dataset))])
         preds = np.array([dataset.data[x]['feats_n'][:,self.colnames.index('sch_time_s')][-1] for x in np.arange(len(dataset))])
         preds = np.clip(preds, 0, 3600)
-        return {'preds':preds, 'labels':labels}
+        res = [{'preds':preds[i], 'labels':labels[i]} for i in range(len(preds))]
+        return res

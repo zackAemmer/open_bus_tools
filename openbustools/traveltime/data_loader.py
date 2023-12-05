@@ -8,13 +8,11 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
+from openbustools.traveltime import data_loader
+
 LABEL_FEATS = [
     "calc_time_s",
     "cumul_time_s",
-]
-EMBED_FEATS = [
-    "t_min_of_day",
-    "t_day_of_week",
 ]
 GPS_FEATS = [
     "calc_dist_m",
@@ -30,6 +28,10 @@ STATIC_FEATS = [
 ]
 DEEPTTE_FEATS = [
     "cumul_dist_m",
+]
+EMBED_FEATS = [
+    "t_min_of_day",
+    "t_day_of_week",
 ]
 MISC_CON_FEATS = [
     "x",
@@ -47,6 +49,8 @@ HOLDOUT_ROUTES = [
     '102736','102628','102555','100129','102719','100229'
 ]
 
+NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+EMBED_FEATS+MISC_CON_FEATS
+
 
 def normalize(x, config_entry):
     mean = config_entry[0]
@@ -60,15 +64,30 @@ def denormalize(x, config_entry):
     return x * std + mean
 
 
-def create_config(data, colnames, idxs):
+def create_config(data, idxs):
     ext_data = [data[x]['feats_n'] for x in idxs]
     config = {}
-    for i,col in enumerate(colnames):
+    for i,col in enumerate(NUM_FEAT_COLS):
         col_data = np.concatenate([samp[:,i] for samp in ext_data])
         col_mean = np.mean(col_data)
         col_sd = np.std(col_data)
         config[col] = (col_mean, col_sd)
     return config
+
+
+def normalize_samples(data, config):
+    for data_idx in list(data.keys()):
+        sample_data = data[data_idx]['feats_n']
+        data[data_idx]['sample'] = {}
+        for k in LABEL_FEATS:
+            data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,NUM_FEAT_COLS.index(k)].astype(float)
+            data[data_idx]['sample'][k] = normalize(sample_data[:,NUM_FEAT_COLS.index(k)].astype(float), config[k])
+        for k in GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
+            data[data_idx]['sample'][k] = normalize(sample_data[:,NUM_FEAT_COLS.index(k)].astype(float), config[k])
+        for k in EMBED_FEATS:
+            data[data_idx]['sample'][k] = sample_data[:,NUM_FEAT_COLS.index(k)].astype(int)[0]
+    return None
+
 
 def load_h5(data_folders, dates, only_holdout=False, **kwargs):
     """Preload all samples from an h5py file into memory, outside of dataset."""
@@ -78,7 +97,6 @@ def load_h5(data_folders, dates, only_holdout=False, **kwargs):
         holdout_routes = kwargs['holdout_routes']
     else:
         holdout_routes = []
-    colnames = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS+EMBED_FEATS
     current_max_key = 0
     # Load all of the folder/day data into one dictionary, reindexing along way
     for data_folder in data_folders:
@@ -105,36 +123,9 @@ def load_h5(data_folders, dates, only_holdout=False, **kwargs):
     if 'config' in kwargs:
         config = kwargs['config']
     else:
-        config = create_config(data, colnames, list(data.keys()))
-    normalize_samples(data, config, colnames, LABEL_FEATS, GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS, EMBED_FEATS)
+        config = create_config(data, list(data.keys()))
+    normalize_samples(data, config)
     return (data, holdout_routes, config)
-
-
-# def normalize_samples(data, config, colnames):
-#     for data_idx in list(data.keys()):
-#         sample_data = data[data_idx]['feats_n']
-#         data[data_idx]['sample'] = {}
-#         for k in LABEL_FEATS:
-#             data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,colnames.index(k)].astype(float)
-#         for k in LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+MISC_CON_FEATS:
-#             data[data_idx]['sample'][k] = normalize(sample_data[:,colnames.index(k)].astype(float), config[k])
-#         for k in EMBED_FEATS:
-#             data[data_idx]['sample'][k] = sample_data[:,colnames.index(k)].astype(int)[0]
-#     return None
-
-
-def normalize_samples(data, config, all_colnames, label_colnames, con_colnames, cat_colnames):
-    for data_idx in list(data.keys()):
-        sample_data = data[data_idx]['feats_n']
-        data[data_idx]['sample'] = {}
-        for k in label_colnames:
-            data[data_idx]['sample'][f"{k}_no_norm"] = sample_data[:,all_colnames.index(k)].astype(float)
-            data[data_idx]['sample'][k] = normalize(sample_data[:,all_colnames.index(k)].astype(float), config[k])
-        for k in con_colnames:
-            data[data_idx]['sample'][k] = normalize(sample_data[:,all_colnames.index(k)].astype(float), config[k])
-        for k in cat_colnames:
-            data[data_idx]['sample'][k] = sample_data[:,all_colnames.index(k)].astype(int)[0]
-    return None
 
 
 class H5Dataset(Dataset):

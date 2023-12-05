@@ -13,4 +13,5 @@ class PersistentTimeModel:
         labels = np.array([dataset.data[x]['feats_n'][:,self.colnames.index('cumul_time_s')][-1] for x in np.arange(len(dataset))])
         lens = np.array([dataset.data[x]['feats_n'].shape[0] for x in np.arange(len(dataset))])
         preds = (lens - 1) * 30
-        return {'preds':preds, 'labels':labels}
+        res = [{'preds':preds[i], 'labels':labels[i]} for i in range(len(preds))]
+        return res

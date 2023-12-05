@@ -12,37 +12,28 @@ class Trajectory():
     def __init__(self, lon, lat, mod, dow, coord_ref_center, epsg, known_times=None, resample_len=None) -> None:
         self.coord_ref_center = coord_ref_center
         self.epsg = epsg
+        self.predicted_time_s = None
         if resample_len:
-            lon_resamp = spatial.resample_to_len(lon, resample_len)
-            lat_resamp = spatial.resample_to_len(lat, resample_len)
-            self.gdf = gpd.GeoDataFrame({
-                'geometry':gpd.points_from_xy(lon_resamp, lat_resamp),
-                'lon': lon_resamp,
-                'lat': lat_resamp,
-                't_min_of_day':mod,
-                't_day_of_week':dow}, crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
-        else:
-            self.gdf = gpd.GeoDataFrame({
-                'geometry':gpd.points_from_xy(lon, lat),
-                'lon': lon,
-                'lat': lat,
-                't_min_of_day':mod,
-                't_day_of_week':dow}, crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
+            lon = spatial.resample_to_len(lon, resample_len)
+            lat = spatial.resample_to_len(lat, resample_len)
+        self.gdf = gpd.GeoDataFrame({
+            'geometry':gpd.points_from_xy(lon, lat),
+            'lon': lon,
+            'lat': lat,
+            't_hour': mod // 60,
+            't_min_of_day':mod,
+            't_day_of_week':dow}, crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
         self.gdf['x'] = self.gdf.geometry.x
         self.gdf['y'] = self.gdf.geometry.y
         self.gdf['x_cent'] = self.gdf['x'] - coord_ref_center[0]
         self.gdf['y_cent'] = self.gdf['y'] - coord_ref_center[1]
-        self.gdf['calc_time_s'] = np.nan
         self.gdf['calc_dist_m'], self.gdf['calc_bear_d'] = spatial.calculate_gps_metrics(self.gdf, 'lon', 'lat')
         self.gdf = self.gdf.drop(index=0)
-        self.gdf['calc_time_s'] = 0
-        self.gdf['cumul_time_s'] = 0
-        self.predicted_time_s = known_times
-    def update_predicted_time(self, model, is_nn=True):
+    def update_predicted_time(self, model):
         samples = self.to_torch()
-        data_loader.normalize_samples(samples, model.config, data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.EMBED_FEATS, data_loader.LABEL_FEATS, data_loader.GPS_FEATS, data_loader.EMBED_FEATS)
+        data_loader.normalize_samples(samples, model.config)
         dataset = data_loader.H5Dataset(samples)
-        if is_nn:
+        if model.is_nn:
             loader = DataLoader(
                 dataset,
                 collate_fn=model.collate_fn,
@@ -57,11 +48,16 @@ class Trajectory():
         preds = [x['preds_raw'] for x in preds_and_labels]
         self.predicted_time_s = preds[0].flatten()
     def to_torch(self):
-        feats_n = self.gdf[data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.EMBED_FEATS].to_numpy().astype('int32')
+        gdf = self.gdf.copy()
+        # Fill modeling features with -1 if not added to trajectory gdf
+        for col in data_loader.NUM_FEAT_COLS+data_loader.MISC_CAT_FEATS:
+            if col not in gdf.columns:
+                gdf[col] = -1
+        feats_n = gdf[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
         return {0: {'feats_n': feats_n}}
     def to_drivecycle(self, dem_path):
         elev = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_path)
-        return DriveCycle(self.gdf['calc_dist_m'].to_numpy(), self.predicted_time_s, elev)
+        return DriveCycle(self.gdf['calc_dist_m'].to_numpy(), self.gdf['calc_time_s'].to_numpy(), elev)
 
 
 class DriveCycle():

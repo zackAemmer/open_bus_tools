@@ -9,7 +9,7 @@ class AvgSpeedModel:
         self.model_name = model_name
         self.is_nn = False
         self.include_grid = False
-        self.colnames = data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.STATIC_FEATS+data_loader.DEEPTTE_FEATS+data_loader.MISC_CON_FEATS+data_loader.EMBED_FEATS
+        self.colnames = data_loader.NUM_FEAT_COLS
         if idx is None:
             idx = np.arange(len(dataset))
         speeds = np.concatenate([dataset.data[i]['feats_n'][:,self.colnames.index('calc_speed_m_s')] for i in idx])
@@ -39,4 +39,5 @@ class AvgSpeedModel:
             speeds = speeds_df['speeds'].to_numpy()
         preds_raw = [dists_raw[i] / speeds[i] for i in range(len(dists_raw))]
         preds = dists / speeds
-        return {'preds':preds, 'labels':labels, 'preds_raw':preds_raw, 'labels_raw':labels_raw}
+        res = [{'preds':preds[i], 'labels':labels[i], 'preds_raw':preds_raw[i], 'labels_raw':labels_raw[i]} for i in range(len(preds))]
+        return res

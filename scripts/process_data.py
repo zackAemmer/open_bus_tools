@@ -12,9 +12,6 @@ import torch
 from openbustools import spatial, standardfeeds
 from openbustools.traveltime import data_loader, grid
 
-data_num_feat_cols = data_loader.LABEL_FEATS+data_loader.GPS_FEATS+data_loader.STATIC_FEATS+data_loader.DEEPTTE_FEATS+data_loader.MISC_CON_FEATS+data_loader.EMBED_FEATS
-data_cat_feat_cols = data_loader.MISC_CAT_FEATS
-
 
 def prepare_run(**kwargs):
     """Pre-process training data and save to sub-folder."""
@@ -157,8 +154,8 @@ def prepare_run(**kwargs):
             pickle.dump(data_grid, f)
         # Minimal training features
         data_id = data['shingle_id'].to_numpy().astype('int32')
-        data_n = data[data_num_feat_cols].to_numpy().astype('int32')
-        data_c = data[data_cat_feat_cols].to_numpy().astype('S10')
+        data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
+        data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S10')
         data_g = data_grid.get_recent_points(data[['x','y','locationtime']].to_numpy(), 4).astype('int32')
         with h5py.File(f"{kwargs['realtime_folder']}processed/samples.hdf5", 'a') as f:
             if day in f.keys():
@@ -166,8 +163,8 @@ def prepare_run(**kwargs):
             g = f.create_group(day)
             g.create_dataset('shingle_ids', data=data_id)
             g.create_dataset('feats_n', data=data_n)
-            g.create_dataset('feats_g', data=data_g)
             g.create_dataset('feats_c', data=data_c)
+            g.create_dataset('feats_g', data=data_g)
     print(f"PROCESSING COMPLETED: {kwargs['network_name']}")
 
 
