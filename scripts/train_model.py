@@ -1,6 +1,7 @@
 import argparse
 
 import lightning.pytorch as pl
+from lightning.pytorch.profilers import SimpleProfiler, AdvancedProfiler, PyTorchProfiler
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
 import numpy as np
@@ -78,7 +79,7 @@ if __name__=="__main__":
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
-            profiler=pl.profiler.PyTorchProfiler(),
+            # profiler=PyTorchProfiler(dirpath="./profiler/", filename=f"{model.model_name}"),
             # limit_train_batches=2,
             # limit_val_batches=2,
         )
