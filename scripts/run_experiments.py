@@ -12,9 +12,16 @@ from openbustools.traveltime import data_loader, model_utils
 
 
 if __name__=="__main__":
-    torch.set_default_dtype(torch.float)
-    torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
+
+    if torch.cuda.is_available():
+        num_workers=4
+        pin_memory=True
+        accelerator="cuda"
+    else:
+        num_workers=0
+        pin_memory=False
+        accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -27,15 +34,6 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
-
-    if torch.cuda.is_available():
-        num_workers=4
-        pin_memory=True
-        accelerator="auto"
-    else:
-        num_workers=4
-        pin_memory=False
-        accelerator="cpu"
 
     print("="*30)
     print(f"EXPERIMENTS")

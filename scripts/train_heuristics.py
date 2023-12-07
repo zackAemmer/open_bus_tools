@@ -13,9 +13,16 @@ from openbustools.traveltime.models import avg_speed
 
 
 if __name__=="__main__":
-    torch.set_default_dtype(torch.float)
-    torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
+
+    if torch.cuda.is_available():
+        num_workers=4
+        pin_memory=True
+        accelerator="cuda"
+    else:
+        num_workers=0
+        pin_memory=False
+        accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run_label', required=True)

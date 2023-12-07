@@ -169,13 +169,11 @@ def prepare_run(**kwargs):
 
 
 if __name__=="__main__":
-    torch.set_default_dtype(torch.float)
-    torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        dates=standardfeeds.get_date_list("2023_03_15", 7),
         # data_dropout=0.2,
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
@@ -188,7 +186,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        dates=standardfeeds.get_date_list("2023_03_15", 7),
         # data_dropout=0.2,
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",

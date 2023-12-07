@@ -64,7 +64,7 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
     fig.set_figheight(HEIGHT_SQ)
     fig.set_figwidth(WIDTH_SQ)
-    plot_gdf.plot(ax=axes, column='shingle_id', cmap='Set2')
+    plot_gdf.plot(ax=axes)
     plot_gdf.iloc[0:1].plot(ax=axes, markersize=1000, color='green', marker='x')
     plot_gdf.iloc[-1:].plot(ax=axes, markersize=1000, color='red', marker='x')
     cx.add_basemap(ax=axes, crs=plot_gdf.crs.to_string(), alpha=0.4, source=cx.providers.MapBox(accessToken=os.getenv(key="MAPBOX_TOKEN")))

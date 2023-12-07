@@ -140,6 +140,14 @@ class H5Dataset(Dataset):
         return sample
     def __len__(self):
         return len(self.data)
+    def to_df(self):
+        shingle_ids = np.arange(len(self.data))
+        shingle_lens = np.array([self.data[i]['feats_n'].shape[0] for i in np.arange(len(self))])
+        shingle_ids = shingle_ids.repeat(shingle_lens)
+        data = np.concatenate([self.data[i]['feats_n'] for i in np.arange(len(self))])
+        data_df = pd.DataFrame(data, columns=data_loader.NUM_FEAT_COLS)
+        data_df['shingle_id'] = shingle_ids
+        return data_df
 
 
 def collate(batch):
