@@ -10,6 +10,19 @@ from openbustools.traveltime import data_loader
 
 class Trajectory():
     def __init__(self, lon, lat, mod, dow, coord_ref_center, epsg, known_times=None, resample_len=None) -> None:
+        """
+        Initialize a Trajectory object.
+
+        Args:
+            lon (list): List of longitude values.
+            lat (list): List of latitude values.
+            mod (int): Time of the trajectory in minutes.
+            dow (int): Day of the week (0-6, Monday to Sunday).
+            coord_ref_center (tuple): Tuple of the reference center coordinates (x, y).
+            epsg (int): EPSG code for the coordinate reference system.
+            known_times (list, optional): List of cumulative time in seconds. Defaults to None.
+            resample_len (int, optional): Length to resample the trajectory to. Defaults to None.
+        """
         self.coord_ref_center = coord_ref_center
         self.epsg = epsg
         self.predicted_time_s = None
@@ -17,7 +30,7 @@ class Trajectory():
             lon = spatial.resample_to_len(lon, resample_len)
             lat = spatial.resample_to_len(lat, resample_len)
         self.gdf = gpd.GeoDataFrame({
-            'geometry':gpd.points_from_xy(lon, lat),
+            'geometry': gpd.points_from_xy(lon, lat),
             'lon': lon,
             'lat': lat,
             't_hour': mod // 60,
@@ -32,9 +45,17 @@ class Trajectory():
                 known_times = spatial.resample_to_len(known_times, resample_len)
             self.gdf['cumul_time_s'] = known_times
             self.gdf['calc_time_s'] = self.gdf['cumul_time_s'].diff()
+            self.gdf['calc_time_s'] = self.gdf['calc_time_s'].fillna(1)
         self.gdf['calc_dist_m'], self.gdf['calc_bear_d'] = spatial.calculate_gps_metrics(self.gdf, 'lon', 'lat')
         self.gdf = self.gdf.drop(index=0)
+    
     def update_predicted_time(self, model):
+        """
+        Update the predicted time of the trajectory using a given model.
+
+        Args:
+            model: The model used for prediction.
+        """
         samples = self.to_torch()
         data_loader.normalize_samples(samples, model.config)
         dataset = data_loader.H5Dataset(samples)
@@ -52,7 +73,14 @@ class Trajectory():
             preds_and_labels = model.predict(dataset, 'h')
         preds = [x['preds_raw'] for x in preds_and_labels]
         self.gdf['calc_time_s'] = preds[0].flatten()
+    
     def to_torch(self):
+        """
+        Convert the trajectory to a torch format.
+
+        Returns:
+            dict: A dictionary containing the trajectory features in torch format.
+        """
         gdf = self.gdf.copy()
         # Fill modeling features with -1 if not added to trajectory gdf
         for col in data_loader.NUM_FEAT_COLS+data_loader.MISC_CAT_FEATS:
@@ -60,12 +88,31 @@ class Trajectory():
                 gdf[col] = -1
         feats_n = gdf[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
         return {0: {'feats_n': feats_n}}
-    def to_drivecycle(self, dem_path):
+    
+    def to_average_drivecycle(self, dem_path):
+        """
+        Convert the trajectory to a DriveCycle object.
+
+        Args:
+            dem_path (str): Path to the digital elevation model (DEM) file.
+
+        Returns:
+            DriveCycle: A DriveCycle object representing the trajectory.
+        """
         elev = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_path)
-        return DriveCycle(self.gdf['calc_dist_m'].to_numpy(), self.gdf['calc_time_s'].to_numpy(), elev)
+        return AverageDriveCycle(self.gdf['calc_dist_m'].to_numpy(), self.gdf['calc_time_s'].to_numpy(), elev)
+
+    def to_momentary_drivecycle(self, vel, acc, theta):
+        """
+        Convert the trajectory to a DriveCycle object.
+
+        Returns:
+            DriveCycle: A DriveCycle object representing the trajectory.
+        """
+        return MomentaryDriveCycle(vel, acc, theta, self.gdf['calc_dist_m'].to_numpy(), self.gdf['calc_time_s'].to_numpy())
 
 
-class DriveCycle():
+class AverageDriveCycle():
     def __init__(self, dist, tim, elev) -> None:
         self.dist = dist
         self.tim = tim
@@ -89,6 +136,24 @@ class DriveCycle():
             'Velocity': self.vel,
             'Acceleration': self.acc,
             'Slope': self.slope,
+            'Theta': self.theta})
+        return df
+
+
+class MomentaryDriveCycle():
+    def __init__(self, vel, acc, theta, dist, tim) -> None:
+        self.vel = vel
+        self.acc = acc
+        self.dist = dist
+        self.tim = tim
+        self.theta = theta
+        self.traj_len = len(self.vel)
+    def to_df(self):
+        df = pd.DataFrame({
+            'Distance': self.dist,
+            'Time': self.tim,
+            'Velocity': self.vel,
+            'Acceleration': self.acc,
             'Theta': self.theta})
         return df
 

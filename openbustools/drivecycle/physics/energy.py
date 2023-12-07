@@ -50,7 +50,7 @@ class DriveCycleEnergyModel():
         f_aero = 0.5 * self.conditions.air_density * np.square(traj.vel) * self.bus.frontal_area * self.bus.drag_coeff
         return f_aero
     def calcGravLoad(self, traj):
-        f_grav = self.bus.mass * self.conditions.gravity * np.sin(traj.theta)
+        f_grav = self.bus.mass * self.conditions.gravity * np.sin(traj.theta * np.pi / 180)
         return f_grav
     def calcRollLoad(self, traj):
         # f_roll = self.bus.mass * self.conditions.gravity * (self.bus.fixed_roll_res + self.bus.variable_roll_res * np.square(traj.vel))
