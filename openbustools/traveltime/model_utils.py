@@ -53,7 +53,7 @@ HYPERPARAM_DICT = {
 def aggregate_tts(tts, mask):
     """Convert a sequence of predicted travel times to total travel time."""
     masked_tts = (tts*mask)
-    total_tts = np.sum(masked_tts, axis=0)
+    total_tts = torch.sum(masked_tts, dim=0)
     return total_tts
 
 
@@ -158,8 +158,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
-            collate_fn=data_loader.collate,
+            input_size=4,
+            collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
@@ -170,8 +170,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=16,
-            collate_fn=data_loader.collate_static,
+            input_size=8,
+            collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
@@ -182,8 +182,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=16,
-            collate_fn=data_loader.collate_realtime,
+            input_size=8,
+            collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],

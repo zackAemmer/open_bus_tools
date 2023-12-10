@@ -33,8 +33,6 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--test_n', required=True)
     args = parser.parse_args()
 
-    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
-
     print("="*30)
     print(f"EXPERIMENTS")
     print(f"RUN: {args.run_label}")
@@ -46,6 +44,7 @@ if __name__=="__main__":
 
     res = {}
     n_folds = 5
+    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")

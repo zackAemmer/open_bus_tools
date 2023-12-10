@@ -24,6 +24,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -34,8 +37,6 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
-
     print("="*30)
     print(f"TRAINING")
     print(f"RUN: {args.run_label}")
@@ -45,6 +46,7 @@ if __name__=="__main__":
     print(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
+    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
     train_dataset = data_loader.H5Dataset(train_data)
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
@@ -73,12 +75,12 @@ if __name__=="__main__":
             pin_memory=pin_memory,
         )
         trainer = pl.Trainer(
-            check_val_every_n_epoch=1,
-            max_epochs=50,
-            min_epochs=5,
+            check_val_every_n_epoch=2,
+            max_epochs=80,
+            min_epochs=3,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
+            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=1)],
             # profiler=PyTorchProfiler(dirpath="./profiler/", filename=f"{model.model_name}"),
             # limit_train_batches=2,
             # limit_val_batches=2,
