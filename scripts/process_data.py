@@ -155,7 +155,7 @@ def prepare_run(**kwargs):
         # Minimal training features
         data_id = data['shingle_id'].to_numpy().astype('int32')
         data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
-        data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S10')
+        data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S30')
         data_g = data_grid.get_recent_points(data[['x','y','locationtime']].to_numpy(), 4).astype('int32')
         with h5py.File(f"{kwargs['realtime_folder']}processed/samples.hdf5", 'a') as f:
             if day in f.keys():

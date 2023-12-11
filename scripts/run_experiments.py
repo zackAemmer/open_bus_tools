@@ -22,6 +22,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -118,6 +121,6 @@ if __name__=="__main__":
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
 
     p = Path('.') / 'results' / args.run_label
-    p.mkdir(exist_ok=True)
+    p.mkdir(parents=True, exist_ok=True)
     pickle.dump(res, open(f"./results/{args.run_label}/{args.model_type}.pkl", 'wb'))
     print(f"EXPERIMENTS COMPLETE")

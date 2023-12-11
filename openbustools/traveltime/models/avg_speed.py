@@ -29,7 +29,7 @@ class AvgSpeedModel:
         self.colnames = data_loader.NUM_FEAT_COLS
         if idx is None:
             idx = np.arange(len(dataset))
-        speeds = np.concatenate([dataset.data[i]['feats_n'][:,self.colnames.index('calc_speed_m_s')] for i in idx])
+        speeds = np.concatenate([dataset.data[i]['feats_n'][:,self.colnames.index('calc_speed_m_s')] for i in idx]).clip(1, 40)
         hours = np.concatenate([dataset.data[i]['feats_n'][:,self.colnames.index('t_hour')] for i in idx])
         mins = np.concatenate([dataset.data[i]['feats_n'][:,self.colnames.index('t_min_of_day')] for i in idx])
         self.speed_mean = np.mean(speeds)
@@ -62,16 +62,16 @@ class AvgSpeedModel:
         else:
             times = [dataset.data[x]['feats_n'][:,self.colnames.index('t_min_of_day')][0] for x in np.arange(len(dataset))]
             speeds_lookup_df = pd.DataFrame(self.min_speed_lookup).reset_index()
-            times_df = pd.DataFrame({'mins':times})
+            times_df = pd.DataFrame({'mins': times})
             speeds_df = pd.merge(times_df, speeds_lookup_df, left_on='mins', right_on='index', how='left')
             speeds_df['speeds'] = speeds_df['speeds'].fillna(self.speed_mean)
             speeds = speeds_df['speeds'].to_numpy()
-        preds_raw = [dists_raw[i] / speeds[i] for i in range(len(dists_raw))]
+        preds_raw = [dists / speed for dists, speed in zip(dists_raw, speeds)]
         preds = dists / speeds
         # Distance of 0 is a special case, cannot predict time so guess average of other times in the sequence
         preds_mean = [np.mean(i) for i in preds_raw]
-        for i in range(len(preds_raw)):
-            if np.sum(preds_raw[i]==0)>0:
-                preds_raw[i][preds_raw[i]==0] = preds_mean[i]
-        res = [{'preds':preds[i], 'labels':labels[i], 'preds_raw':preds_raw[i], 'labels_raw':labels_raw[i]} for i in range(len(preds))]
+        for i, pred in enumerate(preds_raw):
+            if np.sum(pred==0) > 0:
+                pred[pred==0] = preds_mean[i]
+        res = [{'preds': preds[i], 'labels': labels[i], 'preds_raw': preds_raw[i], 'labels_raw': labels_raw[i]} for i in range(len(preds))]
         return res
