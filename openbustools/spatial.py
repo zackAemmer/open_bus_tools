@@ -70,32 +70,26 @@ def sample_raster(points, dem_file):
     return z
 
 
-def shingle(trace_df, min_chunks, max_chunks, min_len, max_len, **kwargs):
+def shingle(trace_df, min_len, max_len, **kwargs):
     """Split a df into even chunks randomly between min and max length."""
-    shingle_groups = trace_df.groupby(['file','trip_id']).count()['lat'].values
-    idx = 0
-    new_idx = []
-    for num_pts in shingle_groups:
-        dummy = np.array([0 for i in range(0,num_pts)])
-        dummy = np.array_split(dummy, np.random.randint(min_chunks, max_chunks))
-        dummy = [len(x) for x in dummy]
-        for x in dummy:
-            [new_idx.append(idx) for y in range(0,x)]
-            idx += 1
+    # Set initial shingle id based on unique file and trip id
+    shingle_lens = trace_df.groupby(['file','trip_id']).count()['lat'].values
+    new_idx = [sid.repeat(grouplen) for sid, grouplen in zip(np.arange(len(shingle_lens)), shingle_lens)]
     z = trace_df.copy()
-    z['shingle_id'] = new_idx
+    z['shingle_id'] = np.concatenate(new_idx)
     # Resample each shingle to a random length between min and max
-    cat_lookup = z[['file','trip_id','shingle_id']].drop_duplicates()
     sids, sidxs = np.unique(z['shingle_id'], return_index=True)
     shingles = np.split(z[['locationtime','lon','lat']].to_numpy(), sidxs[1:], axis=0)
     resample_lens = np.random.randint(min_len, max_len, len(shingles))
     resampled= []
-    for i in range(len(shingles)):
-        resampled.append(resample_to_len(shingles[i], resample_lens[i]))
-    sids = np.repeat(sids,resample_lens).astype(int)
+    for shingle_data, resample_len in zip(shingles, resample_lens):
+        resampled.append(resample_to_len(shingle_data, resample_len))
+    resampled_sids = np.repeat(sids, resample_lens).astype(int)
+    # Can't interpolate categoricals, so rejoin them after resampling
+    cat_lookup = z[['file','trip_id','shingle_id']].drop_duplicates()
     z = pd.DataFrame(np.concatenate(resampled), columns=['locationtime','lon','lat'])
-    z['shingle_id'] = sids
-    z = pd.merge(z, cat_lookup, on='shingle_id')
+    z['shingle_id'] = resampled_sids
+    z = pd.merge(z, cat_lookup, on='shingle_id').sort_values(['shingle_id','locationtime'])
     return z
 
 
@@ -121,46 +115,6 @@ def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_boun
 #     else:
 #         return None
 # intersected_trips['line_locs'] = intersected_trips.apply(lambda x: poly_locate_line_points(x['geometry_x'], x['geometry_y']), axis=1)
-
-
-# def get_adjacent_metric(shingle_group, adj_traces, d_buffer, t_buffer, b_buffer=None, orthogonal=False):
-#     """Calculate adjacent metric for each shingle from all other shingles in adj_traces."""
-#     # Set up spatial index for the traces
-#     tree = KDTree(adj_traces[:,:2])
-#     # Get time filter for the traces
-#     t_end = np.min(shingle_group[['locationtime']].values)
-#     t_start = t_end - t_buffer
-#     # Get the indices of adj_traces which fit dist buffer
-#     d_idxs = tree.query_ball_point(shingle_group[['x','y']].values, d_buffer)
-#     d_idxs = set([item for sublist in d_idxs for item in sublist])
-#     # Get the indices of adj_traces which fit time buffer
-#     t_idxs = (adj_traces[:,2] <= t_end) & (adj_traces[:,2] >= t_start)
-#     t_idxs = set(np.where(t_idxs)[0])
-#     # Get the indices of adj_traces which fit heading buffer
-#     if b_buffer is not None:
-#         if orthogonal == True:
-#             b_left = np.mean(shingle_group[['bearing']].values) + 90
-#             b_left_end = b_left + b_buffer
-#             b_left_start = b_left - b_buffer
-#             b_right = np.mean(shingle_group[['bearing']].values) - 90
-#             b_right_end = b_right + b_buffer
-#             b_right_start = b_right - b_buffer
-#             b_idxs = ((adj_traces[:,3] <= b_left_end) & (adj_traces[:,3] >= b_left_start)) | ((adj_traces[:,3] <= b_right_end) & (adj_traces[:,3] >= b_right_start))
-#         else:
-#             b_end = np.mean(shingle_group[['bearing']].values) + b_buffer
-#             b_start = np.mean(shingle_group[['bearing']].values) - b_buffer
-#             b_idxs = (adj_traces[:,3] <= b_end) & (adj_traces[:,3] >= b_start)
-#         b_idxs = set(np.where(b_idxs)[0])
-#         idxs = d_idxs & t_idxs & b_idxs
-#     else:
-#         idxs = d_idxs & t_idxs
-#     # Get the average speed of the trace and the relevant adj_traces
-#     target = np.mean(shingle_group[['speed_m_s']].values)
-#     if len(idxs) != 0:
-#         pred = np.mean(np.take(adj_traces[:,4], list(idxs), axis=0))
-#     else:
-#         pred = np.nan
-#     return (target, pred)
 
 
 # def create_grid_of_shingles(point_resolution, grid_bounds, coord_ref_center):

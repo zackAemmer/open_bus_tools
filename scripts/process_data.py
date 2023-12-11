@@ -1,4 +1,5 @@
 import datetime
+import logging
 import pickle
 from zoneinfo import ZoneInfo
 
@@ -21,11 +22,12 @@ def prepare_run(**kwargs):
         # Loading data and unifying column names/dtypes
         try:
             data = pd.read_pickle(f"{kwargs['realtime_folder']}/{day}")
+            num_pts_initial = len(data)
         except:
-            print(f"File failed to load: {day}")
+            logging.warning(f"File failed to load: {day}")
             continue
-        num_pts_initial = len(data)
         if num_pts_initial == 0:
+            logging.warning(f"No points found: {day}")
             continue
         data['file'] = day[:10]
         data = data[kwargs['given_names']]
@@ -39,12 +41,8 @@ def prepare_run(**kwargs):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
 
-        # # Avoid sensors recording at regular intervals
-        # drop_indices = np.random.choice(data.index, int(kwargs['data_dropout']*len(data)), replace=False)
-        # data = data[~data.index.isin(drop_indices)].reset_index(drop=True)
-
         # Split full trip trajectories into smaller samples, resample
-        data = spatial.shingle(data, 2, 5, 3, 60)
+        data = spatial.shingle(data, min_len=3, max_len=60)
 
         # Project to local coordinate system, apply bounding box, center coords
         data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
@@ -57,8 +55,8 @@ def prepare_run(**kwargs):
         # Re-calculate geometry features w/o missing points
         data['calc_time_s'] = data['locationtime'] - data['locationtime'].shift(1)
         data['calc_dist_m'], data['calc_bear_d'] = spatial.calculate_gps_metrics(data, 'lon', 'lat')
-        # First pt of each trip (not shingle) is dependent on prev trip metrics
-        data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
+        # First pt is dependent on prev trip metrics
+        data = data.drop(data.groupby('shingle_id', as_index=False, sort=False).nth(0).index)
         data['calc_speed_m_s'] = data['calc_dist_m'] / data['calc_time_s']
         data['calc_dist_km'] = data['calc_dist_m'] / 1000.0
 
@@ -67,10 +65,11 @@ def prepare_run(**kwargs):
         pt_counts = data.groupby('shingle_id')[['calc_dist_m']].count()
         toss_ids.extend(list(pt_counts[pt_counts['calc_dist_m']<2].index))
         # Filter trips with outliers
-        mins_keep = 4
-        toss_ids.extend(list(data[data['calc_speed_m_s']>30]['shingle_id']))
-        toss_ids.extend(list(data[data['calc_dist_m']>mins_keep*60*30]['shingle_id']))
-        toss_ids.extend(list(data[data['calc_time_s']>mins_keep*60]['shingle_id']))
+        max_speed = 30
+        secs_keep = 4 * 60
+        toss_ids.extend(list(data[data['calc_speed_m_s']>max_speed]['shingle_id']))
+        toss_ids.extend(list(data[data['calc_time_s']>secs_keep]['shingle_id']))
+        toss_ids.extend(list(data[data['calc_dist_m']>secs_keep*max_speed]['shingle_id']))
         # Filter the list of full shingles w/invalid points
         toss_ids = np.unique(toss_ids)
         data = data[~data['shingle_id'].isin(toss_ids)].copy()
@@ -93,41 +92,29 @@ def prepare_run(**kwargs):
         # Get GTFS features
         best_static = standardfeeds.latest_available_static(day[:10], kwargs['static_folder'])
         data['best_static'] = best_static
-        stops = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stops.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id')
-        stop_times = pd.read_csv(f"{kwargs['static_folder']}{best_static}/stop_times.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
-        trips = pd.read_csv(f"{kwargs['static_folder']}{best_static}/trips.txt", low_memory=False, dtype=standardfeeds.GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']]
-        # Deal with schedule crossing midnight
-        stop_times['t_sch_hour'] = stop_times['arrival_time'].str.split(':').str[0].astype(int)
-        stop_times['t_sch_min'] = stop_times['arrival_time'].str.split(':').str[1].astype(int)
-        stop_times['t_sch_sec'] = stop_times['arrival_time'].str.split(':').str[2].astype(int)
-        stop_times['t_sch_min_of_day'] = (stop_times['t_sch_hour']*60) + stop_times['t_sch_min']
-        stop_times['t_sch_sec_of_day'] = (stop_times['t_sch_hour']*60*60) + (stop_times['t_sch_min']*60) + stop_times['t_sch_sec']
-        stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
-        stop_times['stop_sequence'] = stop_times.groupby('trip_id').cumcount()
+        stop_times, stops, trips = standardfeeds.load_gtfs_files(f"{kwargs['static_folder']}{best_static}/")
         static = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
         static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         # Filter any realtime trips that are not in the schedule
-        data_filter_static = data.drop(data[~data['trip_id'].isin(static.trip_id)].index)
-        if len(data_filter_static) > 0:
+        data_filtered_static = data.drop(data[~data['trip_id'].isin(static.trip_id)].index)
+        if len(data_filtered_static) > 0:
             data = data.drop(data[~data['trip_id'].isin(static.trip_id)].index)
             data['stop_id'], data['calc_stop_dist_m'], data['stop_sequence'] = standardfeeds.get_scheduled_arrival(data, static)
             data = data.merge(stop_times, on=['trip_id','stop_id','stop_sequence'], how='left')
             data = data.merge(trips, on='trip_id', how='left')
             data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         else:
-            continue
-            data['stop_id'] = np.nan
-            data['calc_stop_dist_m'] = np.nan
-            data['calc_stop_dist_km'] = np.nan
+            logging.warning(f"No data after joining static feed: {day}")
             data['stop_sequence'] = np.nan
-            data['route_id'] = np.nan
             data['t_sch_sec_of_day'] = np.nan
+            continue
         # Passed stops
         data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
         data['pass_stops_n'] = data['pass_stops_n'].fillna(0).clip(lower=0)
         # Scheduled time
         data['t_sec_of_day_start'] = data.groupby('shingle_id')[['t_sec_of_day']].transform('min')
         data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
+        data['sch_time_s'] = data['sch_time_s'].fillna(0)
 
         # Cumulative values
         unique_traj = data.groupby('shingle_id')
@@ -171,41 +158,39 @@ def prepare_run(**kwargs):
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
 
-    prepare_run(
-        network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
-        # data_dropout=0.2,
-        static_folder="./data/kcm_gtfs/",
-        realtime_folder="./data/kcm_realtime/",
-        timezone="America/Los_Angeles",
-        epsg=32148,
-        grid_bounds=[369903,37911,409618,87758],
-        coord_ref_center=[386910,69022],
-        dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
-    prepare_run(
-        network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
-        # data_dropout=0.2,
-        static_folder="./data/atb_gtfs/",
-        realtime_folder="./data/atb_realtime/",
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[550869,7012847,579944,7039521],
-        coord_ref_center=[569472,7034350],
-        dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
     # prepare_run(
-    #     network_name="rut",
-    #     dates=standardfeeds.get_date_list("2023_03_15", 90),
-    #     data_dropout=0.2,
-    #     static_folder="./data/rut_gtfs/",
-    #     realtime_folder="./data/rut_realtime/",
-    #     timezone="Europe/Oslo",
-    #     epsg=32632,
-    #     grid_bounds=[589080,6631314,604705,6648420],
-    #     coord_ref_center=[597427,6642805],
+    #     network_name="kcm",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 37),
+    #     static_folder="./data/kcm_gtfs/",
+    #     realtime_folder="./data/kcm_realtime/",
+    #     timezone="America/Los_Angeles",
+    #     epsg=32148,
+    #     grid_bounds=[369903,37911,409618,87758],
+    #     coord_ref_center=[386910,69022],
+    #     dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
     #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     # )
+    # prepare_run(
+    #     network_name="atb",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 37),
+    #     static_folder="./data/atb_gtfs/",
+    #     realtime_folder="./data/atb_realtime/",
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[550869,7012847,579944,7039521],
+    #     coord_ref_center=[569472,7034350],
+    #     dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
+    prepare_run(
+        network_name="rut",
+        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        static_folder="./data/rut_gtfs/",
+        realtime_folder="./data/rut_realtime/",
+        timezone="Europe/Oslo",
+        epsg=32632,
+        grid_bounds=[589080,6631314,604705,6648420],
+        coord_ref_center=[597427,6642805],
+        dem_file="./data/rut_spatial/eudtm30m_dem_32632.tif",
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )

@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 import lightning.pytorch as pl
 from lightning.pytorch.profilers import SimpleProfiler, AdvancedProfiler, PyTorchProfiler
@@ -24,9 +25,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
-    # num_workers=0
-    # pin_memory=False
-    # accelerator="cpu"
+    num_workers=0
+    pin_memory=False
+    accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -76,8 +77,7 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=2,
-            max_epochs=80,
-            min_epochs=3,
+            max_epochs=2,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=1)],

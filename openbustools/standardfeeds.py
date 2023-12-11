@@ -97,38 +97,25 @@ def get_gtfs_shapes(gtfs_folder):
     return data
 
 
-def merge_gtfs_files(gtfs_folder, epsg, coord_ref_center):
+def load_gtfs_files(gtfs_folder):
     """
     Join a set of GTFS files into a single dataframe. Each row is a trip + arrival time.
 
     Args:
         gtfs_folder (str): Path to the folder containing the GTFS files.
-        epsg (int): EPSG code for the desired coordinate reference system.
-        coord_ref_center (tuple): Tuple containing the coordinates of the reference center.
 
     Returns:
         pandas.DataFrame: Merged GTFS data.
     """
-    z = pd.read_csv(gtfs_folder+"trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
-    r = pd.read_csv(gtfs_folder+"routes.txt", low_memory=False, dtype=GTFS_LOOKUP)
-    st = pd.read_csv(gtfs_folder+"stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
-    sl = pd.read_csv(gtfs_folder+"stops.txt", low_memory=False, dtype=GTFS_LOOKUP)
-    z = pd.merge(z,st,on="trip_id")
-    z = pd.merge(z,sl,on="stop_id")
-    z = pd.merge(z,r,on="route_id")
-    # Calculate stop arrival from midnight
-    gtfs_data = z.sort_values(['trip_id','stop_sequence'])
-    gtfs_data['arrival_s'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in gtfs_data['arrival_time'].str.split(":")]
-    # Resequence stops from 0 with increment of 1
-    gtfs_data['stop_sequence'] = gtfs_data.groupby('trip_id').cumcount()
-    # Project stop locations to local coordinate system
-    default_crs = pyproj.CRS.from_epsg(4326)
-    proj_crs = pyproj.CRS.from_epsg(epsg)
-    transformer = pyproj.Transformer.from_crs(default_crs, proj_crs, always_xy=True)
-    gtfs_data['stop_x'], gtfs_data['stop_y'] = transformer.transform(gtfs_data['stop_lon'], gtfs_data['stop_lat'])
-    gtfs_data['stop_x_cent'] = gtfs_data['stop_x'] - coord_ref_center[0]
-    gtfs_data['stop_y_cent'] = gtfs_data['stop_y'] - coord_ref_center[1]
-    return gtfs_data
+    # Read stop locations, trips/times, and route ids
+    stop_times = pd.read_csv(f"{gtfs_folder}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
+    stops = pd.read_csv(f"{gtfs_folder}/stops.txt", low_memory=False, dtype=GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id')
+    trips = pd.read_csv(f"{gtfs_folder}/trips.txt", low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']]
+    # Deal with schedule crossing midnight, get scheduled arrival
+    stop_times['t_sch_sec_of_day'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in stop_times['arrival_time'].str.split(":")]
+    stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
+    stop_times['stop_sequence'] = stop_times.groupby('trip_id').cumcount()
+    return (stop_times, stops, trips)
 
 
 def extract_operator(old_folder, new_folder, source_col, op_name):

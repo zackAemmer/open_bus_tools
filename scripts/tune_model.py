@@ -22,6 +22,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
+    num_workers=0
+    pin_memory=False
+    accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -32,8 +35,6 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
-
     print("="*30)
     print(f"TUNING")
     print(f"RUN: {args.run_label}")
@@ -43,6 +44,7 @@ if __name__=="__main__":
     print(f"pin_memory: {pin_memory}")
 
     n_folds = 5
+    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")
@@ -61,11 +63,9 @@ if __name__=="__main__":
             drop_last=False,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            persistent_workers=True
         )
         trainer = pl.Trainer(
-            max_epochs=50,
-            min_epochs=5,
+            max_epochs=2,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=3)],
