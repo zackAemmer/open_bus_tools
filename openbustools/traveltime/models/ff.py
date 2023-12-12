@@ -58,7 +58,7 @@ class FF(pl.LightningModule):
         labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
         loss = self.loss_fn(out, labels)
         self.log_dict(
-            {'train_loss': loss},
+            {'train_loss': loss, 'batch_size': x[0].shape[0]},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -72,7 +72,7 @@ class FF(pl.LightningModule):
         labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
         loss = self.loss_fn(out, labels)
         self.log_dict(
-            {'valid_loss': loss},
+            {'valid_loss': loss, 'batch_size': x[0].shape[0]},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -149,7 +149,7 @@ class FFRealtime(pl.LightningModule):
         labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
         loss = self.loss_fn(out, labels)
         self.log_dict(
-            {'train_loss': loss},
+            {'train_loss': loss, 'batch_size': x[0].shape[0]},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -163,7 +163,7 @@ class FFRealtime(pl.LightningModule):
         labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
         loss = self.loss_fn(out, labels)
         self.log_dict(
-            {'valid_loss': loss},
+            {'valid_loss': loss, 'batch_size': x[0].shape[0]},
             on_step=False,
             on_epoch=True,
             prog_bar=True,

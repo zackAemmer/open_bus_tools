@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import boto3
 from dotenv import load_dotenv
@@ -9,7 +9,7 @@ from openbustools import standardfeeds
 
 def download_new_s3_files(data_folder, bucket_name):
     print(f"Getting new files for {data_folder} from S3 bucket {bucket_name}")
-    downloaded_files = os.listdir(data_folder)
+    downloaded_files = [x.name for x in Path(data_folder).glob("*.pkl")]
     print(f"Found {len(downloaded_files)} downloaded files")
     try:
         s3 = boto3.resource('s3')
@@ -21,9 +21,9 @@ def download_new_s3_files(data_folder, bucket_name):
         new_files = [x for x in available_files if x not in downloaded_files]
         print(f"Found {len(new_files)} new files to download out of {len(available_files)} files in the specified bucket")
         # Download all new files to same data folder
-        for i,file in enumerate(new_files):
+        for i, file_name in enumerate(new_files):
             print(f"Downloading file {i} out of {len(new_files)}")
-            bucket.download_file(f"{file}", f"{data_folder}{file}")
+            bucket.download_file(file_name, Path(data_folder, file_name))
     except ValueError:
         print(f"Failure to access S3")
     return None
