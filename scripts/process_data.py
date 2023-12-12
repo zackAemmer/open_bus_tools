@@ -42,7 +42,7 @@ def prepare_run(**kwargs):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
 
         # Split full trip trajectories into smaller samples, resample
-        data = spatial.shingle(data, min_len=3, max_len=60)
+        data = spatial.shingle(data, min_break=2, max_break=5, min_len=3, max_len=60)
 
         # Project to local coordinate system, apply bounding box, center coords
         data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
@@ -105,12 +105,13 @@ def prepare_run(**kwargs):
             data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         else:
             logging.warning(f"No data after joining static feed: {day}")
-            data['stop_sequence'] = np.nan
-            data['t_sch_sec_of_day'] = np.nan
-            continue
+            data['stop_sequence'] = 0
+            data['t_sch_sec_of_day'] = 0
+            data['calc_stop_dist_m'] = 0
+            data['calc_stop_dist_km'] = 0
+            data['route_id'] = 'NotFound'
         # Passed stops
-        data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff()
-        data['pass_stops_n'] = data['pass_stops_n'].fillna(0).clip(lower=0)
+        data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff().fillna(0)
         # Scheduled time
         data['t_sec_of_day_start'] = data.groupby('shingle_id')[['t_sec_of_day']].transform('min')
         data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
@@ -158,30 +159,30 @@ def prepare_run(**kwargs):
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
 
-    # prepare_run(
-    #     network_name="kcm",
-    #     dates=standardfeeds.get_date_list("2023_03_15", 37),
-    #     static_folder="./data/kcm_gtfs/",
-    #     realtime_folder="./data/kcm_realtime/",
-    #     timezone="America/Los_Angeles",
-    #     epsg=32148,
-    #     grid_bounds=[369903,37911,409618,87758],
-    #     coord_ref_center=[386910,69022],
-    #     dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
-    # prepare_run(
-    #     network_name="atb",
-    #     dates=standardfeeds.get_date_list("2023_03_15", 37),
-    #     static_folder="./data/atb_gtfs/",
-    #     realtime_folder="./data/atb_realtime/",
-    #     timezone="Europe/Oslo",
-    #     epsg=32632,
-    #     grid_bounds=[550869,7012847,579944,7039521],
-    #     coord_ref_center=[569472,7034350],
-    #     dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
+    prepare_run(
+        network_name="kcm",
+        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        static_folder="./data/kcm_gtfs/",
+        realtime_folder="./data/kcm_realtime/",
+        timezone="America/Los_Angeles",
+        epsg=32148,
+        grid_bounds=[369903,37911,409618,87758],
+        coord_ref_center=[386910,69022],
+        dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
+    prepare_run(
+        network_name="atb",
+        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        static_folder="./data/atb_gtfs/",
+        realtime_folder="./data/atb_realtime/",
+        timezone="Europe/Oslo",
+        epsg=32632,
+        grid_bounds=[550869,7012847,579944,7039521],
+        coord_ref_center=[569472,7034350],
+        dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
     prepare_run(
         network_name="rut",
         dates=standardfeeds.get_date_list("2023_03_15", 37),

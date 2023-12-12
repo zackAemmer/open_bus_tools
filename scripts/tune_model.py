@@ -22,9 +22,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
-    num_workers=0
-    pin_memory=False
-    accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -65,10 +65,10 @@ if __name__=="__main__":
             pin_memory=pin_memory,
         )
         trainer = pl.Trainer(
-            max_epochs=2,
+            max_epochs=50,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=3)],
+            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=5)],
         )
         trainer.fit(model=model, train_dataloaders=train_loader)
     print(f"TUNING COMPLETE")

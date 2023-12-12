@@ -70,13 +70,25 @@ def sample_raster(points, dem_file):
     return z
 
 
-def shingle(trace_df, min_len, max_len, **kwargs):
+def shingle(trace_df, min_break, max_break, min_len, max_len, **kwargs):
     """Split a df into even chunks randomly between min and max length."""
-    # Set initial shingle id based on unique file and trip id
+    # Set initial id based on unique file and trip id
     shingle_lens = trace_df.groupby(['file','trip_id']).count()['lat'].values
-    new_idx = [sid.repeat(grouplen) for sid, grouplen in zip(np.arange(len(shingle_lens)), shingle_lens)]
+    shingle_ids = [id.repeat(grouplen) for id, grouplen in zip(np.arange(len(shingle_lens)), shingle_lens)]
+    # Break each shingle into a random number of smaller shingles
+    shingle_n_chunks = np.random.randint(min_break, max_break, len(shingle_ids))
+    shingle_ids = [np.array_split(shingle, n_chunks) for shingle, n_chunks in zip(shingle_ids, shingle_n_chunks)]
+    # Start from 0
+    shingle_id_counter = 0
+    all_shingles = []
+    for i in range(len(shingle_ids)):
+        for j in range(len(shingle_ids[i])):
+            shingle_ids[i][j][:] = shingle_id_counter
+            all_shingles.append(shingle_ids[i][j])
+            shingle_id_counter += 1
+    shingle_ids = np.concatenate(all_shingles)
     z = trace_df.copy()
-    z['shingle_id'] = np.concatenate(new_idx)
+    z['shingle_id'] = shingle_ids
     # Resample each shingle to a random length between min and max
     sids, sidxs = np.unique(z['shingle_id'], return_index=True)
     shingles = np.split(z[['locationtime','lon','lat']].to_numpy(), sidxs[1:], axis=0)

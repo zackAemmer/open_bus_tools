@@ -1,6 +1,4 @@
 from itertools import compress
-import gc
-import pickle
 
 import h5py
 import numpy as np
@@ -108,7 +106,7 @@ def load_h5(data_folders, dates, only_holdout=False, **kwargs):
                     feats_g = list(compress(feats_g, is_not_holdout))
                     feats_c = list(compress(feats_c, is_not_holdout))
                 sids = np.arange(current_max_key, current_max_key+len(sids))
-                sample = {fs:{'feats_n':fn,'feats_g':fg,'feats_c':fc} for fs,fn,fg,fc in zip(sids,feats_n,feats_g,feats_c)}
+                sample = {fs: {'feats_n': fn,'feats_g': fg,'feats_c': fc} for fs,fn,fg,fc in zip(sids,feats_n,feats_g,feats_c)}
                 data.update(sample)
                 current_max_key = sorted(data.keys())[-1]+1
     # Add sample key to all data entries that has normalized data
