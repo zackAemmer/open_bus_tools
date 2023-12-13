@@ -159,33 +159,33 @@ def prepare_run(**kwargs):
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
 
-    prepare_run(
-        network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
-        static_folder="./data/kcm_gtfs/",
-        realtime_folder="./data/kcm_realtime/",
-        timezone="America/Los_Angeles",
-        epsg=32148,
-        grid_bounds=[369903,37911,409618,87758],
-        coord_ref_center=[386910,69022],
-        dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
-    prepare_run(
-        network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
-        static_folder="./data/atb_gtfs/",
-        realtime_folder="./data/atb_realtime/",
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[550869,7012847,579944,7039521],
-        coord_ref_center=[569472,7034350],
-        dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
+    # prepare_run(
+    #     network_name="kcm",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 10),
+    #     static_folder="./data/kcm_gtfs/",
+    #     realtime_folder="./data/kcm_realtime/",
+    #     timezone="America/Los_Angeles",
+    #     epsg=32148,
+    #     grid_bounds=[369903,37911,409618,87758],
+    #     coord_ref_center=[386910,69022],
+    #     dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
+    # prepare_run(
+    #     network_name="atb",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 10),
+    #     static_folder="./data/atb_gtfs/",
+    #     realtime_folder="./data/atb_realtime/",
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[550869,7012847,579944,7039521],
+    #     coord_ref_center=[569472,7034350],
+    #     dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
     prepare_run(
         network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        dates=standardfeeds.get_date_list("2023_03_15", 10),
         static_folder="./data/rut_gtfs/",
         realtime_folder="./data/rut_realtime/",
         timezone="Europe/Oslo",

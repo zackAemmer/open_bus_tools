@@ -105,7 +105,7 @@ def load_gtfs_files(gtfs_folder):
         gtfs_folder (str): Path to the folder containing the GTFS files.
 
     Returns:
-        pandas.DataFrame: Merged GTFS data.
+        tuple: A tuple containing three dataframes - stop_times, stops, and trips.
     """
     # Read stop locations, trips/times, and route ids
     stop_times = pd.read_csv(f"{gtfs_folder}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
@@ -265,51 +265,65 @@ def date_to_service_id(date_str, gtfs_folder):
     return list(valid_service_ids.service_id)
 
 
-def load_phone_data(phone_folder, window_len=120, polyorder=3):
-    location = pd.read_csv(f"{phone_folder}Location.csv")
-    location['time'] = location['time'].astype(str).str[:10].astype(int)
-    location = location.add_prefix('location_')
-    accelerometer = pd.read_csv(f"{phone_folder}Accelerometer.csv")
-    accelerometer['y'] = accelerometer['y'] * -1
-    accelerometer['time'] = accelerometer['time'].astype(str).str[:10].astype(int)
-    # accelerometer['magnitude'] = np.linalg.norm(accelerometer[['z','y','x']].to_numpy(), ord=2, axis=1)
-    accelerometer['y_smooth'] = scipy.signal.savgol_filter(accelerometer['y'].to_numpy(), window_length=window_len, polyorder=polyorder)
-    accelerometer = accelerometer.add_prefix('accelerometer_')
-    orientation = pd.read_csv(f"{phone_folder}Orientation.csv")
-    orientation['time'] = orientation['time'].astype(str).str[:10].astype(int)
+def combine_phone_sensors(phone_folder, chop_n=None):
+    """
+    Combines sensor data from different files into a single dataframe.
+
+    Args:
+        phone_folder (str): The path to the folder containing the sensor data files.
+
+    Returns:
+        pandas.DataFrame: A dataframe containing the combined sensor data.
+    """
+    # Location; defines time index start
+    location = pd.read_csv(f"{phone_folder}Location.csv")[['time','seconds_elapsed','latitude','longitude','altitudeAboveMeanSeaLevel','bearing','speed']]
+    # Don't use cached sensor readings
+    location = location[location['seconds_elapsed'] > 0]
+    start_time_ns = location['time'].min()
+    location.index = pd.to_timedelta(location['time'] - start_time_ns, unit='ns')
+    location = location.resample('S').mean().drop(columns=['time'])
+    location['cumul_time_s'] = location.index.seconds
+    # Accelerometer
+    accelerometer = pd.read_csv(f"{phone_folder}Accelerometer.csv")[['time','y']]
+    accelerometer.index = pd.to_timedelta(accelerometer['time'] - start_time_ns, unit='ns')
+    accelerometer = accelerometer.resample('S').mean().drop(columns=['time'])
+    accelerometer['cumul_time_s'] = accelerometer.index.seconds
+    # Orientation
+    orientation = pd.read_csv(f"{phone_folder}Orientation.csv")[['time','pitch']]
+    orientation.index = pd.to_timedelta(orientation['time'] - start_time_ns, unit='ns')
+    orientation = orientation.resample('S').mean().drop(columns=['time'])
     orientation['pitch'] = orientation['pitch'] * 180 / np.pi
-    orientation['pitch_smooth'] = scipy.signal.savgol_filter(orientation['pitch'].to_numpy(), window_length=window_len, polyorder=polyorder)
-    orientation = orientation.add_prefix('orientation_')
-    location = location.merge(accelerometer, left_on='location_time', right_on='accelerometer_time', how='left')
-    location = location.merge(orientation, left_on='location_time', right_on='orientation_time', how='left')
-    location = location.groupby('location_time').mean().reset_index()
-    location['calc_time_s'] = np.diff(location['location_time'].to_numpy(), prepend=location['location_time'].to_numpy()[0])
-    location['cumul_time_s'] = np.cumsum(location['calc_time_s'].to_numpy())
-    location = location.dropna()
-    return location
+    # Join dataframes
+    high_res = pd.concat([orientation, accelerometer], axis=1)
+    all_sensors = location.merge(high_res, on='cumul_time_s', how='left')
+    all_sensors = all_sensors.ffill()
+    if chop_n:
+        all_sensors = all_sensors.iloc[chop_n:-chop_n,:]
+        all_sensors['cumul_time_s'] = all_sensors['cumul_time_s'] - all_sensors['cumul_time_s'].min()
+    return all_sensors
 
 
-def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):
-    """Filter bus schedule using best guess for trip_ids that correspond to a phone trip."""
-    # Filter to the route number shown on the headsign
-    filtered_df = gtfs_df[gtfs_df['route_short_name']==route_short_name]
-    # # Filter by service ids that are active on day of week
-    # weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
-    # phone_start_time = datetime.fromtimestamp(int(str(min(phone_df.time))[:10]))
-    # phone_start_time = phone_start_time.hour*3600 + phone_start_time.second
-    # valid_service_ids = gtfs_calendar[gtfs_calendar[weekdays[phone_start_time.weekday()]]==1].service_id
-    # filtered_df = filtered_df[filtered_df['service_id'].isin(valid_service_ids)]
-    # Filter to direction 0; will need to be improved
-    filtered_df = filtered_df[filtered_df['direction_id']==0]
-    # # Filter to trips scheduled active when the phone started recording
-    # trip_times = filtered_df[['trip_id','arrival_s']].groupby('trip_id', as_index=False).agg(['min','max'])
-    # trip_times = trip_times[phone_start_time > trip_times[('arrival_s','min')]]
-    # trip_times = trip_times[phone_start_time < trip_times[('arrival_s','max')]]
-    # filtered_df = filtered_df[filtered_df['trip_id'].isin(trip_times[('trip_id','')])]
-    # filtered_df = filtered_df.sort_values(['trip_id','arrival_s'])
-    # Return only one trip_id in the dataframe for plotting, regardless of total remaining
-    remaining_trip_ids = np.unique(filtered_df.trip_id)
-    keep_trip_id = remaining_trip_ids[0]
-    print(f"Filtered down to {len(remaining_trip_ids)} possible trip_ids; returning the first one ({keep_trip_id}).")
-    filtered_df = filtered_df[filtered_df['trip_id']==keep_trip_id]
-    return filtered_df.copy(), remaining_trip_ids
+# def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):
+#     """Filter bus schedule using best guess for trip_ids that correspond to a phone trip."""
+#     # Filter to the route number shown on the headsign
+#     filtered_df = gtfs_df[gtfs_df['route_short_name']==route_short_name]
+#     # # Filter by service ids that are active on day of week
+#     # weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
+#     # phone_start_time = datetime.fromtimestamp(int(str(min(phone_df.time))[:10]))
+#     # phone_start_time = phone_start_time.hour*3600 + phone_start_time.second
+#     # valid_service_ids = gtfs_calendar[gtfs_calendar[weekdays[phone_start_time.weekday()]]==1].service_id
+#     # filtered_df = filtered_df[filtered_df['service_id'].isin(valid_service_ids)]
+#     # Filter to direction 0; will need to be improved
+#     filtered_df = filtered_df[filtered_df['direction_id']==0]
+#     # # Filter to trips scheduled active when the phone started recording
+#     # trip_times = filtered_df[['trip_id','arrival_s']].groupby('trip_id', as_index=False).agg(['min','max'])
+#     # trip_times = trip_times[phone_start_time > trip_times[('arrival_s','min')]]
+#     # trip_times = trip_times[phone_start_time < trip_times[('arrival_s','max')]]
+#     # filtered_df = filtered_df[filtered_df['trip_id'].isin(trip_times[('trip_id','')])]
+#     # filtered_df = filtered_df.sort_values(['trip_id','arrival_s'])
+#     # Return only one trip_id in the dataframe for plotting, regardless of total remaining
+#     remaining_trip_ids = np.unique(filtered_df.trip_id)
+#     keep_trip_id = remaining_trip_ids[0]
+#     print(f"Filtered down to {len(remaining_trip_ids)} possible trip_ids; returning the first one ({keep_trip_id}).")
+#     filtered_df = filtered_df[filtered_df['trip_id']==keep_trip_id]
+#     return filtered_df.copy(), remaining_trip_ids
