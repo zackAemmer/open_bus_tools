@@ -77,7 +77,7 @@ class Trajectory():
             preds_and_labels = model.predict(dataset, 'h')
         preds = [x['preds_raw'] for x in preds_and_labels]
         self.gdf['calc_time_s'] = preds[0].flatten()
-    
+
     def to_torch(self):
         """
         Convert the trajectory to a torch format.

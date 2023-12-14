@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta
 import os
+from pathlib import Path
 import pickle
 import shutil
 
@@ -265,7 +266,7 @@ def date_to_service_id(date_str, gtfs_folder):
     return list(valid_service_ids.service_id)
 
 
-def combine_phone_sensors(phone_folder, chop_n=None):
+def combine_phone_sensors(phone_folder, timezone, chop_n=None):
     """
     Combines sensor data from different files into a single dataframe.
 
@@ -276,31 +277,55 @@ def combine_phone_sensors(phone_folder, chop_n=None):
         pandas.DataFrame: A dataframe containing the combined sensor data.
     """
     # Location; defines time index start
-    location = pd.read_csv(f"{phone_folder}Location.csv")[['time','seconds_elapsed','latitude','longitude','altitudeAboveMeanSeaLevel','bearing','speed']]
-    # Don't use cached sensor readings
-    location = location[location['seconds_elapsed'] > 0]
-    start_time_ns = location['time'].min()
-    location.index = pd.to_timedelta(location['time'] - start_time_ns, unit='ns')
+    location = pd.read_csv(Path(phone_folder, "Location.csv"))[['time','seconds_elapsed','longitude','latitude','altitudeAboveMeanSeaLevel','bearing','speed']]
+    location = location[location['seconds_elapsed'] > 0] # Remove cached sensor readings
+    location.index = pd.to_datetime(location['time'], unit='ns')
+    location = location.tz_localize('UTC').tz_convert(timezone)
     location = location.resample('S').mean().drop(columns=['time'])
-    location['cumul_time_s'] = location.index.seconds
+    location['epoch_time_s'] = location.index.strftime('%s').astype(int)
     # Accelerometer
-    accelerometer = pd.read_csv(f"{phone_folder}Accelerometer.csv")[['time','y']]
-    accelerometer.index = pd.to_timedelta(accelerometer['time'] - start_time_ns, unit='ns')
+    accelerometer = pd.read_csv(Path(phone_folder, "Accelerometer.csv"))[['time','seconds_elapsed','y']]
+    accelerometer = accelerometer[accelerometer['seconds_elapsed'] > 0]
+    accelerometer.index = pd.to_datetime(accelerometer['time'], unit='ns')
+    accelerometer = accelerometer.tz_localize('UTC').tz_convert(timezone)
     accelerometer = accelerometer.resample('S').mean().drop(columns=['time'])
-    accelerometer['cumul_time_s'] = accelerometer.index.seconds
+    accelerometer['epoch_time_s'] = accelerometer.index.strftime('%s').astype(int)
     # Orientation
-    orientation = pd.read_csv(f"{phone_folder}Orientation.csv")[['time','pitch']]
-    orientation.index = pd.to_timedelta(orientation['time'] - start_time_ns, unit='ns')
+    orientation = pd.read_csv(Path(phone_folder, "Orientation.csv"))[['time','seconds_elapsed','pitch']]
+    orientation = orientation[orientation['seconds_elapsed'] > 0]
+    orientation.index = pd.to_datetime(orientation['time'], unit='ns')
+    orientation = orientation.tz_localize('UTC').tz_convert(timezone)
     orientation = orientation.resample('S').mean().drop(columns=['time'])
+    orientation['epoch_time_s'] = orientation.index.strftime('%s').astype(int)
     orientation['pitch'] = orientation['pitch'] * 180 / np.pi
     # Join dataframes
-    high_res = pd.concat([orientation, accelerometer], axis=1)
-    all_sensors = location.merge(high_res, on='cumul_time_s', how='left')
+    all_sensors = location.merge(accelerometer, on='epoch_time_s', how='left')
+    all_sensors = all_sensors.merge(orientation, on='epoch_time_s', how='left')
     all_sensors = all_sensors.ffill()
+    all_sensors = all_sensors.groupby('epoch_time_s', as_index=False).mean()
     if chop_n:
         all_sensors = all_sensors.iloc[chop_n:-chop_n,:]
-        all_sensors['cumul_time_s'] = all_sensors['cumul_time_s'] - all_sensors['cumul_time_s'].min()
-    return all_sensors
+    all_sensors['cumul_time_s'] = all_sensors['epoch_time_s'] - all_sensors['epoch_time_s'].min()
+    # Metadata
+    annotation = pd.read_csv(Path(phone_folder, "Annotation.csv"))
+    veh_id, short_name = str(phone_folder).split("/")[-1].split("-")[0:2] 
+    start_timestamp = pd.to_datetime(int(all_sensors.iloc[0].epoch_time_s), unit='s').tz_localize('UTC').tz_convert(timezone)
+    t_day = start_timestamp.strftime('%Y_%m_%d')
+    t_min_of_day = int(start_timestamp.strftime('%H:%M:%S').split(":")[0])*60 + int(start_timestamp.strftime('%H:%M:%S').split(":")[1])
+    t_day_of_week = start_timestamp.strftime('%w')
+    start_epoch = int(all_sensors.iloc[0].epoch_time_s)
+    end_epoch = int(all_sensors.iloc[-1].epoch_time_s)
+    metadata = {
+        'folder': phone_folder,
+        'short_name': short_name,
+        'veh_id': veh_id,
+        't_day': t_day,
+        't_min_of_day': t_min_of_day,
+        't_day_of_week': t_day_of_week,
+        'start_epoch': start_epoch,
+        'end_epoch': end_epoch
+    }
+    return (metadata, all_sensors)
 
 
 # def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):
