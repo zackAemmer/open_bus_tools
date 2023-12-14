@@ -354,6 +354,6 @@ def load_model(model_folder, network_name, model_type, fold_num):
         model_cl = DeepTTE.Net
     try:
         model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False).eval()
-    except:
+    except RuntimeError:
         model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
     return model

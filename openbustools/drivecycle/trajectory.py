@@ -10,7 +10,7 @@ from openbustools.traveltime import data_loader
 
 
 class Trajectory():
-    def __init__(self, point_attr, traj_attr, coord_ref_center, epsg, resample_len=None, apply_filter=False) -> None:
+    def __init__(self, point_attr, traj_attr, coord_ref_center, epsg, dem_file=None, resample_len=None, apply_filter=False) -> None:
         """
         Initialize a Trajectory object.
 
@@ -21,6 +21,7 @@ class Trajectory():
             traj_attr (dict): Dictionary of trajectory attributes.
             coord_ref_center (tuple): Tuple of (x,y) coordinates of the system reference point.
             epsg (int): EPSG code of the coordinate reference system.
+            dem_file (str): Path to the elevation raster file. Defaults to None.
             resample_len (int, optional): Length to resample the trajectory to. Defaults to None.
             apply_filter (bool, optional): Whether to apply a filter to the trajectory. Defaults to False.
         """
@@ -34,8 +35,8 @@ class Trajectory():
                 self.point_attr[key] = spatial.resample_to_len(self.point_attr[key], resample_len)
         if apply_filter:
             for key in self.point_attr.keys():
-                window_len = 50
                 polyorder = 3
+                window_len = 50
                 self.point_attr[key] = scipy.signal.savgol_filter(self.point_attr[key], window_length=window_len, polyorder=polyorder)
         # Create GeoDataFrame and calculate metrics
         gdf = self.point_attr
@@ -47,6 +48,9 @@ class Trajectory():
         self.gdf['y_cent'] = self.gdf['y'] - coord_ref_center[1]
         self.gdf['calc_dist_m'], self.gdf['calc_bear_d'] = spatial.calculate_gps_metrics(self.gdf, 'lon', 'lat')
         self.gdf = self.gdf.fillna(0)
+        # Get elevation if DEM passed
+        if dem_file:
+            self.gdf['calc_elev_m'] = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_file)
         # Set predicted travel time values if they are known
         if 'cumul_time_s' in self.point_attr.keys():
             self.pred_time_s = np.diff(self.point_attr['cumul_time_s'], prepend=0)
@@ -69,25 +73,36 @@ class Trajectory():
                 collate_fn=model.collate_fn,
                 batch_size=model.batch_size,
                 shuffle=False,
-                drop_last=False
+                drop_last=False,
+                num_workers=0,
+                pin_memory=False
             )
-            trainer = pl.Trainer(logger=False)
+            trainer = pl.Trainer(
+                accelerator='cpu',
+                logger=False,
+                inference_mode=True,
+                enable_progress_bar=False,
+                enable_checkpointing=False,
+                enable_model_summary=False
+            )
             preds_and_labels = trainer.predict(model=model, dataloaders=loader)
         else:
             preds_and_labels = model.predict(dataset, 'h')
         preds = [x['preds_raw'] for x in preds_and_labels]
-        self.gdf['calc_time_s'] = preds[0].flatten()
+        self.pred_time_s = preds[0].flatten()
 
     def to_torch(self):
         """
-        Convert the trajectory to a torch format.
+        Convert the trajectory to format expected for model prediction.
 
         Returns:
-            dict: A dictionary containing the trajectory features in torch format.
+            dict: A dictionary with ordered features in arrays.
         """
         gdf = self.gdf.copy()
+        gdf['t_min_of_day'] = self.traj_attr['t_min_of_day']
+        gdf['t_day_of_week'] = self.traj_attr['t_day_of_week']
         # Fill modeling features with -1 if not added to trajectory gdf
-        for col in data_loader.NUM_FEAT_COLS + data_loader.MISC_CAT_FEATS:
+        for col in data_loader.NUM_FEAT_COLS:
             if col not in gdf.columns:
                 gdf[col] = -1
         feats_n = gdf[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
@@ -100,12 +115,32 @@ class Trajectory():
         Returns:
             DriveCycle: A DriveCycle object representing the trajectory.
         """
+        # Time from model or known
+        time = self.pred_time_s
+        # All motion values taken from point measurements
         accel = self.point_attr['measured_accel_m_s2']
         speed = self.point_attr['measured_speed_m_s']
         theta = self.point_attr['measured_theta_d']
-        time = self.pred_time_s
+        # Distances from GPS
         distance = self.gdf['calc_dist_m'].to_numpy()
         cycle = MomentaryDriveCycle(speed, accel, theta, time, distance)
+        return cycle
+
+    def to_averaged_drivecycle(self):
+        """
+        Convert the trajectory to a DriveCycle object.
+
+        Returns:
+            DriveCycle: A DriveCycle object representing the trajectory.
+        """
+        # Time from model or known
+        time = self.pred_time_s
+        # All motion values derived from GPS distances and times
+        distance = self.gdf['calc_dist_m'].to_numpy()
+        speed = distance[1:] / time[1:]
+        accel = np.diff(speed, prepend=0) / time[1:]
+        theta = spatial.divide_ffill(np.diff(self.gdf['calc_elev_m'].to_numpy()), distance[1:])
+        cycle = MomentaryDriveCycle(speed, accel, theta, time[1:], distance[1:])
         return cycle
 
 
@@ -120,7 +155,19 @@ class DriveCycle():
 
 
 class MomentaryDriveCycle(DriveCycle):
-    """Acceleration and velocity measured at each point in the trajectory."""
+    """
+    Acceleration and velocity measured at each point in the trajectory.
+    Time is known or predicted. Distance is from GPS points.
+    Velocity, theta and acceleration are used in force calculations.
+    Time is used in power calculations.
+    
+    Attributes:
+        velocity (list): List of velocity values.
+        acceleration (list): List of acceleration values.
+        theta (list): List of theta values.
+        time (list): List of time values.
+        distance (list): List of distance values.
+    """
     def __init__(self, velocity, acceleration, theta, time, distance):
         super().__init__(velocity, acceleration, theta)
         self.velocity = velocity
@@ -128,7 +175,13 @@ class MomentaryDriveCycle(DriveCycle):
         self.theta = theta
         self.time = time
         self.distance = distance
+
     def to_df(self):
+        """Converts the MomentaryDriveCycle object to a pandas DataFrame.
+        
+        Returns:
+            pandas.DataFrame: DataFrame containing the velocity, acceleration, theta, time, and distance values.
+        """
         df = pd.DataFrame({
             'Velocity': self.velocity,
             'Acceleration': self.acceleration,

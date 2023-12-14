@@ -169,6 +169,25 @@ def shingle(trace_df, min_break, max_break, min_len, max_len, **kwargs):
     return shingled_trace_df
 
 
+def divide_ffill(arr1, arr2):
+    """
+    Divide two arrays element-wise, while handling division by zero.
+    Forward fill the resulting array to replace NaN values.
+
+    Args:
+        arr1 (numpy.ndarray): The numerator array.
+        arr2 (numpy.ndarray): The denominator array.
+
+    Returns:
+        numpy.ndarray: The resulting array after division and forward filling.
+    """
+    with np.errstate(divide='ignore', invalid='ignore'):
+        res = arr1 / arr2
+    res[res==-np.inf] = np.nan
+    res = pd.Series(res).ffill().to_numpy()
+    return res
+
+
 def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_bounds, dem_file):
     """
     Create a geodataframe matching a grid and network.
@@ -184,7 +203,6 @@ def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_boun
 
     Returns:
         gpd.GeoDataFrame: Geodataframe containing the bounded data with additional columns.
-
     """
     data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data[lon_col].to_numpy(), data[lat_col].to_numpy()), crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
     data = data.cx[grid_bounds[0]:grid_bounds[2], grid_bounds[1]:grid_bounds[3]].copy()
