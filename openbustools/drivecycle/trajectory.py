@@ -36,7 +36,7 @@ class Trajectory():
         if apply_filter:
             for key in self.point_attr.keys():
                 polyorder = 3
-                window_len = 50
+                window_len = max([polyorder + 1, self.traj_len // 20])
                 self.point_attr[key] = scipy.signal.savgol_filter(self.point_attr[key], window_length=window_len, polyorder=polyorder)
         # Create GeoDataFrame and calculate metrics
         gdf = self.point_attr

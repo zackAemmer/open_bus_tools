@@ -32,9 +32,9 @@ class EnergyModel():
         return cycle_df
 
     def printSummary(self, cycle):
-        print(f"{self.calcTotalEnergy(cycle)} kWh")
-        print(f"{np.sum(cycle.distance)/1000/1.6} mi")
-        print(f"{self.calcIntensity(cycle)*1.6} Avg. kWh/mi")
+        print(f"{self.calcTotalEnergy(cycle):.2f} kWh")
+        print(f"{np.sum(cycle.distance)/1000/1.6:.2f} mi")
+        print(f"{self.calcIntensity(cycle)*1.6:.2f} Avg. kWh/mi")
 
     def calcIntensity(self, cycle, combine=True):
         total_energy = self.calcTotalEnergy(cycle)

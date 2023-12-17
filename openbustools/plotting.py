@@ -117,9 +117,16 @@ def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
 
 
 def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
-    plot_df = traj_df.reset_index().melt(id_vars="index")
-    fig = sns.FacetGrid(plot_df, row='variable', height=1.7, aspect=4, sharey=False)
-    fig.map(sns.lineplot, 'index', 'value')
+    if 'source' not in traj_df.columns:
+        traj_df['source'] = 'unknown'
+    if 'cumul_time_s' not in traj_df.columns:
+        traj_df['cumul_time_s'] = np.arange(len(traj_df))
+    plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'source'], value_vars=['Velocity','Acceleration','Theta','Time','Distance','P_tot'])
+    fig = sns.FacetGrid(plot_df, row='variable', hue='source', height=1.7, aspect=4, sharey=False)
+    fig.map(sns.lineplot, 'cumul_time_s', 'value')
+    fig.add_legend()
+    fig.tight_layout()
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
     return fig
 
 
