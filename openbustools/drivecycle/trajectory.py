@@ -38,6 +38,11 @@ class Trajectory():
                 polyorder = 3
                 window_len = max([polyorder + 1, self.traj_len // 20])
                 self.point_attr[key] = scipy.signal.savgol_filter(self.point_attr[key], window_length=window_len, polyorder=polyorder)
+                if key == 'measured_speed_m_s':
+                    self.point_attr[key] = np.clip(self.point_attr[key], a_min=0, a_max=None)
+                elif key == 'measured_bear_d':
+                    self.point_attr[key][self.point_attr[key]<0] = self.point_attr[key][self.point_attr[key]<0] + 360
+                    self.point_attr[key][self.point_attr[key]>360] = self.point_attr[key][self.point_attr[key]>360] - 360
         # Create GeoDataFrame and calculate metrics
         gdf = self.point_attr
         gdf.update({'geometry': gpd.points_from_xy(self.point_attr['lon'], self.point_attr['lat'])})
