@@ -81,7 +81,8 @@ class RealtimeGrid:
                 cell_points[:,:,i] = np.nan_to_num(cell_points[:,:,i], nan=val)
         # Sample x Channels x Points
         cell_points = np.swapaxes(cell_points, 1, 2)
-        return cell_points
+        # Just return speed, bearing, and elapsed time
+        return cell_points[:,(3,4,7),:]
 
 
 def convert_to_frames(g):

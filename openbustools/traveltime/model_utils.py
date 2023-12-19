@@ -17,7 +17,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 128,
         'num_layers': 2,
         'dropout_rate': .2,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'CONV': {
@@ -25,7 +25,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 64,
         'num_layers': 3,
         'dropout_rate': .1,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'GRU': {
@@ -33,7 +33,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 64,
         'num_layers': 2,
         'dropout_rate': .05,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'TRSF': {
@@ -41,7 +41,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 128,
         'num_layers': 4,
         'dropout_rate': .1,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'DEEPTTE': {
