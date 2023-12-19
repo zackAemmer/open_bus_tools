@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pyproj
 import scipy
+import shapely
 from shapely.geometry import LineString
 
 from openbustools import spatial
@@ -77,12 +78,14 @@ def get_gtfs_shapes_lookup(gtfs_folder):
     return data
 
 
-def get_gtfs_shapes(gtfs_folder):
+def get_gtfs_shapes(gtfs_folder, epsg=None, stop_dist_filter=None):
     """
     Use stop locations to create unique shapes from GTFS files.
 
     Args:
         gtfs_folder (str): The path to the folder containing the GTFS files.
+        epsg (int, optional): The EPSG code for the desired coordinate reference system. Defaults to None.
+        stop_dist_filter (float, optional): The maximum distance between consecutive stops to consider when filtering shapes. Defaults to None.
 
     Returns:
         data (GeoDataFrame): A GeoDataFrame containing the unique shapes created from the GTFS files.
@@ -90,11 +93,26 @@ def get_gtfs_shapes(gtfs_folder):
     stops = pd.read_csv(f"{gtfs_folder}stops.txt", low_memory=False, dtype=GTFS_LOOKUP)
     stop_times = pd.read_csv(f"{gtfs_folder}stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
     data = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
-    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.stop_lon, data.stop_lat), crs="EPSG:4326")
+    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.stop_lon, data.stop_lat), crs="EPSG:4326").to_crs(f"EPSG: {epsg}")
+    if stop_dist_filter:
+        # Filter first point of trip
+        data['calc_dist_m'] = shapely.distance(data.geometry, data.geometry.shift())
+        data = data.reset_index()
+        drop_ids = data.groupby('trip_id').nth(0).index
+        data = data.drop(index=drop_ids)
+        # Filter trips with too-far stop distances
+        drop_ids = data[data['trip_id'].isin(data[data['calc_dist_m']>=stop_dist_filter].trip_id)].index
+        data = data.drop(index=drop_ids)
+        # Filter trips with too-few stops
+        data.groupby(['trip_id'], as_index=False).count()
+        counts = data.groupby('trip_id').count()['geometry']
+        drop_ids = counts[counts<5].index
+        data = data[~data['trip_id'].isin(drop_ids)]
     # Avoid making duplicate shapes; one per service/route/direction
     shapes_lookup = get_gtfs_shapes_lookup(gtfs_folder)
     data = data.merge(shapes_lookup, on='trip_id').drop_duplicates(['service_id','route_id','direction_id','stop_id']).sort_values(['service_id','route_id','direction_id','stop_sequence'])
-    data = data.groupby(['service_id','route_id','direction_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist())).set_crs("EPSG:4326")
+    data = data.groupby(['service_id','route_id','direction_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist()))
+    data.crs = f"EPSG: {epsg}"
     return data
 
 

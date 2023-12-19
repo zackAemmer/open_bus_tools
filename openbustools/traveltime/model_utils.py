@@ -49,6 +49,32 @@ HYPERPARAM_DICT = {
     }
 }
 
+model_order = [
+    'AVGH',
+    'AVGM',
+    'PERT',
+    'SCH',
+    'FF','FF_TUNED',
+    'FF_STATIC','FF_STATIC_TUNED',
+    'FF_REALTIME','FF_REALTIME_TUNED',
+    'CONV','CONV_TUNED',
+    'CONV_STATIC','CONV_STATIC_TUNED',
+    'CONV_REALTIME','CONV_REALTIME_TUNED',
+    'GRU','GRU_TUNED',
+    'GRU_STATIC','GRU_STATIC_TUNED',
+    'GRU_REALTIME','GRU_REALTIME_TUNED',
+    'TRSF','TRSF_TUNED',
+    'TRSF_STATIC','TRSF_STATIC_TUNED',
+    'TRSF_REALTIME','TRSF_REALTIME_TUNED',
+    'DEEPTTE','DEEPTTE_TUNED',
+    'DEEPTTE_STATIC','DEEPTTE_STATIC_TUNED',
+]
+experiment_order = [
+    'same_city',
+    'holdout',
+    'diff_city'
+]
+
 
 def aggregate_tts(tts, mask):
     """Convert a sequence of predicted travel times to total travel time."""
@@ -64,6 +90,25 @@ def fill_tensor_mask(mask, x_sl, drop_first=True):
     if drop_first:
         mask[0,:] = 0
     return mask
+
+
+def load_results(res_folder):
+    all_res = []
+    all_out = []
+    for model_res_file in os.listdir(res_folder):
+        if model_res_file.split('.')[-1]=='pkl':
+            res, out = format_model_res(f"{res_folder}{model_res_file}")
+            all_res.append(res)
+            all_out.append(out)
+    all_res = pd.concat(all_res)
+    all_out = pd.concat(all_out)
+    all_res['model_archetype'] = all_res['model'].str.split('_').str[0]
+    all_res['is_tuned'] = False
+    all_res.loc[all_res['model'].str.split('_').str[-1]=='TUNED', 'is_tuned'] = True
+    all_res['plot_order_model'] = all_res['model'].apply(lambda x: model_order.index(x))
+    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: experiment_order.index(x))
+    all_res = all_res.sort_values(['plot_order_model','plot_order_experiment'])
+    return (all_res, all_out)
 
 
 def format_model_res(model_res_file):
