@@ -44,7 +44,7 @@ class Trajectory():
                     self.point_attr[key][self.point_attr[key]<0] = self.point_attr[key][self.point_attr[key]<0] + 360
                     self.point_attr[key][self.point_attr[key]>360] = self.point_attr[key][self.point_attr[key]>360] - 360
         # Create GeoDataFrame and calculate metrics
-        gdf = self.point_attr
+        gdf = self.point_attr.copy()
         gdf.update({'geometry': gpd.points_from_xy(self.point_attr['lon'], self.point_attr['lat'])})
         self.gdf = gpd.GeoDataFrame(gdf, crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
         self.gdf['x'] = self.gdf.geometry.x
@@ -93,8 +93,10 @@ class Trajectory():
             preds_and_labels = trainer.predict(model=model, dataloaders=loader)
         else:
             preds_and_labels = model.predict(dataset, 'h')
-        preds = [x['preds_raw'] for x in preds_and_labels]
-        self.pred_time_s = preds[0].flatten()
+        preds = [x['preds_raw'].flatten() for x in preds_and_labels][0]
+        preds[0] = 0
+        self.pred_time_s = preds
+        self.gdf['cumul_time_s'] = np.cumsum(preds)
 
     def to_torch(self):
         """
