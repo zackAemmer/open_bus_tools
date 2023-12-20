@@ -69,7 +69,8 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             accelerator=accelerator,
-            logger=False
+            logger=False,
+            inference_mode=True
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
@@ -91,7 +92,8 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             accelerator=accelerator,
-            logger=False
+            logger=False,
+            inference_mode=True
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
@@ -113,7 +115,8 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             accelerator=accelerator,
-            logger=False
+            logger=False,
+            inference_mode=True
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])

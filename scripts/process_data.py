@@ -42,7 +42,7 @@ def prepare_run(**kwargs):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
 
         # Split full trip trajectories into smaller samples, resample
-        data = spatial.shingle(data, min_break=2, max_break=5, min_len=3, max_len=100)
+        data = spatial.shingle(data, min_break=2, max_break=5, min_len=3, max_len=200)
 
         # Project to local coordinate system, apply bounding box, center coords
         data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
@@ -161,7 +161,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 10),
+        dates=standardfeeds.get_date_list("2023_03_15", 37),
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
         timezone="America/Los_Angeles",
@@ -173,7 +173,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 10),
+        dates=standardfeeds.get_date_list("2023_03_15", 37),
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
         timezone="Europe/Oslo",
@@ -185,7 +185,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 10),
+        dates=standardfeeds.get_date_list("2023_03_15", 37),
         static_folder="./data/rut_gtfs/",
         realtime_folder="./data/rut_realtime/",
         timezone="Europe/Oslo",
