@@ -121,7 +121,8 @@ def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
         traj_df['source'] = 'unknown'
     if 'cumul_time_s' not in traj_df.columns:
         traj_df['cumul_time_s'] = np.arange(len(traj_df))
-    plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'source'], value_vars=['Velocity','Acceleration','Theta','Time','Distance','P_tot'])
+    # plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'source'], value_vars=['Velocity','Acceleration','Theta','Time','Distance','P_tot'])
+    plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'source'])
     fig = sns.FacetGrid(plot_df, row='variable', hue='source', height=1.7, aspect=4, sharey=False)
     fig.map(sns.lineplot, 'cumul_time_s', 'value')
     fig.add_legend()

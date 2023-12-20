@@ -113,7 +113,7 @@ class Trajectory():
         feats_n = gdf[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
         return {0: {'feats_n': feats_n}}
 
-    def to_momentary_drivecycle(self):
+    def measured_to_drivecycle(self):
         """
         Convert the trajectory to a DriveCycle object.
 
@@ -125,13 +125,13 @@ class Trajectory():
         # All motion values taken from point measurements
         accel = self.point_attr['measured_accel_m_s2']
         speed = self.point_attr['measured_speed_m_s']
-        theta = self.point_attr['measured_theta_d']
-        # Distances from GPS
+        elev = self.point_attr['measured_elev_m']
         distance = self.gdf['calc_dist_m'].to_numpy()
-        cycle = MomentaryDriveCycle(speed, accel, theta, time, distance)
+        theta = spatial.divide_fwd_back_fill(np.diff(elev, prepend=0), distance)
+        cycle = DriveCycle(speed, accel, theta, time, distance)
         return cycle
 
-    def to_averaged_drivecycle(self):
+    def gps_to_drivecycle(self):
         """
         Convert the trajectory to a DriveCycle object.
 
@@ -144,22 +144,12 @@ class Trajectory():
         distance = self.gdf['calc_dist_m'].to_numpy()
         speed = distance[1:] / time[1:]
         accel = np.diff(speed, prepend=0) / time[1:]
-        theta = spatial.divide_ffill(np.diff(self.gdf['calc_elev_m'].to_numpy()), distance[1:])
-        cycle = MomentaryDriveCycle(speed, accel, theta, time[1:], distance[1:])
+        theta = spatial.divide_fwd_back_fill(np.diff(self.gdf['calc_elev_m'].to_numpy()), distance[1:])
+        cycle = DriveCycle(speed, accel, theta, time[1:], distance[1:])
         return cycle
 
 
 class DriveCycle():
-    """Base class for drive cycles. Minimum features to calculate power."""
-    def __init__(self, velocity, acceleration, theta):
-        self.velocity = velocity
-        self.acceleration = acceleration
-        self.theta = theta
-    def to_df(self):
-        pass
-
-
-class MomentaryDriveCycle(DriveCycle):
     """
     Acceleration and velocity measured at each point in the trajectory.
     Time is known or predicted. Distance is from GPS points.
@@ -174,7 +164,6 @@ class MomentaryDriveCycle(DriveCycle):
         distance (list): List of distance values.
     """
     def __init__(self, velocity, acceleration, theta, time, distance):
-        super().__init__(velocity, acceleration, theta)
         self.velocity = velocity
         self.acceleration = acceleration
         self.theta = theta

@@ -169,7 +169,7 @@ def shingle(trace_df, min_break, max_break, min_len, max_len, **kwargs):
     return shingled_trace_df
 
 
-def divide_ffill(arr1, arr2):
+def divide_fwd_back_fill(arr1, arr2):
     """
     Divide two arrays element-wise, while handling division by zero.
     Forward fill the resulting array to replace NaN values.
@@ -184,7 +184,9 @@ def divide_ffill(arr1, arr2):
     with np.errstate(divide='ignore', invalid='ignore'):
         res = arr1 / arr2
     res[res==-np.inf] = np.nan
-    res = pd.Series(res).ffill().to_numpy()
+    res[res==np.inf] = np.nan
+    res = pd.Series(res).ffill()
+    res = res.bfill().to_numpy()
     return res
 
 
