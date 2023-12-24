@@ -1,5 +1,6 @@
 import datetime
 import logging
+from pathlib import Path
 import pickle
 from zoneinfo import ZoneInfo
 
@@ -136,16 +137,19 @@ def prepare_run(**kwargs):
         num_pts_final = len(data)
         print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
         # Full geodataframe
-        data.to_pickle(f"{kwargs['realtime_folder']}processed/{day}")
+        processed_path = Path(kwargs['realtime_folder'], "processed")
+        processed_path.mkdir(parents=True, exist_ok=True)
+        data.to_pickle(processed_path / day)
         # Grid object
-        with open(f"{kwargs['realtime_folder']}processed/grid/{day}", 'wb') as f:
+        Path(processed_path / "grid").mkdir(parents=True, exist_ok=True)
+        with open(Path(processed_path / "grid" / day), 'wb') as f:
             pickle.dump(data_grid, f)
         # Minimal training features
         data_id = data['shingle_id'].to_numpy().astype('int32')
         data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
         data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S30')
         data_g = data_grid.get_recent_points(data[['x','y','locationtime']].to_numpy(), 4).astype('int32')
-        with h5py.File(f"{kwargs['realtime_folder']}processed/samples.hdf5", 'a') as f:
+        with h5py.File(Path(processed_path / "samples.hdf5"), 'a') as f:
             if day in f.keys():
                 del f[day]
             g = f.create_group(day)
@@ -161,7 +165,7 @@ if __name__=="__main__":
 
     prepare_run(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        dates=standardfeeds.get_date_list("2023_03_15", 38),
         static_folder="./data/kcm_gtfs/",
         realtime_folder="./data/kcm_realtime/",
         timezone="America/Los_Angeles",
@@ -173,7 +177,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        dates=standardfeeds.get_date_list("2023_03_15", 38),
         static_folder="./data/atb_gtfs/",
         realtime_folder="./data/atb_realtime/",
         timezone="Europe/Oslo",
@@ -185,7 +189,7 @@ if __name__=="__main__":
     )
     prepare_run(
         network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 37),
+        dates=standardfeeds.get_date_list("2023_03_15", 38),
         static_folder="./data/rut_gtfs/",
         realtime_folder="./data/rut_realtime/",
         timezone="Europe/Oslo",

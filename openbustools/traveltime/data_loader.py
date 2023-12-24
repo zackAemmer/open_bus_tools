@@ -92,23 +92,26 @@ def load_h5(data_folders, dates, only_holdout=False, **kwargs):
     for data_folder in data_folders:
         with h5py.File(f"{data_folder}/samples.hdf5", 'r') as f:
             for day in dates:
-                sids, sidxs = np.unique(f[day]['shingle_ids'], return_index=True)
-                feats_n = np.split(f[day]['feats_n'], sidxs[1:], axis=0)
-                feats_g = np.split(f[day]['feats_g'], sidxs[1:], axis=0)
-                feats_c = np.split(f[day]['feats_c'], sidxs[1:], axis=0)
-                # Keep either all but, or only samples from holdout routes
-                if len(holdout_routes)>0:
-                    is_not_holdout = np.array([x[0].astype(str)[0] not in holdout_routes for x in feats_c])
-                    if only_holdout:
-                        is_not_holdout = np.invert(is_not_holdout)
-                    sids = sids[is_not_holdout]
-                    feats_n = list(compress(feats_n, is_not_holdout))
-                    feats_g = list(compress(feats_g, is_not_holdout))
-                    feats_c = list(compress(feats_c, is_not_holdout))
-                sids = np.arange(current_max_key, current_max_key+len(sids))
-                sample = {fs: {'feats_n': fn,'feats_g': fg,'feats_c': fc} for fs,fn,fg,fc in zip(sids,feats_n,feats_g,feats_c)}
-                data.update(sample)
-                current_max_key = sorted(data.keys())[-1]+1
+                try:
+                    sids, sidxs = np.unique(f[day]['shingle_ids'], return_index=True)
+                    feats_n = np.split(f[day]['feats_n'], sidxs[1:], axis=0)
+                    feats_g = np.split(f[day]['feats_g'], sidxs[1:], axis=0)
+                    feats_c = np.split(f[day]['feats_c'], sidxs[1:], axis=0)
+                    # Keep either all but, or only samples from holdout routes
+                    if len(holdout_routes)>0:
+                        is_not_holdout = np.array([x[0].astype(str)[0] not in holdout_routes for x in feats_c])
+                        if only_holdout:
+                            is_not_holdout = np.invert(is_not_holdout)
+                        sids = sids[is_not_holdout]
+                        feats_n = list(compress(feats_n, is_not_holdout))
+                        feats_g = list(compress(feats_g, is_not_holdout))
+                        feats_c = list(compress(feats_c, is_not_holdout))
+                    sids = np.arange(current_max_key, current_max_key+len(sids))
+                    sample = {fs: {'feats_n': fn,'feats_g': fg,'feats_c': fc} for fs,fn,fg,fc in zip(sids,feats_n,feats_g,feats_c)}
+                    data.update(sample)
+                    current_max_key = sorted(data.keys())[-1]+1
+                except KeyError:
+                    print(f"Day not found: {day}")
     # Add sample key to all data entries that has normalized data
     if 'config' in kwargs:
         config = kwargs['config']
