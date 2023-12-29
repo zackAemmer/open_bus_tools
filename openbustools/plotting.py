@@ -32,7 +32,7 @@ def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
     sns.lineplot(plot_df, x=x_var, y=y_var, ax=axes)
     fig.suptitle(title_text, fontsize=16)
     fig.tight_layout()
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return None
 
 
@@ -42,7 +42,7 @@ def formatted_rel_lineplot(plot_df, x_var, y_var, rel_var, title_text="throwaway
         g.set(xlim=xlim)
     if ylim:
         g.set(ylim=ylim)
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return None
 
 
@@ -56,7 +56,7 @@ def formatted_basemap_scatterplot(plot_gdf, title_text="throwaway"):
     plot_gdf.iloc[-1:].plot(ax=axes, markersize=100, color='red', marker='x')
     cx.add_basemap(ax=axes, crs=plot_gdf.crs.to_string(), alpha=0.6, source=cx.providers.MapBox(accessToken=os.getenv(key="MAPBOX_TOKEN")))
     fig.tight_layout()
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig, axes
 
 
@@ -70,7 +70,7 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
     plot_gdf.iloc[-1:].plot(ax=axes, markersize=1000, color='red', marker='x')
     cx.add_basemap(ax=axes, crs=plot_gdf.crs.to_string(), alpha=0.4, source=cx.providers.MapBox(accessToken=os.getenv(key="MAPBOX_TOKEN")))
     fig.tight_layout()
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig, axes
 
 
@@ -112,22 +112,50 @@ def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
         axes[5].set_xlim(-20,20)
         # axes[5].xticks(np.arange(min(-30000), max(x)+1, 1.0))
     fig.tight_layout()
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig, axes
 
 
 def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
-    if 'source' not in traj_df.columns:
-        traj_df['source'] = 'unknown'
+    if 'Source' not in traj_df.columns:
+        traj_df['Source'] = 'unknown'
     if 'cumul_time_s' not in traj_df.columns:
         traj_df['cumul_time_s'] = np.arange(len(traj_df))
-    # plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'source'], value_vars=['Velocity','Acceleration','Theta','Time','Distance','P_tot'])
-    plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'source'])
-    fig = sns.FacetGrid(plot_df, row='variable', hue='source', height=1.7, aspect=4, sharey=False)
-    fig.map(sns.lineplot, 'cumul_time_s', 'value')
+    plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'Source'])
+    plot_df = plot_df[plot_df['variable'].isin(['Distance','Velocity','Acceleration'])]
+    plot_df['Variable'] = plot_df['variable']
+    plot_df['Value'] = plot_df['value']
+    plot_df.loc[plot_df['Variable']=='Velocity', 'Variable'] = 'Velocity (m/s)'
+    plot_df.loc[plot_df['Variable']=='Distance', 'Variable'] = 'Distance (m)'
+    plot_df.loc[plot_df['Variable']=='Acceleration', 'Variable'] = 'Acceleration (m/s2)'
+    plot_df['Cumulative Time (s)'] = plot_df['cumul_time_s']
+    fig = sns.FacetGrid(plot_df, row='Variable', hue='Source', height=1.7, aspect=4, sharey=False)
+    fig.map(sns.lineplot, 'Cumulative Time (s)', 'Value')
     fig.add_legend()
     fig.tight_layout()
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
+    return fig
+
+def formatted_forces_lineplot(traj_df, title_text="throwaway"):
+    if 'Source' not in traj_df.columns:
+        traj_df['Source'] = 'unknown'
+    if 'cumul_time_s' not in traj_df.columns:
+        traj_df['cumul_time_s'] = np.arange(len(traj_df))
+    plot_df = traj_df.reset_index().melt(id_vars=['cumul_time_s', 'Source'])
+    plot_df = plot_df[plot_df['variable'].isin(['F_aero','F_grav','F_roll', 'F_acc', 'P_tot'])]
+    plot_df['Variable'] = plot_df['variable']
+    plot_df['Value'] = plot_df['value']
+    plot_df.loc[plot_df['Variable']=='F_aero', 'Variable'] = 'Aerodynamic (kg m/s2)'
+    plot_df.loc[plot_df['Variable']=='F_grav', 'Variable'] = 'Gravity (kg m/s2)'
+    plot_df.loc[plot_df['Variable']=='F_roll', 'Variable'] = 'Rolling (kg m/s2)'
+    plot_df.loc[plot_df['Variable']=='F_acc', 'Variable'] = 'Acceleration (kg m/s2)'
+    plot_df.loc[plot_df['Variable']=='P_tot', 'Variable'] = 'Power (W)'
+    plot_df['Cumulative Time (s)'] = plot_df['cumul_time_s']
+    fig = sns.FacetGrid(plot_df, row='Variable', hue='Source', height=1.7, aspect=4, sharey=False)
+    fig.map(sns.lineplot, 'Cumulative Time (s)', 'Value')
+    fig.add_legend()
+    fig.tight_layout()
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig
 
 
@@ -141,7 +169,7 @@ def formatted_residuals_plot(plot_df, title_text="throwaway"):
     sns.histplot(plot_df['residuals'], ax=axes[2], bins=100)
     fig.suptitle(title_text, fontsize=16)
     fig.tight_layout()
-    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".jpg"), format='jpg', dpi=600, bbox_inches='tight')
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return None
 
 
@@ -172,7 +200,7 @@ def formatted_grid_animation(data, title_text="throwaway"):
 #     axes.set_xlim([0, 0.5])
 #     fig.suptitle('KCM Model Performance', fontsize=16)
 #     fig.tight_layout()
-#     plt.savefig("{PLOT_FOLDER}model_performances_kcm.jpg", format='jpg', dpi=600, bbox_inches='tight')
+#     plt.savefig("{PLOT_FOLDER}model_performances_kcm.png", format='png', dpi=600, bbox_inches='tight')
 #     return None
 
 # Annotated geopandas plots
