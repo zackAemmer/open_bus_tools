@@ -1,7 +1,17 @@
 from datetime import datetime
-import re
+from pathlib import Path
+import uuid
 
+import gtfs_realtime_pb2
+import pandas as pd
+from pyproj import CRS
+from pyproj.aoi import AreaOfInterest
+from pyproj.database import query_utm_crs_info
 import pytz
+import requests
+import re
+import timezonefinder
+
 
 
 def get_time_info(tz=None):
@@ -43,3 +53,94 @@ def xml_to_dict(element):
         else:
             element_dict[tag] = xml_to_dict(child)
     return element_dict
+
+
+def clean_source_list():
+    # Clean up the columns and join static + realtime urls
+    more_gtfs_sources = pd.read_csv(Path('..', 'data', 'more_gtfs_sources.csv'))
+    static_sources = more_gtfs_sources[more_gtfs_sources['data_type'] == "gtfs"]
+    static_sources = static_sources[[
+        'mdb_source_id',
+        'location.country_code',
+        'location.subdivision_name',
+        'location.municipality',
+        'provider',
+        'urls.direct_download',
+        'location.bounding_box.minimum_longitude',
+        'location.bounding_box.maximum_longitude',
+        'location.bounding_box.minimum_latitude',
+        'location.bounding_box.maximum_latitude',
+        'status'
+    ]]
+    realtime_sources = more_gtfs_sources[more_gtfs_sources['data_type'] == "gtfs-rt"]
+    realtime_sources = realtime_sources[realtime_sources['entity_type']=='vp']
+    realtime_sources = realtime_sources[[
+        'static_reference',
+        'location.country_code',
+        'location.subdivision_name',
+        'location.municipality',
+        'provider',
+        'urls.direct_download',
+        'status'
+    ]]
+    joined_sources = pd.merge(static_sources, realtime_sources, left_on='mdb_source_id', right_on='static_reference')
+    joined_sources = joined_sources[joined_sources['location.subdivision_name_x'] == joined_sources['location.subdivision_name_y']]
+    joined_sources = joined_sources[joined_sources['provider_x'] == joined_sources['provider_y']]
+    joined_sources = joined_sources[joined_sources['location.municipality_x'] == joined_sources['location.municipality_y']]
+    joined_sources = joined_sources[joined_sources['status_x'] != "inactive"]
+    joined_sources = joined_sources[joined_sources['status_y'] != "inactive"]
+    joined_sources = joined_sources[[
+        'location.country_code_x',
+        'location.subdivision_name_x',
+        'location.municipality_x',
+        'provider_x',
+        'urls.direct_download_x',
+        'urls.direct_download_y',
+        'location.bounding_box.minimum_longitude',
+        'location.bounding_box.maximum_longitude',
+        'location.bounding_box.minimum_latitude',
+        'location.bounding_box.maximum_latitude'
+    ]]
+    joined_sources.columns = [
+        'country_code',
+        'subdivision_name',
+        'municipality',
+        'provider',
+        'static_url',
+        'realtime_url',
+        'min_lon',
+        'max_lon',
+        'min_lat',
+        'max_lat'
+    ]
+    # Find which realtime urls are not working
+    broken_urls = []
+    for i, url in enumerate(joined_sources['realtime_url']):
+        try:
+            response = requests.get(url)
+            feed = gtfs_realtime_pb2.FeedMessage()
+            feed.ParseFromString(response.content)
+        except:
+            broken_urls.append(i)
+    # Broken static feeds
+    cleaned_sources = cleaned_sources[~cleaned_sources['provider'].isin(['Riverside Transit Agency','Transit Authority of Northern Kentucky (TANK)'])]
+    # Save functional urls
+    cleaned_sources = joined_sources.reset_index(drop=True).drop(broken_urls).reset_index(drop=True)
+    cleaned_sources['uuid'] = [uuid.uuid4() for x in range(len(cleaned_sources))]
+    cleaned_sources = cleaned_sources.dropna()
+    cleaned_sources['tz_str'] = [timezonefinder.TimezoneFinder().timezone_at(lng=row['min_lon'], lat=row['min_lat']) for _, row in cleaned_sources.iterrows()]
+    epsg_codes = []
+    for _, row in cleaned_sources.iterrows():
+        utm_crs_list = query_utm_crs_info(
+            datum_name="WGS 84",
+            area_of_interest=AreaOfInterest(
+                west_lon_degree=row['min_lon'],
+                south_lat_degree=row['min_lat'],
+                east_lon_degree=row['max_lon'],
+                north_lat_degree=row['max_lat'],
+            ),
+        )
+        utm_crs = CRS.from_epsg(utm_crs_list[0].code)
+        epsg_codes.append(utm_crs.to_epsg())
+    cleaned_sources['epsg_code'] = epsg_codes
+    cleaned_sources.to_csv(Path('..', 'data', 'other_feeds', 'cleaned_sources.csv'), index=False)
