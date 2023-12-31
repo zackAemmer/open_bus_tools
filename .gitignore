@@ -10,6 +10,7 @@
 /.venv/*
 /dist/*
 /logs/*
+/profiler/*
 secret.py
 .DS_Store
 .env

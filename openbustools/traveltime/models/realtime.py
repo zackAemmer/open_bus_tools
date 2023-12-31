@@ -21,4 +21,5 @@ class GridFeedForward(nn.Module):
         out = self.norm(out)
         out = torch.swapaxes(out, 1, 2)
         out = self.linear_relu_stack_grid(out)
+        out = torch.swapaxes(out, 0, 1)
         return out

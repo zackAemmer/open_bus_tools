@@ -2,6 +2,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import lightning.pytorch as pl
+import scipy
 from torch.utils.data import DataLoader
 
 from openbustools import spatial
@@ -9,32 +10,65 @@ from openbustools.traveltime import data_loader
 
 
 class Trajectory():
-    def __init__(self, lon, lat, mod, dow, coord_ref_center, epsg, known_times=None, resample_len=None) -> None:
+    def __init__(self, point_attr, traj_attr, coord_ref_center, epsg, dem_file=None, resample_len=None, apply_filter=False) -> None:
+        """
+        Initialize a Trajectory object.
+
+        Args:
+            point_attr (dict): Dictionary of point attributes as arrays.
+                - lon (np.array): Longitude values.
+                - lat (np.array): Latitude values.
+            traj_attr (dict): Dictionary of trajectory attributes.
+            coord_ref_center (tuple): Tuple of (x,y) coordinates of the system reference point.
+            epsg (int): EPSG code of the coordinate reference system.
+            dem_file (str): Path to the elevation raster file. Defaults to None.
+            resample_len (int, optional): Length to resample the trajectory to. Defaults to None.
+            apply_filter (bool, optional): Whether to apply a filter to the trajectory. Defaults to False.
+        """
+        self.point_attr = point_attr
+        self.traj_attr = traj_attr
         self.coord_ref_center = coord_ref_center
         self.epsg = epsg
-        self.predicted_time_s = None
-        if resample_len is not None:
-            lon = spatial.resample_to_len(lon, resample_len)
-            lat = spatial.resample_to_len(lat, resample_len)
-        self.gdf = gpd.GeoDataFrame({
-            'geometry':gpd.points_from_xy(lon, lat),
-            'lon': lon,
-            'lat': lat,
-            't_hour': mod // 60,
-            't_min_of_day':mod,
-            't_day_of_week':dow}, crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
+        self.traj_len = resample_len if resample_len else len(point_attr['lon'])
+        if resample_len:
+            for key in self.point_attr.keys():
+                self.point_attr[key] = spatial.resample_to_len(self.point_attr[key], resample_len)
+        if apply_filter:
+            for key in self.point_attr.keys():
+                polyorder = 3
+                window_len = max([polyorder + 1, self.traj_len // 20])
+                self.point_attr[key] = scipy.signal.savgol_filter(self.point_attr[key], window_length=window_len, polyorder=polyorder)
+                if key == 'measured_speed_m_s':
+                    self.point_attr[key] = np.clip(self.point_attr[key], a_min=0, a_max=None)
+                elif key == 'measured_bear_d':
+                    self.point_attr[key][self.point_attr[key]<0] = self.point_attr[key][self.point_attr[key]<0] + 360
+                    self.point_attr[key][self.point_attr[key]>360] = self.point_attr[key][self.point_attr[key]>360] - 360
+        # Create GeoDataFrame and calculate metrics
+        gdf = self.point_attr.copy()
+        gdf.update({'geometry': gpd.points_from_xy(self.point_attr['lon'], self.point_attr['lat'])})
+        self.gdf = gpd.GeoDataFrame(gdf, crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
         self.gdf['x'] = self.gdf.geometry.x
         self.gdf['y'] = self.gdf.geometry.y
         self.gdf['x_cent'] = self.gdf['x'] - coord_ref_center[0]
         self.gdf['y_cent'] = self.gdf['y'] - coord_ref_center[1]
-        if known_times is not None:
-            if resample_len is not None:
-                known_times = spatial.resample_to_len(known_times, resample_len)
-            self.gdf['cumul_time_s'] = known_times
-            self.gdf['calc_time_s'] = self.gdf['cumul_time_s'].diff()
         self.gdf['calc_dist_m'], self.gdf['calc_bear_d'] = spatial.calculate_gps_metrics(self.gdf, 'lon', 'lat')
-        self.gdf = self.gdf.drop(index=0)
+        self.gdf = self.gdf.fillna(0)
+        # Get elevation if DEM passed
+        if dem_file:
+            self.gdf['calc_elev_m'] = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_file)
+        # Set predicted travel time values if they are known
+        if 'cumul_time_s' in self.point_attr.keys():
+            self.pred_time_s = np.diff(self.point_attr['cumul_time_s'], prepend=0)
+        else:
+            self.pred_time_s = np.nan(self.traj_len)
+
     def update_predicted_time(self, model):
+        """
+        Update the predicted time of the trajectory using a given model.
+
+        Args:
+            model: The model used for prediction.
+        """
         samples = self.to_torch()
         data_loader.normalize_samples(samples, model.config)
         dataset = data_loader.H5Dataset(samples)
@@ -44,82 +78,111 @@ class Trajectory():
                 collate_fn=model.collate_fn,
                 batch_size=model.batch_size,
                 shuffle=False,
-                drop_last=False
+                drop_last=False,
+                num_workers=0,
+                pin_memory=False
             )
-            trainer = pl.Trainer(logger=False)
+            trainer = pl.Trainer(
+                accelerator='cpu',
+                logger=False,
+                inference_mode=True,
+                enable_progress_bar=False,
+                enable_checkpointing=False,
+                enable_model_summary=False
+            )
             preds_and_labels = trainer.predict(model=model, dataloaders=loader)
         else:
             preds_and_labels = model.predict(dataset, 'h')
-        preds = [x['preds_raw'] for x in preds_and_labels]
-        self.gdf['calc_time_s'] = preds[0].flatten()
+        preds = [x['preds_raw'].flatten() for x in preds_and_labels][0]
+        preds[0] = 0
+        self.pred_time_s = preds
+        self.gdf['cumul_time_s'] = np.cumsum(preds)
+
     def to_torch(self):
+        """
+        Convert the trajectory to format expected for model prediction.
+
+        Returns:
+            dict: A dictionary with ordered features in arrays.
+        """
         gdf = self.gdf.copy()
+        gdf['t_min_of_day'] = self.traj_attr['t_min_of_day']
+        gdf['t_day_of_week'] = self.traj_attr['t_day_of_week']
         # Fill modeling features with -1 if not added to trajectory gdf
-        for col in data_loader.NUM_FEAT_COLS+data_loader.MISC_CAT_FEATS:
+        for col in data_loader.NUM_FEAT_COLS:
             if col not in gdf.columns:
                 gdf[col] = -1
         feats_n = gdf[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
         return {0: {'feats_n': feats_n}}
-    def to_drivecycle(self, dem_path):
-        elev = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_path)
-        return DriveCycle(self.gdf['calc_dist_m'].to_numpy(), self.gdf['calc_time_s'].to_numpy(), elev)
+
+    def measured_to_drivecycle(self):
+        """
+        Convert the trajectory to a DriveCycle object.
+
+        Returns:
+            DriveCycle: A DriveCycle object representing the trajectory.
+        """
+        # Time from model or known
+        time = self.pred_time_s
+        # All motion values taken from point measurements
+        accel = self.point_attr['measured_accel_m_s2']
+        speed = self.point_attr['measured_speed_m_s']
+        elev = self.point_attr['measured_elev_m']
+        distance = self.gdf['calc_dist_m'].to_numpy()
+        theta = spatial.divide_fwd_back_fill(np.diff(elev, prepend=0), distance)
+        cycle = DriveCycle(speed, accel, theta, time, distance)
+        return cycle
+
+    def gps_to_drivecycle(self):
+        """
+        Convert the trajectory to a DriveCycle object.
+
+        Returns:
+            DriveCycle: A DriveCycle object representing the trajectory.
+        """
+        # Time from model or known
+        time = self.pred_time_s
+        # All motion values derived from GPS distances and times
+        distance = self.gdf['calc_dist_m'].to_numpy()
+        speed = distance[1:] / time[1:]
+        accel = np.diff(speed, prepend=0) / time[1:]
+        theta = spatial.divide_fwd_back_fill(np.diff(self.gdf['calc_elev_m'].to_numpy()), distance[1:])
+        cycle = DriveCycle(speed, accel, theta, time[1:], distance[1:])
+        return cycle
 
 
 class DriveCycle():
-    def __init__(self, dist, tim, elev) -> None:
-        self.dist = dist
-        self.tim = tim
-        self.elev = elev
-        self.vel = self.dist / self.tim
-        # Measured between each point
-        self.acc = np.diff(self.vel) / self.tim[1:]
-        self.slope = np.diff(self.elev) / np.clip(self.dist[1:], .001, None)
-        self.theta = np.arctan(self.slope)
-        # Calculated new avg values; lose first point
-        self.dist = self.dist[1:]
-        self.tim = self.tim[1:]
-        self.elev = self.elev[1:]
-        self.vel = self.vel[1:]
-        self.traj_len = len(self.dist)
-    def to_df(self):
-        df = pd.DataFrame({
-            'Distance': self.dist,
-            'Time': self.tim,
-            'Elevation': self.elev,
-            'Velocity': self.vel,
-            'Acceleration': self.acc,
-            'Slope': self.slope,
-            'Theta': self.theta})
-        return df
+    """
+    Acceleration and velocity measured at each point in the trajectory.
+    Time is known or predicted. Distance is from GPS points.
+    Velocity, theta and acceleration are used in force calculations.
+    Time is used in power calculations.
+    
+    Attributes:
+        velocity (list): List of velocity values.
+        acceleration (list): List of acceleration values.
+        theta (list): List of theta values.
+        time (list): List of time values.
+        distance (list): List of distance values.
+    """
+    def __init__(self, velocity, acceleration, theta, time, distance):
+        self.velocity = velocity
+        self.acceleration = acceleration
+        self.theta = theta
+        self.time = time
+        self.distance = distance
 
-
-class RandomDriveCycle():
-    def __init__(self) -> None:
-        self.traj_len = np.random.randint(10,50)
-        self.vel = np.random.randint(1, 35, size=self.traj_len)
-        self.dist = np.random.randint(1, 4200, size=self.traj_len)
-        self.tim = self.dist / self.vel
-        self.elev = np.random.randint(-200, 200, size=self.traj_len)
-        # Measured between each point
-        self.acc =( np.roll(self.vel, -1) - self.vel) / np.roll(self.tim, -1)
-        self.slope = np.roll(self.elev, -1) - self.elev / np.roll(self.dist, -1)
-        self.theta = np.arctan(self.slope)
-        # Calculated new avg values; lose first point
-        self.dist = self.dist[:-1]
-        self.tim = self.tim[:-1]
-        self.elev = self.elev[:-1]
-        self.vel = self.vel[:-1]
-        self.acc = self.acc[:-1]
-        self.slope = self.slope[:-1]
-        self.theta = self.theta[:-1]
-        self.traj_len = len(self.dist)
     def to_df(self):
+        """Converts the MomentaryDriveCycle object to a pandas DataFrame.
+        
+        Returns:
+            pandas.DataFrame: DataFrame containing the velocity, acceleration, theta, time, and distance values.
+        """
         df = pd.DataFrame({
-            'Distance': self.dist,
-            'Time': self.tim,
-            'Elevation': self.elev,
-            'Velocity': self.vel,
-            'Acceleration': self.acc,
-            'Slope': self.slope,
-            'Theta': self.theta})
+            'Velocity': self.velocity,
+            'Acceleration': self.acceleration,
+            'Theta': self.theta,
+            'Time': self.time,
+            'Distance': self.distance
+        })
         return df

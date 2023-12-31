@@ -1,6 +1,8 @@
 import argparse
+import logging
 
 import lightning.pytorch as pl
+from lightning.pytorch.profilers import SimpleProfiler, AdvancedProfiler, PyTorchProfiler
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.loggers import TensorBoardLogger
 import numpy as np
@@ -13,9 +15,19 @@ from openbustools.traveltime import data_loader, model_utils
 
 
 if __name__=="__main__":
-    torch.set_default_dtype(torch.float)
-    torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
+
+    if torch.cuda.is_available():
+        num_workers=4
+        pin_memory=True
+        accelerator="cuda"
+    else:
+        num_workers=0
+        pin_memory=False
+        accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -26,17 +38,6 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
-
-    if torch.cuda.is_available():
-        num_workers=4
-        pin_memory=True
-        accelerator="cuda"
-    else:
-        num_workers=0
-        pin_memory=False
-        accelerator="cpu"
-
     print("="*30)
     print(f"TRAINING")
     print(f"RUN: {args.run_label}")
@@ -46,6 +47,7 @@ if __name__=="__main__":
     print(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(5, shuffle=True, random_state=42)
+    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
     train_dataset = data_loader.H5Dataset(train_data)
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
@@ -75,12 +77,11 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
-            max_epochs=50,
-            min_epochs=5,
+            max_epochs=100,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
-            # profiler=pl.profilers.AdvancedProfiler(filename='profiler_results'),
+            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=5)],
+            # profiler=PyTorchProfiler(dirpath="./profiler/", filename=f"{model.model_name}"),
             # limit_train_batches=2,
             # limit_val_batches=2,
         )

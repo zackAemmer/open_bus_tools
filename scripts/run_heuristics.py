@@ -12,9 +12,19 @@ from openbustools.traveltime.models import avg_speed, persistent, schedule
 
 
 if __name__=="__main__":
-    torch.set_default_dtype(torch.float)
-    torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
+
+    if torch.cuda.is_available():
+        num_workers=4
+        pin_memory=True
+        accelerator="cuda"
+    else:
+        num_workers=0
+        pin_memory=False
+        accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-mf', '--model_folder', required=True)
@@ -25,8 +35,6 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--test_n', required=True)
     args = parser.parse_args()
 
-    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
-
     print("="*30)
     print(f"EXPERIMENTS")
     print(f"RUN: {args.run_label}")
@@ -36,6 +44,7 @@ if __name__=="__main__":
 
     res = {'AVGH':{}, 'AVGM':{}, 'PERT':{}, 'SCH':{}}
     n_folds = 5
+    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")

@@ -17,7 +17,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 128,
         'num_layers': 2,
         'dropout_rate': .2,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'CONV': {
@@ -25,7 +25,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 64,
         'num_layers': 3,
         'dropout_rate': .1,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'GRU': {
@@ -33,7 +33,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 64,
         'num_layers': 2,
         'dropout_rate': .05,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'TRSF': {
@@ -41,7 +41,7 @@ HYPERPARAM_DICT = {
         'hidden_size': 128,
         'num_layers': 4,
         'dropout_rate': .1,
-        'grid_input_size': 8*4,
+        'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'DEEPTTE': {
@@ -49,11 +49,37 @@ HYPERPARAM_DICT = {
     }
 }
 
+model_order = [
+    'AVGH',
+    'AVGM',
+    'PERT',
+    'SCH',
+    'FF','FF_TUNED',
+    'FF_STATIC','FF_STATIC_TUNED',
+    'FF_REALTIME','FF_REALTIME_TUNED',
+    'CONV','CONV_TUNED',
+    'CONV_STATIC','CONV_STATIC_TUNED',
+    'CONV_REALTIME','CONV_REALTIME_TUNED',
+    'GRU','GRU_TUNED',
+    'GRU_STATIC','GRU_STATIC_TUNED',
+    'GRU_REALTIME','GRU_REALTIME_TUNED',
+    'TRSF','TRSF_TUNED',
+    'TRSF_STATIC','TRSF_STATIC_TUNED',
+    'TRSF_REALTIME','TRSF_REALTIME_TUNED',
+    'DEEPTTE','DEEPTTE_TUNED',
+    'DEEPTTE_STATIC','DEEPTTE_STATIC_TUNED',
+]
+experiment_order = [
+    'same_city',
+    'holdout',
+    'diff_city'
+]
+
 
 def aggregate_tts(tts, mask):
     """Convert a sequence of predicted travel times to total travel time."""
     masked_tts = (tts*mask)
-    total_tts = np.sum(masked_tts, axis=0)
+    total_tts = torch.sum(masked_tts, dim=0)
     return total_tts
 
 
@@ -64,6 +90,25 @@ def fill_tensor_mask(mask, x_sl, drop_first=True):
     if drop_first:
         mask[0,:] = 0
     return mask
+
+
+def load_results(res_folder):
+    all_res = []
+    all_out = []
+    for model_res_file in os.listdir(res_folder):
+        if model_res_file.split('.')[-1]=='pkl':
+            res, out = format_model_res(f"{res_folder}{model_res_file}")
+            all_res.append(res)
+            all_out.append(out)
+    all_res = pd.concat(all_res)
+    all_out = pd.concat(all_out)
+    all_res['model_archetype'] = all_res['model'].str.split('_').str[0]
+    all_res['is_tuned'] = False
+    all_res.loc[all_res['model'].str.split('_').str[-1]=='TUNED', 'is_tuned'] = True
+    all_res['plot_order_model'] = all_res['model'].apply(lambda x: model_order.index(x))
+    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: experiment_order.index(x))
+    all_res = all_res.sort_values(['plot_order_model','plot_order_experiment'])
+    return (all_res, all_out)
 
 
 def format_model_res(model_res_file):
@@ -158,8 +203,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
-            collate_fn=data_loader.collate,
+            input_size=4,
+            collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
@@ -170,8 +215,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=16,
-            collate_fn=data_loader.collate_static,
+            input_size=8,
+            collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
@@ -182,8 +227,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=16,
-            collate_fn=data_loader.collate_realtime,
+            input_size=8,
+            collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
@@ -354,6 +399,6 @@ def load_model(model_folder, network_name, model_type, fold_num):
         model_cl = DeepTTE.Net
     try:
         model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False).eval()
-    except:
+    except RuntimeError:
         model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
     return model

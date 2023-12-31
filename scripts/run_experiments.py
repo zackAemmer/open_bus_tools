@@ -12,9 +12,19 @@ from openbustools.traveltime import data_loader, model_utils
 
 
 if __name__=="__main__":
-    torch.set_default_dtype(torch.float)
-    torch.set_float32_matmul_precision('medium')
     pl.seed_everything(42, workers=True)
+
+    if torch.cuda.is_available():
+        num_workers=4
+        pin_memory=True
+        accelerator="cuda"
+    else:
+        num_workers=0
+        pin_memory=False
+        accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -25,17 +35,6 @@ if __name__=="__main__":
     parser.add_argument('-td', '--test_date', required=True)
     parser.add_argument('-tn', '--test_n', required=True)
     args = parser.parse_args()
-
-    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
-
-    if torch.cuda.is_available():
-        num_workers=4
-        pin_memory=True
-        accelerator="auto"
-    else:
-        num_workers=4
-        pin_memory=False
-        accelerator="cpu"
 
     print("="*30)
     print(f"EXPERIMENTS")
@@ -48,6 +47,7 @@ if __name__=="__main__":
 
     res = {}
     n_folds = 5
+    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     for fold_num in range(n_folds):
         print("="*30)
         print(f"FOLD: {fold_num}")
@@ -69,7 +69,8 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             accelerator=accelerator,
-            logger=False
+            logger=False,
+            inference_mode=True
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
@@ -91,7 +92,8 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             accelerator=accelerator,
-            logger=False
+            logger=False,
+            inference_mode=True
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
@@ -113,7 +115,8 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             accelerator=accelerator,
-            logger=False
+            logger=False,
+            inference_mode=True
         )
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
@@ -121,6 +124,6 @@ if __name__=="__main__":
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
 
     p = Path('.') / 'results' / args.run_label
-    p.mkdir(exist_ok=True)
+    p.mkdir(parents=True, exist_ok=True)
     pickle.dump(res, open(f"./results/{args.run_label}/{args.model_type}.pkl", 'wb'))
     print(f"EXPERIMENTS COMPLETE")
