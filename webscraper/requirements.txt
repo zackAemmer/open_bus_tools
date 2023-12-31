@@ -5,7 +5,8 @@ awscrt==0.16.7
 Babel==2.9.1
 boto3==1.28.68
 botocore==1.31.68
-cffi==1.14.5
+certifi==2023.11.17
+cffi==1.16.0
 chardet==4.0.0
 chevron==0.13.1
 cloud-init==22.2.2
@@ -17,6 +18,7 @@ distro==1.5.0
 docutils==0.16
 ec2-hibinit-agent==1.0.2
 gpg==1.15.1
+h3==3.7.6
 idna==2.10
 Jinja2==2.11.3
 jmespath==0.10.0
@@ -33,7 +35,9 @@ pandas==2.1.1
 ply==3.11
 prettytable==0.7.2
 prompt-toolkit==3.0.24
+protobuf==4.25.1
 pycparser==2.20
+pyproj==3.6.1
 pyrsistent==0.17.3
 pyserial==3.4
 PySocks==1.7.1
@@ -53,6 +57,7 @@ sepolicy==3.4
 setools==4.4.1
 six==1.15.0
 support-info==1.0
+timezonefinder==6.2.0
 tzdata==2023.3
 urllib3==1.25.10
 wcwidth==0.2.5

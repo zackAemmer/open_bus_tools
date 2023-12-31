@@ -123,7 +123,7 @@ def clean_source_list():
         except:
             broken_urls.append(i)
     # Broken static feeds
-    cleaned_sources = cleaned_sources[~cleaned_sources['provider'].isin(['Riverside Transit Agency','Transit Authority of Northern Kentucky (TANK)'])]
+    joined_sources = joined_sources[~joined_sources['provider'].isin(['Riverside Transit Agency','Transit Authority of Northern Kentucky (TANK)'])]
     # Save functional urls
     cleaned_sources = joined_sources.reset_index(drop=True).drop(broken_urls).reset_index(drop=True)
     cleaned_sources['uuid'] = [uuid.uuid4() for x in range(len(cleaned_sources))]
