@@ -14,7 +14,7 @@ if __name__ == "__main__":
     utc_date = datetime.datetime.utcnow()
     summary_date = utc_date - datetime.timedelta(days=1)
     # Combine the protobuf files for each day/provider into a dataframe
-    for provider_folder in Path('data', 'other_feeds').glob('*_realtime'):
+    for provider_folder in Path('open_bus_tools', 'data', 'other_feeds').glob('*_realtime'):
         try:
             daily_veh_positions = {}
             # Each collected file gets combined for given provider

@@ -9,7 +9,7 @@ import pytz
 
 if __name__ == "__main__":
     # Load cleaned list of transit data providers
-    cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
+    cleaned_sources = pd.read_csv(Path('open_bus_tools', 'data', 'cleaned_sources.csv'))
     # For each transit feed, query realtime data and save to folder
     for index, row in cleaned_sources.iterrows():
         provider_folder = Path('data', 'other_feeds', f"{row['uuid']}_realtime", 'pbf')
