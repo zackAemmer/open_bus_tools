@@ -13,7 +13,6 @@ if __name__ == "__main__":
     cleaned_sources = pd.read_csv(Path('data', 'other_feeds', 'cleaned_sources.csv'))
     # For each transit feed, query static data, unzip and save to folder
     for index, row in cleaned_sources.iterrows():
-        print(row['provider'])
         provider_folder = Path('data', 'other_feeds', f"{row['uuid']}_static")
         provider_folder.mkdir(exist_ok=True, parents=True)
         localized_date = datetime.datetime.now().astimezone(pytz.timezone(row['tz_str']))
