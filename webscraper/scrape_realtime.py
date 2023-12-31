@@ -12,7 +12,7 @@ if __name__ == "__main__":
     cleaned_sources = pd.read_csv(Path('open_bus_tools', 'data', 'cleaned_sources.csv'))
     # For each transit feed, query realtime data and save to folder
     for index, row in cleaned_sources.iterrows():
-        provider_folder = Path('data', 'other_feeds', f"{row['uuid']}_realtime", 'pbf')
+        provider_folder = Path('open_bus_tools', 'data', 'other_feeds', f"{row['uuid']}_realtime", 'pbf')
         provider_folder.mkdir(exist_ok=True, parents=True)
         try:
             current_target_time = datetime.datetime.now(pytz.timezone(row['tz_str']))
