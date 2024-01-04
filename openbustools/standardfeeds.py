@@ -127,9 +127,9 @@ def load_gtfs_files(gtfs_folder):
         tuple: A tuple containing three dataframes - stop_times, stops, and trips.
     """
     # Read stop locations, trips/times, and route ids
-    stop_times = pd.read_csv(f"{gtfs_folder}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']]
-    stops = pd.read_csv(f"{gtfs_folder}/stops.txt", low_memory=False, dtype=GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id')
-    trips = pd.read_csv(f"{gtfs_folder}/trips.txt", low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']]
+    stop_times = pd.read_csv(Path(gtfs_folder, "stop_times.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']].dropna()
+    stops = pd.read_csv(Path(gtfs_folder, "stops.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id').dropna()
+    trips = pd.read_csv(Path(gtfs_folder, "trips.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']].sort_values(['service_id','route_id','direction_id','trip_id']).dropna()
     # Deal with schedule crossing midnight, get scheduled arrival
     stop_times['t_sch_sec_of_day'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in stop_times['arrival_time'].str.split(":")]
     stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
@@ -252,11 +252,16 @@ def latest_available_static(day, static_folder):
     Returns:
         str: The latest available static data date in the format "%Y_%m_%d".
     """
-    static_available = [f for f in os.listdir(static_folder) if not f.startswith('.')]
+    # Use path glob to get only the directories, not zip files in the static folder
+    static_available = [x.name for x in Path(static_folder).glob("*/") if x.is_dir()]
     static_available = [datetime.strptime(x, "%Y_%m_%d") for x in static_available]
     static_needed = datetime.strptime(day, "%Y_%m_%d")
     static_possible = [sp for sp in static_available if sp < static_needed]
-    static_best = max(static_possible)
+    # If there are no static before the needed date, use the earliest available
+    if len(static_possible) == 0:
+        static_best = min(static_available)
+    else:
+        static_best = max(static_possible)
     return datetime.strftime(static_best, "%Y_%m_%d")
 
 

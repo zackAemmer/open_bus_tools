@@ -9,7 +9,6 @@ import h5py
 import lightning.pytorch as pl
 import numpy as np
 import pandas as pd
-import torch
 
 from openbustools import spatial, standardfeeds
 from openbustools.traveltime import data_loader, grid
@@ -22,13 +21,17 @@ def prepare_run(**kwargs):
         print(day)
         # Loading data and unifying column names/dtypes
         try:
-            data = pd.read_pickle(f"{kwargs['realtime_folder']}/{day}")
+            data = pd.read_pickle(Path(kwargs['realtime_folder'], day))
             num_pts_initial = len(data)
+            print(f"Loaded {num_pts_initial:_} points")
         except:
             logging.warning(f"File failed to load: {day}")
             continue
         if num_pts_initial == 0:
             logging.warning(f"No points found: {day}")
+            continue
+        elif num_pts_initial < 100:
+            logging.warning(f"Too few points found: {day}")
             continue
         data['file'] = day[:10]
         data = data[kwargs['given_names']]
@@ -93,7 +96,7 @@ def prepare_run(**kwargs):
         # Get GTFS features
         best_static = standardfeeds.latest_available_static(day[:10], kwargs['static_folder'])
         data['best_static'] = best_static
-        stop_times, stops, trips = standardfeeds.load_gtfs_files(f"{kwargs['static_folder']}{best_static}/")
+        stop_times, stops, trips = standardfeeds.load_gtfs_files(Path(kwargs['static_folder'], best_static))
         static = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
         static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{kwargs['epsg']}")
         # Filter any realtime trips that are not in the schedule
@@ -130,7 +133,8 @@ def prepare_run(**kwargs):
         data['data_folder'] = kwargs['realtime_folder']
 
         # Realtime grid features
-        data_grid = grid.RealtimeGrid(kwargs['grid_bounds'], 500)
+        grid_bounds_xy, _ = spatial.project_bounds(kwargs['grid_bounds'], kwargs['coord_ref_center'], kwargs['epsg'])
+        data_grid = grid.RealtimeGrid(grid_bounds_xy, 500)
         data_grid.build_cell_lookup(data[['locationtime','x','y','calc_speed_m_s','calc_bear_d']].copy())
 
         # Save processed data
@@ -163,39 +167,62 @@ def prepare_run(**kwargs):
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
 
-    prepare_run(
-        network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 38),
-        static_folder="./data/kcm_gtfs/",
-        realtime_folder="./data/kcm_realtime/",
-        timezone="America/Los_Angeles",
-        epsg=32148,
-        grid_bounds=[369903,37911,409618,87758],
-        coord_ref_center=[386910,69022],
-        dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
-    prepare_run(
-        network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 38),
-        static_folder="./data/atb_gtfs/",
-        realtime_folder="./data/atb_realtime/",
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[550869,7012847,579944,7039521],
-        coord_ref_center=[569472,7034350],
-        dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
-    prepare_run(
-        network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 38),
-        static_folder="./data/rut_gtfs/",
-        realtime_folder="./data/rut_realtime/",
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[589080,6631314,604705,6648420],
-        coord_ref_center=[597427,6642805],
-        dem_file="./data/rut_spatial/eudtm30m_dem_32632.tif",
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
+    # prepare_run(
+    #     network_name="kcm",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 38),
+    #     static_folder="./data/kcm_gtfs/",
+    #     realtime_folder="./data/kcm_realtime/",
+    #     timezone="America/Los_Angeles",
+    #     epsg=32148,
+    #     # grid_bounds=[369903,37911,409618,87758],
+    #     grid_bounds=[-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442],
+    #     # coord_ref_center=[386910,69022],
+    #     coord_ref_center=[-122.33761744472739, 47.61086041739939]
+    #     dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
+    # prepare_run(
+    #     network_name="atb",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 38),
+    #     static_folder="./data/atb_gtfs/",
+    #     realtime_folder="./data/atb_realtime/",
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     # grid_bounds=[550869,7012847,579944,7039521],
+    #     grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
+    #     # coord_ref_center=[569472,7034350],
+    #     coord_ref_center=[10.392178466426625,63.430852975179626],
+    #     dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
+    # prepare_run(
+    #     network_name="rut",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 38),
+    #     static_folder="./data/rut_gtfs/",
+    #     realtime_folder="./data/rut_realtime/",
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     # grid_bounds=[589080,6631314,604705,6648420],
+    #     grid_bounds=[10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328],
+    #     # coord_ref_center=[597427,6642805],
+    #     coord_ref_center=[10.742169939719487,59.911212837674746],
+    #     dem_file="./data/rut_spatial/eudtm30m_dem_32632.tif",
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
+    cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
+    cleaned_sources = cleaned_sources.iloc[35:]
+    cleaned_sources = cleaned_sources[cleaned_sources['provider']=='York Region Transit']
+    for i, row in cleaned_sources.iterrows():
+        print(row['provider'])
+        prepare_run(
+            network_name=row['uuid'],
+            dates=['2024_01_01.pkl'],
+            static_folder=f"./data/other_feeds/{row['uuid']}_static/",
+            realtime_folder=f"./data/other_feeds/{row['uuid']}_realtime/",
+            timezone=row['tz_str'],
+            epsg=row['epsg_code'],
+            grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
+            coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
+            dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+            given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+        )

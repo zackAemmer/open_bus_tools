@@ -8,6 +8,7 @@ load_dotenv()
 
 def download_new_s3_files(data_folder, bucket_name):
     print(f"Getting new files for {data_folder} from S3 bucket {bucket_name}")
+    data_folder.mkdir(parents=True, exist_ok=True)
     downloaded_files = [x.name for x in Path(data_folder).glob("*.pkl")]
     print(f"Found {len(downloaded_files)} downloaded files")
     try:

@@ -206,14 +206,38 @@ def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_boun
     Returns:
         gpd.GeoDataFrame: Geodataframe containing the bounded data with additional columns.
     """
-    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data[lon_col].to_numpy(), data[lat_col].to_numpy()), crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
-    data = data.cx[grid_bounds[0]:grid_bounds[2], grid_bounds[1]:grid_bounds[3]].copy()
+    _, coord_ref_center_xy = project_bounds(grid_bounds, coord_ref_center, epsg)
+    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data[lon_col].to_numpy(), data[lat_col].to_numpy()), crs="EPSG:4326")
+    data = data.cx[grid_bounds[0]:grid_bounds[2], grid_bounds[1]:grid_bounds[3]].copy().to_crs(f"EPSG:{epsg}")
     data['x'] = data.geometry.x
     data['y'] = data.geometry.y
-    data['x_cent'] = data['x'] - coord_ref_center[0]
-    data['y_cent'] = data['y'] - coord_ref_center[1]
+    data['x_cent'] = data['x'] - coord_ref_center_xy[0]
+    data['y_cent'] = data['y'] - coord_ref_center_xy[1]
     data['elev_m'] = sample_raster(data[['x','y']].values, dem_file)
     return data
+
+
+def project_bounds(grid_bounds, coord_ref_center, epsg):
+    """
+    Projects the grid bounds and coordinate reference center to xy coordinates in integer meters.
+
+    Args:
+        grid_bounds (list): A list of four values representing the grid bounds in the format [min_x, min_y, max_x, max_y].
+        coord_ref_center (list): A list of two values representing the coordinate reference center in the format [x, y].
+        epsg (int): The EPSG code specifying the coordinate reference system.
+
+    Returns:
+        tuple: A tuple containing the projected grid bounds and coordinate reference center in the format (grid_bounds_prj, coord_ref_center_prj).
+               grid_bounds_prj (list): A list of four integer values representing the projected grid bounds in the format [min_x, min_y, max_x, max_y].
+               coord_ref_center_prj (list): A list of two integer values representing the projected coordinate reference center in the format [x, y].
+    """
+    grid_bounds_gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy([grid_bounds[0], grid_bounds[2]], [grid_bounds[1], grid_bounds[3]])}, crs="EPSG:4326")
+    grid_bounds_gdf = grid_bounds_gdf.to_crs(f"EPSG:{epsg}")
+    grid_bounds_prj = [int(grid_bounds_gdf.geometry[0].x), int(grid_bounds_gdf.geometry[0].y), int(grid_bounds_gdf.geometry[1].x), int(grid_bounds_gdf.geometry[1].y)]
+    coord_ref_center_gdf = gpd.GeoDataFrame({'geometry': gpd.points_from_xy([coord_ref_center[0]], [coord_ref_center[1]])}, crs="EPSG:4326")
+    coord_ref_center_gdf = coord_ref_center_gdf.to_crs(f"EPSG:{epsg}")
+    coord_ref_center_prj = [int(coord_ref_center_gdf.geometry[0].x), int(coord_ref_center_gdf.geometry[0].y)]
+    return (grid_bounds_prj, coord_ref_center_prj)
 
 
 # def poly_locate_line_points(poly_geo, line_geo):
