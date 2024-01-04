@@ -76,11 +76,11 @@ if __name__=="__main__":
             pin_memory=pin_memory,
         )
         trainer = pl.Trainer(
-            check_val_every_n_epoch=1,
+            check_val_every_n_epoch=2,
             max_epochs=100,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=5)],
+            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
             # profiler=PyTorchProfiler(dirpath="./profiler/", filename=f"{model.model_name}"),
             # limit_train_batches=2,
             # limit_val_batches=2,
