@@ -13,7 +13,6 @@ if __name__ == "__main__":
     load_dotenv()
     utc_date = datetime.datetime.utcnow()
     summary_date = utc_date - datetime.timedelta(days=1)
-    summary_date = utc_date - datetime.timedelta(days=2)
     # Combine the protobuf files for each day/provider into a dataframe
     for provider_folder in Path('open_bus_tools', 'data', 'other_feeds').glob('*_realtime'):
         # Wrap each feed in try loop
@@ -22,7 +21,8 @@ if __name__ == "__main__":
             # Each collected file gets combined for given provider
             for pb_file in Path(provider_folder, 'pbf').glob('*.pb'):
                 # Check that file is from previous day
-                if pb_file.name[:10] == summary_date.strftime('%Y_%m_%d'):
+                pb_file_datetime = datetime.datetime.strptime(pb_file.name[:10], '%Y_%m_%d')
+                if pb_file_datetime.date() == summary_date.date():
                     # Wrap each tracked time in try loop
                     try:
                         with open(pb_file, 'rb') as f:
@@ -40,12 +40,14 @@ if __name__ == "__main__":
                                     }
                     except Exception as e:
                         continue
-                    # Remove the tracked time file regardless of if it was successfully read
+                    # Remove the tracked time file regardless if it was successfully read
+                    pb_file.unlink()
+                # Remove the tracked time file if it is from a previous date
+                elif pb_file_datetime.date() < summary_date.date():
                     pb_file.unlink()
             # If there were no records for the day, skip
             if len(daily_veh_positions) > 0:
                 daily_df = pd.DataFrame.from_dict(daily_veh_positions, orient='index').drop_duplicates().sort_values(['trip_id', 'locationtime'])
-                # daily_df.to_pickle(Path(provider_folder, f"{pb_file.name[:10]}.pkl"))
                 # Upload to S3
                 s3 = boto3.client('s3')
                 s3.put_object(
