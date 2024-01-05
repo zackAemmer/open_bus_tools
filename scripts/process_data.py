@@ -15,41 +15,49 @@ from openbustools.traveltime import data_loader, grid
 
 
 def prepare_run(**kwargs):
+    logger = logging.getLogger('data_processing')
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
     """Pre-process training data and save to sub-folder."""
     print(f"PROCESSING: {kwargs['network_name']}")
     for day in kwargs['dates']:
         print(day)
         # Loading data and unifying column names/dtypes
-        try:
-            data = pd.read_pickle(Path(kwargs['realtime_folder'], day))
-            num_pts_initial = len(data)
-            print(f"Loaded {num_pts_initial:_} points")
-        except:
-            logging.warning(f"File failed to load: {day}")
-            continue
-        if num_pts_initial == 0:
-            logging.warning(f"No points found: {day}")
-            continue
-        elif num_pts_initial < 100:
-            logging.warning(f"Too few points found: {day}")
-            continue
+        data = pd.read_pickle(Path(kwargs['realtime_folder'], day))
         data['file'] = day[:10]
         data = data[kwargs['given_names']]
         data.columns = standardfeeds.GTFSRT_LOOKUP.keys()
         data['locationtime'] = data['locationtime'].astype(float)
         data = data.astype(standardfeeds.GTFSRT_LOOKUP)
+        logger.debug(f"Loaded and unified columns: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Sensors seem to hold old positions right at start/end of trip
         data = data.reset_index(drop=True)
         for _ in range(3):
             data = data.drop(data.groupby('trip_id', as_index=False).nth(0).index)
             data = data.drop(data.groupby('trip_id', as_index=False).nth(-1).index)
+        logger.debug(f"Removed trip start/end points: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Split full trip trajectories into smaller samples, resample
         data = spatial.shingle(data, min_break=2, max_break=5, min_len=3, max_len=200)
+        logger.debug(f"Shingled: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Project to local coordinate system, apply bounding box, center coords
         data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
+        logger.debug(f"Created bounded gdf: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Calculate geometry features
         data['calc_time_s'] = data['locationtime'] - data['locationtime'].shift(1)
@@ -63,6 +71,9 @@ def prepare_run(**kwargs):
         data = data.drop(data.groupby('shingle_id', as_index=False, sort=False).nth(0).index)
         data['calc_speed_m_s'] = data['calc_dist_m'] / data['calc_time_s']
         data['calc_dist_km'] = data['calc_dist_m'] / 1000.0
+        logger.debug(f"Calculated geometry: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Filter trips with less than 2 points
         toss_ids = []
@@ -77,6 +88,9 @@ def prepare_run(**kwargs):
         # Filter the list of full shingles w/invalid points
         toss_ids = np.unique(toss_ids)
         data = data[~data['shingle_id'].isin(toss_ids)].copy()
+        logger.debug(f"Filtered invalid trips: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Calculate time features
         data['t'] = pd.to_datetime(data['locationtime'], unit='s', utc=True).dt.tz_convert(kwargs['timezone'])
@@ -92,6 +106,9 @@ def prepare_run(**kwargs):
         # For calculating absolute time differences in trips (midnight crossover)
         data['t_sec_of_day'] = data['t'] - datetime.datetime(min(data['t_year']), min(data['t_month']), min(data['t_day']), 0, tzinfo=ZoneInfo(kwargs['timezone']))
         data['t_sec_of_day'] = data['t_sec_of_day'].dt.total_seconds()
+        logger.debug(f"Calculated time features: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Get GTFS features
         best_static = standardfeeds.latest_available_static(day[:10], kwargs['static_folder'])
@@ -108,12 +125,16 @@ def prepare_run(**kwargs):
             data = data.merge(trips, on='trip_id', how='left')
             data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         else:
-            logging.warning(f"No data after joining static feed: {day}")
+            logger.warning(f"No data after joining static feed: {day}")
             data['stop_sequence'] = 0
             data['t_sch_sec_of_day'] = 0
             data['calc_stop_dist_m'] = 0
             data['calc_stop_dist_km'] = 0
             data['route_id'] = 'NotFound'
+        logger.debug(f"Joined static feed: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
         # Passed stops
         data['pass_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff().fillna(0)
         # Scheduled time
@@ -138,8 +159,8 @@ def prepare_run(**kwargs):
         data_grid.build_cell_lookup(data[['locationtime','x','y','calc_speed_m_s','calc_bear_d']].copy())
 
         # Save processed data
-        num_pts_final = len(data)
-        print(f"Kept {np.round(num_pts_final/num_pts_initial, 3)*100}% of original points")
+        logger.debug(f"Final data: {len(data):_} points")
+
         # Full geodataframe
         processed_path = Path(kwargs['realtime_folder'], "processed")
         processed_path.mkdir(parents=True, exist_ok=True)
@@ -161,7 +182,7 @@ def prepare_run(**kwargs):
             g.create_dataset('feats_n', data=data_n)
             g.create_dataset('feats_c', data=data_c)
             g.create_dataset('feats_g', data=data_g)
-    print(f"PROCESSING COMPLETED: {kwargs['network_name']}")
+    print(f"PROCESSING COMPLETED: {kwargs['network_name']}\n")
 
 
 if __name__=="__main__":
@@ -210,19 +231,18 @@ if __name__=="__main__":
     #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     # )
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    cleaned_sources = cleaned_sources.iloc[35:]
-    cleaned_sources = cleaned_sources[cleaned_sources['provider']=='York Region Transit']
     for i, row in cleaned_sources.iterrows():
-        print(row['provider'])
-        prepare_run(
-            network_name=row['uuid'],
-            dates=['2024_01_01.pkl'],
-            static_folder=f"./data/other_feeds/{row['uuid']}_static/",
-            realtime_folder=f"./data/other_feeds/{row['uuid']}_realtime/",
-            timezone=row['tz_str'],
-            epsg=row['epsg_code'],
-            grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
-            coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
-            dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-            given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-        )
+        if standardfeeds.validate_realtime_data(row):
+            print(row['provider'])
+            prepare_run(
+                network_name=row['uuid'],
+                dates=['2024_01_03.pkl'],
+                static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+                realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
+                timezone=row['tz_str'],
+                epsg=row['epsg_code'],
+                grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
+                coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
+                dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+                given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+            )

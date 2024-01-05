@@ -25,6 +25,29 @@ GTFS_TYPES = [str,str,str,float,float,str]
 GTFS_LOOKUP = dict(zip(GTFS_NAMES, GTFS_TYPES))
 
 
+def validate_realtime_data(row):
+    """
+    Validates the realtime data for a given city.
+
+    Args:
+        row (pandas.Series): The row containing the city info to be validated.
+
+    Returns:
+        bool: True if there is loadable realtime data, False otherwise.
+    """
+    uuid = row['uuid']
+    provider_path = Path('data', 'other_feeds', f"{uuid}_realtime")
+    available_files = [x.name for x in provider_path.glob('*.pkl')]
+    if len(available_files) != 0:
+        for file in available_files:
+            data = pd.read_pickle(provider_path / file)
+            if len(data) == 0:
+                return False
+        return True
+    else:
+        return False
+
+
 def get_time_embeddings(timestamps, timezone='America/Los_Angeles'):
     """
     Converts a list of timestamps to time embeddings.
@@ -74,13 +97,13 @@ def get_gtfs_shapes_lookup(gtfs_folder):
     routes = pd.read_csv(f"{gtfs_folder}routes.txt", low_memory=False, dtype=GTFS_LOOKUP)
     trips = pd.read_csv(f"{gtfs_folder}trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
     data = trips.merge(routes, on='route_id')
-    data = data[['service_id','route_id','direction_id','trip_id']].drop_duplicates().sort_values(['service_id','route_id','direction_id','trip_id'])
+    data = data[['service_id','route_id','trip_id']].drop_duplicates().sort_values(['service_id','route_id','trip_id'])
     return data
 
 
 def get_gtfs_shapes(gtfs_folder, epsg=None, stop_dist_filter=None):
     """
-    Use stop locations to create unique shapes from GTFS files.
+    Use stop locations to create unique shapes for each trip in GTFS files.
 
     Args:
         gtfs_folder (str): The path to the folder containing the GTFS files.
@@ -110,9 +133,9 @@ def get_gtfs_shapes(gtfs_folder, epsg=None, stop_dist_filter=None):
         data = data[~data['trip_id'].isin(drop_ids)]
     # Avoid making duplicate shapes; one per service/route/direction
     shapes_lookup = get_gtfs_shapes_lookup(gtfs_folder)
-    data = data.merge(shapes_lookup, on='trip_id').drop_duplicates(['service_id','route_id','direction_id','stop_id']).sort_values(['service_id','route_id','direction_id','stop_sequence'])
-    data = data.groupby(['service_id','route_id','direction_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist()))
-    data.crs = f"EPSG: {epsg}"
+    data = pd.merge(shapes_lookup, data, on=['trip_id'])[['service_id','route_id','trip_id','stop_id','stop_sequence','geometry']].sort_values(['service_id','route_id','trip_id','stop_sequence']).drop_duplicates()
+    data = data.groupby(['service_id','route_id','trip_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist()))
+    data = gpd.GeoDataFrame(data, geometry='geometry', crs=f"EPSG: {epsg}")
     return data
 
 
@@ -129,7 +152,7 @@ def load_gtfs_files(gtfs_folder):
     # Read stop locations, trips/times, and route ids
     stop_times = pd.read_csv(Path(gtfs_folder, "stop_times.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']].dropna()
     stops = pd.read_csv(Path(gtfs_folder, "stops.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id').dropna()
-    trips = pd.read_csv(Path(gtfs_folder, "trips.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id','direction_id']].sort_values(['service_id','route_id','direction_id','trip_id']).dropna()
+    trips = pd.read_csv(Path(gtfs_folder, "trips.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id']].sort_values(['service_id','route_id','trip_id']).dropna()
     # Deal with schedule crossing midnight, get scheduled arrival
     stop_times['t_sch_sec_of_day'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in stop_times['arrival_time'].str.split(":")]
     stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
@@ -349,29 +372,3 @@ def combine_phone_sensors(phone_folder, timezone, chop_n=None):
         'end_epoch': end_epoch
     }
     return (metadata, all_sensors)
-
-
-# def filter_gtfs_w_phone(phone_df, gtfs_df, route_short_name, gtfs_calendar):
-#     """Filter bus schedule using best guess for trip_ids that correspond to a phone trip."""
-#     # Filter to the route number shown on the headsign
-#     filtered_df = gtfs_df[gtfs_df['route_short_name']==route_short_name]
-#     # # Filter by service ids that are active on day of week
-#     # weekdays = ("monday","tuesday","wednesday","thursday","friday","saturday","sunday")
-#     # phone_start_time = datetime.fromtimestamp(int(str(min(phone_df.time))[:10]))
-#     # phone_start_time = phone_start_time.hour*3600 + phone_start_time.second
-#     # valid_service_ids = gtfs_calendar[gtfs_calendar[weekdays[phone_start_time.weekday()]]==1].service_id
-#     # filtered_df = filtered_df[filtered_df['service_id'].isin(valid_service_ids)]
-#     # Filter to direction 0; will need to be improved
-#     filtered_df = filtered_df[filtered_df['direction_id']==0]
-#     # # Filter to trips scheduled active when the phone started recording
-#     # trip_times = filtered_df[['trip_id','arrival_s']].groupby('trip_id', as_index=False).agg(['min','max'])
-#     # trip_times = trip_times[phone_start_time > trip_times[('arrival_s','min')]]
-#     # trip_times = trip_times[phone_start_time < trip_times[('arrival_s','max')]]
-#     # filtered_df = filtered_df[filtered_df['trip_id'].isin(trip_times[('trip_id','')])]
-#     # filtered_df = filtered_df.sort_values(['trip_id','arrival_s'])
-#     # Return only one trip_id in the dataframe for plotting, regardless of total remaining
-#     remaining_trip_ids = np.unique(filtered_df.trip_id)
-#     keep_trip_id = remaining_trip_ids[0]
-#     print(f"Filtered down to {len(remaining_trip_ids)} possible trip_ids; returning the first one ({keep_trip_id}).")
-#     filtered_df = filtered_df[filtered_df['trip_id']==keep_trip_id]
-#     return filtered_df.copy(), remaining_trip_ids
