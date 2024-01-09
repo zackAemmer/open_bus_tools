@@ -17,6 +17,11 @@ secret.py
 *.sh
 !/data/more_gtfs_sources.csv
 !/data/cleaned_sources.csv
+/notebooks/cache/*
+/notebooks/checkpoints/*
+/notebooks/files/*
+/notebooks/lightning_logs/*
+*/*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
