@@ -121,7 +121,7 @@ def sample_raster(points, dem_file):
     return z
 
 
-def shingle(trace_df, min_break, max_break, min_len, max_len, **kwargs):
+def shingle(trace_df, min_break, max_break, resample_shingles=False, min_len=None, max_len=None, **kwargs):
     """
     Split a dataframe into random even chunks, with random resampled len.
 
@@ -129,6 +129,7 @@ def shingle(trace_df, min_break, max_break, min_len, max_len, **kwargs):
         trace_df (DataFrame): The input dataframe to be split into shingles.
         min_break (int): The minimum number of breaks to be applied to each shingle.
         max_break (int): The maximum number of breaks to be applied to each shingle.
+        resample_shingles (bool): Whether to resample the shingles to a random length.
         min_len (int): The minimum length of each shingle.
         max_len (int): The maximum length of each shingle.
         **kwargs: Additional keyword arguments.
@@ -153,19 +154,20 @@ def shingle(trace_df, min_break, max_break, min_len, max_len, **kwargs):
     shingle_ids = np.concatenate(all_shingles)
     shingled_trace_df = trace_df.copy()
     shingled_trace_df['shingle_id'] = shingle_ids
-    # Now resample each shingle to a random length between min and max
-    sids, sidxs = np.unique(shingled_trace_df['shingle_id'], return_index=True)
-    shingles = np.split(shingled_trace_df[['locationtime','lon','lat']].to_numpy(), sidxs[1:], axis=0)
-    resample_lens = np.random.randint(min_len, max_len, len(shingles))
-    resampled= []
-    for shingle_data, resample_len in zip(shingles, resample_lens):
-        resampled.append(resample_to_len(shingle_data, resample_len))
-    resampled_sids = np.repeat(sids, resample_lens).astype(int)
-    # Can't interpolate categoricals, so rejoin them after resampling
-    cat_lookup = shingled_trace_df[['file','trip_id','shingle_id']].drop_duplicates()
-    shingled_trace_df = pd.DataFrame(np.concatenate(resampled), columns=['locationtime','lon','lat'])
-    shingled_trace_df['shingle_id'] = resampled_sids
-    shingled_trace_df = pd.merge(shingled_trace_df, cat_lookup, on='shingle_id').sort_values(['shingle_id','locationtime'])
+    if resample_shingles:
+        # Now resample each shingle to a random length between min and max
+        sids, sidxs = np.unique(shingled_trace_df['shingle_id'], return_index=True)
+        shingles = np.split(shingled_trace_df[['locationtime','lon','lat']].to_numpy(), sidxs[1:], axis=0)
+        resample_lens = np.random.randint(min_len, max_len, len(shingles))
+        resampled= []
+        for shingle_data, resample_len in zip(shingles, resample_lens):
+            resampled.append(resample_to_len(shingle_data, resample_len))
+        resampled_sids = np.repeat(sids, resample_lens).astype(int)
+        # Can't interpolate categoricals, so rejoin them after resampling
+        cat_lookup = shingled_trace_df[['file','trip_id','shingle_id']].drop_duplicates()
+        shingled_trace_df = pd.DataFrame(np.concatenate(resampled), columns=['locationtime','lon','lat'])
+        shingled_trace_df['shingle_id'] = resampled_sids
+        shingled_trace_df = pd.merge(shingled_trace_df, cat_lookup, on='shingle_id').sort_values(['shingle_id','locationtime'])
     return shingled_trace_df
 
 

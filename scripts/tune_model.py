@@ -43,7 +43,7 @@ if __name__=="__main__":
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
-    n_folds = 5
+    n_folds = 2
     train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     for fold_num in range(n_folds):
         print("="*30)

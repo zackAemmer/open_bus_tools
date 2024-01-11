@@ -15,20 +15,16 @@ from openbustools.traveltime import data_loader, grid
 
 
 def prepare_run(**kwargs):
-    logger = logging.getLogger('data_processing')
-    logger.setLevel(logging.DEBUG)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
-
     """Pre-process training data and save to sub-folder."""
     print(f"PROCESSING: {kwargs['network_name']}")
     for day in kwargs['dates']:
         print(day)
         # Loading data and unifying column names/dtypes
-        data = pd.read_pickle(Path(kwargs['realtime_folder'], day))
+        try:
+            data = pd.read_pickle(Path(kwargs['realtime_folder'], day))
+        except:
+            logger.warning(f"Could not load realtime data: {day}")
+            continue
         data['file'] = day[:10]
         data = data[kwargs['given_names']]
         data.columns = standardfeeds.GTFSRT_LOOKUP.keys()
@@ -48,7 +44,7 @@ def prepare_run(**kwargs):
             continue
 
         # Split full trip trajectories into smaller samples, resample
-        data = spatial.shingle(data, min_break=2, max_break=5, min_len=3, max_len=200)
+        data = spatial.shingle(data, min_break=2, max_break=5)
         logger.debug(f"Shingled: {len(data):_} points")
         if len(data) == 0:
             continue
@@ -80,7 +76,7 @@ def prepare_run(**kwargs):
         pt_counts = data.groupby('shingle_id')[['calc_dist_m']].count()
         toss_ids.extend(list(pt_counts[pt_counts['calc_dist_m']<2].index))
         # Filter trips with outliers
-        max_speed = 30
+        max_speed = 35
         secs_keep = 4 * 60
         toss_ids.extend(list(data[data['calc_speed_m_s']>max_speed]['shingle_id']))
         toss_ids.extend(list(data[data['calc_time_s']>secs_keep]['shingle_id']))
@@ -187,6 +183,13 @@ def prepare_run(**kwargs):
 
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
+    logger = logging.getLogger('process_data')
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     # prepare_run(
     #     network_name="kcm",
@@ -195,48 +198,42 @@ if __name__=="__main__":
     #     realtime_folder="./data/kcm_realtime/",
     #     timezone="America/Los_Angeles",
     #     epsg=32148,
-    #     # grid_bounds=[369903,37911,409618,87758],
     #     grid_bounds=[-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442],
-    #     # coord_ref_center=[386910,69022],
-    #     coord_ref_center=[-122.33761744472739, 47.61086041739939]
+    #     coord_ref_center=[-122.33761744472739, 47.61086041739939],
     #     dem_file="./data/kcm_spatial/usgs10m_dem_32148.tif",
     #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     # )
-    # prepare_run(
-    #     network_name="atb",
-    #     dates=standardfeeds.get_date_list("2023_03_15", 38),
-    #     static_folder="./data/atb_gtfs/",
-    #     realtime_folder="./data/atb_realtime/",
-    #     timezone="Europe/Oslo",
-    #     epsg=32632,
-    #     # grid_bounds=[550869,7012847,579944,7039521],
-    #     grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
-    #     # coord_ref_center=[569472,7034350],
-    #     coord_ref_center=[10.392178466426625,63.430852975179626],
-    #     dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
-    # prepare_run(
-    #     network_name="rut",
-    #     dates=standardfeeds.get_date_list("2023_03_15", 38),
-    #     static_folder="./data/rut_gtfs/",
-    #     realtime_folder="./data/rut_realtime/",
-    #     timezone="Europe/Oslo",
-    #     epsg=32632,
-    #     # grid_bounds=[589080,6631314,604705,6648420],
-    #     grid_bounds=[10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328],
-    #     # coord_ref_center=[597427,6642805],
-    #     coord_ref_center=[10.742169939719487,59.911212837674746],
-    #     dem_file="./data/rut_spatial/eudtm30m_dem_32632.tif",
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
+    prepare_run(
+        network_name="atb",
+        dates=standardfeeds.get_date_list("2023_03_15", 38),
+        static_folder="./data/atb_gtfs/",
+        realtime_folder="./data/atb_realtime/",
+        timezone="Europe/Oslo",
+        epsg=32632,
+        grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
+        coord_ref_center=[10.392178466426625,63.430852975179626],
+        dem_file="./data/atb_spatial/eudtm30m_dem_32632.tif",
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
+    prepare_run(
+        network_name="rut",
+        dates=standardfeeds.get_date_list("2023_03_15", 38),
+        static_folder="./data/rut_gtfs/",
+        realtime_folder="./data/rut_realtime/",
+        timezone="Europe/Oslo",
+        epsg=32632,
+        grid_bounds=[10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328],
+        coord_ref_center=[10.742169939719487,59.911212837674746],
+        dem_file="./data/rut_spatial/eudtm30m_dem_32632.tif",
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
         if standardfeeds.validate_realtime_data(row):
             print(row['provider'])
             prepare_run(
                 network_name=row['uuid'],
-                dates=['2024_01_03.pkl'],
+                dates=['2024_01_04.pkl'],
                 static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
                 realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
                 timezone=row['tz_str'],

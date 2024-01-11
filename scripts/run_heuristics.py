@@ -43,7 +43,7 @@ if __name__=="__main__":
     print(f"TEST CITY DATA: {args.test_data_folders}")
 
     res = {'AVGH':{}, 'AVGM':{}, 'PERT':{}, 'SCH':{}}
-    n_folds = 5
+    n_folds = 2
     test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     for fold_num in range(n_folds):
         print("="*30)

@@ -46,7 +46,7 @@ if __name__=="__main__":
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
-    k_fold = KFold(5, shuffle=True, random_state=42)
+    k_fold = KFold(2, shuffle=True, random_state=42)
     train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
     train_dataset = data_loader.H5Dataset(train_data)
