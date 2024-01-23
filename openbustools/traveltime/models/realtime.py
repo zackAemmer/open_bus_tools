@@ -16,9 +16,8 @@ class GridFeedForward(nn.Module):
             nn.ReLU()
         )
     def forward(self, x):
-        # N x C x L (norm over n grid samples and over sequence length)
-        out = x.view(x.shape[0], x.shape[1]*x.shape[2], x.shape[3])
-        out = self.norm(out)
+        # N x C x L (norm channels over batch size and sequence length)
+        out = self.norm(x)
         out = torch.swapaxes(out, 1, 2)
         out = self.linear_relu_stack_grid(out)
         out = torch.swapaxes(out, 0, 1)

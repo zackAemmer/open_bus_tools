@@ -66,12 +66,12 @@ def combine_static_stops(stop_times, stops, epsg):
     Combines stop_times and stops dataframes to create a GeoDataFrame with static stop information.
 
     Args:
-    - stop_times (DataFrame): DataFrame containing stop times information.
-    - stops (DataFrame): DataFrame containing stop information.
-    - epsg (int): EPSG code for the desired coordinate reference system.
+        stop_times (DataFrame): DataFrame containing stop times information.
+        stops (DataFrame): DataFrame containing stop information.
+        epsg (int): EPSG code for the desired coordinate reference system.
 
     Returns:
-    - static (GeoDataFrame): GeoDataFrame with combined static stop information.
+        static (GeoDataFrame): GeoDataFrame with combined static stop information.
     """
     # Deal with schedule crossing midnight, get scheduled arrival
     stop_times['t_sch_sec_of_day'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in stop_times['arrival_time'].str.split(":")]

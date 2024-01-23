@@ -32,9 +32,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
-    num_workers=4
-    pin_memory=True
-    accelerator="cpu"
+    # num_workers=4
+    # pin_memory=True
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -45,25 +45,28 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    print("="*30)
-    print(f"TRAINING")
-    print(f"RUN: {args.run_label}")
-    print(f"MODEL: {args.model_type}")
-    print(f"DATA: {args.data_folders}")
-    print(f"START: {args.train_date}")
-    print(f"DAYS: {args.train_n}")
-    print(f"num_workers: {num_workers}")
-    print(f"pin_memory: {pin_memory}")
+    logger.info(f"RUN: {args.run_label}")
+    logger.info(f"MODEL: {args.model_type}")
+    logger.info(f"DATA: {args.data_folders}")
+    logger.info(f"START: {args.train_date}")
+    logger.info(f"DAYS: {args.train_n}")
+    logger.info(f"num_workers: {num_workers}")
+    logger.info(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(2, shuffle=True, random_state=42)
     train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_days = [x.split(".")[0] for x in train_days]
-    train_dataset = data_loader.NumpyDataset(args.data_folders, train_days, holdout_routes=data_loader.HOLDOUT_ROUTES)
+    train_dataset = data_loader.NumpyDataset(
+        args.data_folders,
+        train_days,
+        holdout_routes=data_loader.HOLDOUT_ROUTES,
+        load_in_memory=False,
+        include_grid=True if args.model_type.split("_")[-1]=="REALTIME" else False
+    )
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
         print("="*30)
         print(f"FOLD: {fold_num}")
         model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
-        train_dataset.include_grid = model.include_grid
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
         train_loader = DataLoader(
@@ -85,7 +88,7 @@ if __name__=="__main__":
             pin_memory=pin_memory,
         )
         trainer = pl.Trainer(
-            check_val_every_n_epoch=2,
+            check_val_every_n_epoch=5,
             max_epochs=100,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),

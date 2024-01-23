@@ -174,13 +174,17 @@ def add_static_features(data, static_foldername, epsg):
     if len(data_filtered_static) > 0:
         data = data_filtered_static
         data['stop_id'], data['calc_stop_dist_m'], data['stop_sequence'] = standardfeeds.get_scheduled_arrival(data, static_data)
-        # None of the stop sequences in the data match the values in the static?
         data = data.merge(static_data[['trip_id','stop_id','stop_sequence','arrival_time','t_sch_sec_of_day','stop_lon','stop_lat']], on=['trip_id','stop_id','stop_sequence'], how='left')
         data = data.merge(trips, on='trip_id', how='left')
         data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         # Passed stops
         data['passed_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff().fillna(0)
         # Scheduled time
+        # Handle case where trip in data started the day before collection, giving it scheduled times after midnight but sensed times of same day
+        # If the trip started same day as collection and crossed over midnight, the times will line up
+        # Can't seem to distinguish between these two cases, so assume anything w/scheduled time over 12hrs started day before and subtract 24hrs from schedule
+        data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
+        data.loc[data['sch_time_s'] > 60*60*12, 't_sch_sec_of_day'] = data.loc[data['sch_time_s'] > 60*60*12, 't_sch_sec_of_day'] - 60*60*24
         data['sch_time_s'] = data['t_sch_sec_of_day'] - data['t_sec_of_day_start']
         data['sch_time_s'] = data['sch_time_s'].fillna(0)
     else:

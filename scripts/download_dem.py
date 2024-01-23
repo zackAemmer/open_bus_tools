@@ -66,11 +66,11 @@ if __name__ == "__main__":
         provider_path = Path('data', 'other_feeds', f"{row['uuid']}_spatial")
         provider_path.mkdir(parents=True, exist_ok=True)
         if row['country_code'] == 'US':
-            download_dem("https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m", provider_path, [row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], row['epsg_code'], "usgs10m_dem.tif")
+            download_dem("https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m", provider_path, [row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], "usgs10m_dem.tif")
             spatial.reproject_raster(Path(provider_path, "usgs10m_dem.tif"), Path(provider_path, f"usgs10m_dem_{row['epsg_code']}.tif"), row['epsg_code'])
         elif row['country_code'] in ['FI', 'NO', 'IT', 'ES', 'SE', 'DK', 'DE', 'FR', 'NL', 'BE']:
-            download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", provider_path, [row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], row['epsg_code'], "eudtm30m_dem.tif")
+            download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", provider_path, [row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], "eudtm30m_dem.tif")
             spatial.reproject_raster(Path(provider_path, "eudtm30m_dem.tif"), Path(provider_path, f"eudtm30m_dem_{row['epsg_code']}.tif"), row['epsg_code'])
         else:
-            download_dem("https://portal.opentopography.org/API/globaldem?demtype=AW3D30", provider_path, [row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], row['epsg_code'], "aw3d30m_dem.tif")
+            download_dem("https://portal.opentopography.org/API/globaldem?demtype=AW3D30", provider_path, [row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], "aw3d30m_dem.tif")
             spatial.reproject_raster(Path(provider_path, "aw3d30m_dem.tif"), Path(provider_path, f"aw3d30m_dem_{row['epsg_code']}.tif"), row['epsg_code'])
