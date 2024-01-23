@@ -7,22 +7,79 @@ import shutil
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import pyproj
-import scipy
 import shapely
 from shapely.geometry import LineString
 
 from openbustools import spatial
 
-# Set of unified feature names and dtypes for variables in the GTFS-RT data
-GTFSRT_NAMES = ['trip_id','file','locationtime','lat','lon','vehicle_id']
-GTFSRT_TYPES = ['object','object','int','float','float','object']
-GTFSRT_LOOKUP = dict(zip(GTFSRT_NAMES, GTFSRT_TYPES))
 
 # Set of unified feature names and dtypes for variables in the GTFS data
 GTFS_NAMES = ['trip_id','route_id','stop_id','stop_lat','stop_lon','arrival_time']
-GTFS_TYPES = [str,str,str,float,float,str]
+GTFS_TYPES = ['object','object','object','float','float','object']
 GTFS_LOOKUP = dict(zip(GTFS_NAMES, GTFS_TYPES))
+# Set of unified feature names and dtypes for variables in the GTFS-RT data
+GTFSRT_NAMES = ['trip_id','locationtime','lat','lon','vehicle_id']
+GTFSRT_TYPES = ['object','int','float','float','object']
+GTFSRT_LOOKUP = dict(zip(GTFSRT_NAMES, GTFSRT_TYPES))
+
+
+def load_standard_static(folderpath):
+    """
+    Join a set of GTFS files into a single dataframe. Each row is a trip + arrival time.
+
+    Args:
+        folderpath (str): Path to the folder containing the unzipped static files.
+
+    Returns:
+        tuple: A tuple containing three dataframes - stop_times, stops, and trips.
+    """
+    # Read stop locations, trips/times, and route ids
+    stop_times = pd.read_csv(Path(folderpath, "stop_times.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']].dropna()
+    stops = pd.read_csv(Path(folderpath, "stops.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id').dropna()
+    trips = pd.read_csv(Path(folderpath, "trips.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id']].sort_values(['service_id','route_id','trip_id']).dropna()
+    return (stop_times, stops, trips)
+
+
+def load_standard_realtime(filepath):
+    """
+    Load standard realtime data from a pickle file.
+
+    Args:
+        filepath (str): The path to the pickle file.
+
+    Returns:
+        DataFrame: The loaded real-time data.
+
+    """
+    data = pd.read_pickle(filepath)
+    data = data[GTFSRT_NAMES]
+    data.columns = GTFSRT_LOOKUP.keys()
+    data['locationtime'] = data['locationtime'].astype(float)
+    data = data.astype(GTFSRT_LOOKUP)
+    data['realtime_filename'] = filepath.name
+    data['realtime_foldername'] = str(filepath.parent)
+    return data
+
+
+def combine_static_stops(stop_times, stops, epsg):
+    """
+    Combines stop_times and stops dataframes to create a GeoDataFrame with static stop information.
+
+    Args:
+    - stop_times (DataFrame): DataFrame containing stop times information.
+    - stops (DataFrame): DataFrame containing stop information.
+    - epsg (int): EPSG code for the desired coordinate reference system.
+
+    Returns:
+    - static (GeoDataFrame): GeoDataFrame with combined static stop information.
+    """
+    # Deal with schedule crossing midnight, get scheduled arrival
+    stop_times['t_sch_sec_of_day'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in stop_times['arrival_time'].str.split(":")]
+    stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
+    stop_times['stop_sequence'] = stop_times.groupby('trip_id').cumcount()
+    static = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
+    static = gpd.GeoDataFrame(static, geometry=gpd.points_from_xy(static.stop_lon, static.stop_lat), crs="EPSG:4326").to_crs(f"EPSG:{epsg}")
+    return static
 
 
 def validate_realtime_data(row):
@@ -46,25 +103,6 @@ def validate_realtime_data(row):
         return True
     else:
         return False
-
-
-def get_time_embeddings(timestamps, timezone='America/Los_Angeles'):
-    """
-    Converts a list of timestamps to time embeddings.
-
-    Args:
-        timestamps (list): A list of timestamps in seconds.
-        timezone (str, optional): The timezone to convert the timestamps to. Defaults to 'America/Los_Angeles'.
-
-    Returns:
-        tuple: A tuple containing two arrays - minute_of_day and day_of_week.
-            - minute_of_day: An array representing the minute of the day for each timestamp.
-            - day_of_week: An array representing the day of the week for each timestamp.
-    """
-    local_times = pd.to_datetime(timestamps, unit='s').dt.tz_localize('UTC').dt.tz_convert(timezone)
-    minute_of_day = local_times.dt.hour * 60 + local_times.dt.minute
-    day_of_week = local_times.dt.dayofweek
-    return (minute_of_day.to_numpy(), day_of_week.to_numpy())
 
 
 def get_date_list(start, n_days):
@@ -137,27 +175,6 @@ def get_gtfs_shapes(gtfs_folder, epsg=None, stop_dist_filter=None):
     data = data.groupby(['service_id','route_id','trip_id'], as_index=False)['geometry'].apply(lambda x: LineString(x.tolist()))
     data = gpd.GeoDataFrame(data, geometry='geometry', crs=f"EPSG: {epsg}")
     return data
-
-
-def load_gtfs_files(gtfs_folder):
-    """
-    Join a set of GTFS files into a single dataframe. Each row is a trip + arrival time.
-
-    Args:
-        gtfs_folder (str): Path to the folder containing the GTFS files.
-
-    Returns:
-        tuple: A tuple containing three dataframes - stop_times, stops, and trips.
-    """
-    # Read stop locations, trips/times, and route ids
-    stop_times = pd.read_csv(Path(gtfs_folder, "stop_times.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','stop_id','arrival_time','stop_sequence']].dropna()
-    stops = pd.read_csv(Path(gtfs_folder, "stops.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['stop_id','stop_lon','stop_lat']].sort_values('stop_id').dropna()
-    trips = pd.read_csv(Path(gtfs_folder, "trips.txt"), low_memory=False, dtype=GTFS_LOOKUP)[['trip_id','service_id','route_id']].sort_values(['service_id','route_id','trip_id']).dropna()
-    # Deal with schedule crossing midnight, get scheduled arrival
-    stop_times['t_sch_sec_of_day'] = [int(x[0])*60*60 + int(x[1])*60 + int(x[2]) for x in stop_times['arrival_time'].str.split(":")]
-    stop_times = stop_times.sort_values(['trip_id','t_sch_sec_of_day'])
-    stop_times['stop_sequence'] = stop_times.groupby('trip_id').cumcount()
-    return (stop_times, stops, trips)
 
 
 def extract_operator(old_folder, new_folder, source_col, op_name):

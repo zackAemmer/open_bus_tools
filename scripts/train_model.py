@@ -16,6 +16,13 @@ from openbustools.traveltime import data_loader, model_utils
 
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
+    logger = logging.getLogger('train_model')
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     if torch.cuda.is_available():
         num_workers=4
@@ -25,9 +32,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
-    # num_workers=0
-    # pin_memory=False
-    # accelerator="cpu"
+    num_workers=4
+    pin_memory=True
+    accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
@@ -43,17 +50,19 @@ if __name__=="__main__":
     print(f"RUN: {args.run_label}")
     print(f"MODEL: {args.model_type}")
     print(f"DATA: {args.data_folders}")
+    print(f"START: {args.train_date}")
+    print(f"DAYS: {args.train_n}")
     print(f"num_workers: {num_workers}")
     print(f"pin_memory: {pin_memory}")
 
     k_fold = KFold(2, shuffle=True, random_state=42)
-    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
-    train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
-    train_dataset = data_loader.H5Dataset(train_data)
-    for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
+    train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
+    train_days = [x.split(".")[0] for x in train_days]
+    train_dataset = data_loader.NumpyDataset(args.data_folders, train_days, holdout_routes=data_loader.HOLDOUT_ROUTES)
+    for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
         print("="*30)
         print(f"FOLD: {fold_num}")
-        model = model_utils.make_model(args.model_type, fold_num, train_config, holdout_routes)
+        model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
         train_dataset.include_grid = model.include_grid
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)

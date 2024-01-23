@@ -10,7 +10,16 @@ load_dotenv()
 from openbustools import spatial
 
 
-def download_dem(endpoint, data_folder, grid_bounds, epsg, out_file):
+def download_dem(endpoint, data_folder, grid_bounds, out_file):
+    """
+    Downloads a Digital Elevation Model (DEM) file from OpenTopography.
+
+    Args:
+        endpoint (str): The API endpoint for downloading the DEM.
+        data_folder (str): The folder where the downloaded DEM will be saved.
+        grid_bounds (list): The bounding coordinates of the grid in the format [min_x, min_y, max_x, max_y].
+        out_file (str): The name of the output file.
+    """
     print(f"Getting DEM for {data_folder}{out_file} from {endpoint} at OpenTopography")
     try:
         grid_bounds = pd.DataFrame({'x':[grid_bounds[0], grid_bounds[2]], 'y': [grid_bounds[1], grid_bounds[3]]})
@@ -30,21 +39,26 @@ def download_dem(endpoint, data_folder, grid_bounds, epsg, out_file):
             save_file.write(r.content)
     except:
         print(f"Failure to request data: {r.status_code}")
-    return None
 
 
 if __name__ == "__main__":
-    # # Download KCM
-    # download_dem("https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m", "./data/kcm_spatial/", [369903,37911,409618,87758], 32148, "usgs10m_dem.tif")
-    # spatial.reproject_raster("./data/kcm_spatial/usgs10m_dem.tif", "./data/kcm_spatial/usgs10m_dem_32148.tif", 32148)
+    # Download KCM
+    provider_path = Path('data', 'kcm_spatial')
+    provider_path.mkdir(parents=True, exist_ok=True)
+    download_dem("https://portal.opentopography.org/API/usgsdem?datasetName=USGS10m", provider_path, [-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442], "usgs10m_dem.tif")
+    spatial.reproject_raster(provider_path / "usgs10m_dem.tif", provider_path / "usgs10m_dem_32148.tif", 32148)
 
-    # # Download ATB
-    # download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", "./data/atb_spatial/", [550869,7012847,579944,7039521], 32632, "eudtm30m_dem.tif")
-    # spatial.reproject_raster("./data/atb_spatial/eudtm30m_dem.tif", "./data/atb_spatial/eudtm30m_dem_32632.tif", 32632)
+    # Download ATB
+    provider_path = Path('data', 'atb_spatial')
+    provider_path.mkdir(parents=True, exist_ok=True)
+    download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", provider_path, [10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395], "eudtm30m_dem.tif")
+    spatial.reproject_raster(provider_path / "eudtm30m_dem.tif", provider_path / "eudtm30m_dem_32632.tif", 32632)
 
-    # # Download RUT
-    # download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", "./data/rut_spatial/", [589080,6631314,604705,6648420], 32632, "eudtm30m_dem.tif")
-    # spatial.reproject_raster("./data/rut_spatial/eudtm30m_dem.tif", "./data/rut_spatial/eudtm30m_dem_32632.tif", 32632)
+    # Download RUT
+    provider_path = Path('data', 'rut_spatial')
+    provider_path.mkdir(parents=True, exist_ok=True)
+    download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", provider_path, [10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328], "eudtm30m_dem.tif")
+    spatial.reproject_raster(provider_path / "eudtm30m_dem.tif", provider_path / "eudtm30m_dem_32632.tif", 32632)
 
     # Download Others
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))

@@ -7,14 +7,12 @@ from rasterio.sample import sample_gen
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from scipy.spatial import KDTree
 
-from openbustools.drivecycle import trajectory
-
 
 def resample_to_len(ary, new_len, xp=None):
     """
     Resamples an array to a specified length using linear interpolation.
 
-    Parameters:
+    Args:
         ary (ndarray): The input array to be resampled.
         new_len (int): The desired length of the resampled array.
         xp (ndarray, optional): The x-coordinates of the input array. If not provided, it is assumed to be a linearly spaced array.
@@ -33,7 +31,7 @@ def resample_to_len(ary, new_len, xp=None):
     return res
 
 
-def calculate_gps_metrics(gdf, lon_col, lat_col):
+def calculate_gps_metrics(gdf, lon_col, lat_col, time_col=None):
     """Calculate metrics between consecutive gps locations.
 
     Args:
@@ -44,19 +42,24 @@ def calculate_gps_metrics(gdf, lon_col, lat_col):
     Returns:
         tuple: A tuple containing the distance and forward azimuth between consecutive GPS locations.
     """
-    # The first row of each trip will overlap previous and should be removed
-    gdf_shifted = gdf.shift()
+    # The first row of each trip will overlap previous trip's last row
+    gdf_shifted = gdf.shift(1)
     geodesic = pyproj.Geod(ellps='WGS84')
     # Fwd azimuth is CW deg from N==0, pointed towards the latter point
     f_azm, b_azm, distance = geodesic.inv(gdf_shifted[lon_col], gdf_shifted[lat_col], gdf[lon_col], gdf[lat_col])
-    return distance, f_azm
+    # Can optionally calculate time between points if the points were observed
+    if time_col is not None:
+        time_diff = gdf[time_col] - gdf_shifted[time_col]
+        return distance, f_azm, time_diff
+    else:
+        return distance, f_azm
 
 
 def get_point_distances(points, query_points):
     """
     Calculates the distances between a set of points and a set of query points using a KDTree.
 
-    Parameters:
+    Args:
         points (array-like): The coordinates of the points in the form of a 2D array-like object.
         query_points (array-like): The coordinates of the query points in the form of a 2D array-like object.
 
@@ -109,7 +112,7 @@ def sample_raster(points, dem_file):
     """
     Sample a raster at a set of points, currently used for elevation.
 
-    Parameters:
+    Args:
         points (list): List of (x, y) coordinate tuples representing the points to sample.
         dem_file (str): Filepath of the raster file to sample.
 
@@ -119,56 +122,6 @@ def sample_raster(points, dem_file):
     with rasterio.open(dem_file, "r") as src:
         z = np.array(list(sample_gen(src, points))).flatten()
     return z
-
-
-def shingle(trace_df, min_break, max_break, resample_shingles=False, min_len=None, max_len=None, **kwargs):
-    """
-    Split a dataframe into random even chunks, with random resampled len.
-
-    Parameters:
-        trace_df (DataFrame): The input dataframe to be split into shingles.
-        min_break (int): The minimum number of breaks to be applied to each shingle.
-        max_break (int): The maximum number of breaks to be applied to each shingle.
-        resample_shingles (bool): Whether to resample the shingles to a random length.
-        min_len (int): The minimum length of each shingle.
-        max_len (int): The maximum length of each shingle.
-        **kwargs: Additional keyword arguments.
-
-    Returns:
-        DataFrame: The dataframe with shingle IDs assigned to each row.
-    """
-    # Set initial id based on unique file and trip id
-    shingle_lens = trace_df.groupby(['file','trip_id']).count()['lat'].values
-    shingle_ids = [id.repeat(grouplen) for id, grouplen in zip(np.arange(len(shingle_lens)), shingle_lens)]
-    # Break each shingle into a random number of smaller shingles
-    shingle_n_chunks = np.random.randint(min_break, max_break, len(shingle_ids))
-    shingle_ids = [np.array_split(shingle, n_chunks) for shingle, n_chunks in zip(shingle_ids, shingle_n_chunks)]
-    # Start shingle indexing from 0
-    shingle_id_counter = 0
-    all_shingles = []
-    for i in range(len(shingle_ids)):
-        for j in range(len(shingle_ids[i])):
-            shingle_ids[i][j][:] = shingle_id_counter
-            all_shingles.append(shingle_ids[i][j])
-            shingle_id_counter += 1
-    shingle_ids = np.concatenate(all_shingles)
-    shingled_trace_df = trace_df.copy()
-    shingled_trace_df['shingle_id'] = shingle_ids
-    if resample_shingles:
-        # Now resample each shingle to a random length between min and max
-        sids, sidxs = np.unique(shingled_trace_df['shingle_id'], return_index=True)
-        shingles = np.split(shingled_trace_df[['locationtime','lon','lat']].to_numpy(), sidxs[1:], axis=0)
-        resample_lens = np.random.randint(min_len, max_len, len(shingles))
-        resampled= []
-        for shingle_data, resample_len in zip(shingles, resample_lens):
-            resampled.append(resample_to_len(shingle_data, resample_len))
-        resampled_sids = np.repeat(sids, resample_lens).astype(int)
-        # Can't interpolate categoricals, so rejoin them after resampling
-        cat_lookup = shingled_trace_df[['file','trip_id','shingle_id']].drop_duplicates()
-        shingled_trace_df = pd.DataFrame(np.concatenate(resampled), columns=['locationtime','lon','lat'])
-        shingled_trace_df['shingle_id'] = resampled_sids
-        shingled_trace_df = pd.merge(shingled_trace_df, cat_lookup, on='shingle_id').sort_values(['shingle_id','locationtime'])
-    return shingled_trace_df
 
 
 def divide_fwd_back_fill(arr1, arr2):
@@ -194,7 +147,7 @@ def divide_fwd_back_fill(arr1, arr2):
 
 def create_bounded_gdf(data, lon_col, lat_col, epsg, coord_ref_center, grid_bounds, dem_file):
     """
-    Create a geodataframe matching a grid and network.
+    Create a geodataframe of tracks matching a grid and network.
 
     Args:
         data (pandas.DataFrame): Input data containing lon_col and lat_col columns.
