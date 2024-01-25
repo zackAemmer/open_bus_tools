@@ -1,9 +1,10 @@
 import argparse
+import logging
+from pathlib import Path
 import pickle
 
 import lightning.pytorch as pl
 import numpy as np
-import pandas as pd
 import torch
 from sklearn.model_selection import KFold
 
@@ -14,18 +15,13 @@ from openbustools.traveltime.models import avg_speed
 
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
-
-    if torch.cuda.is_available():
-        num_workers=4
-        pin_memory=True
-        accelerator="cuda"
-    else:
-        num_workers=0
-        pin_memory=False
-        accelerator="cpu"
-    # num_workers=0
-    # pin_memory=False
-    # accelerator="cpu"
+    logger = logging.getLogger('train_heuristics')
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run_label', required=True)
@@ -34,22 +30,26 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    print("="*30)
-    print(f"TRAINING")
-    print(f"RUN: {args.run_label}")
-    print(f"MODEL: HEURISTICS")
-    print(f"DATA: {args.data_folders}")
+    logger.info(f"RUN: {args.run_label}")
+    logger.info(f"MODEL: HEURISTICS")
+    logger.info(f"DATA: {args.data_folders}")
+    logger.info(f"START: {args.train_date}")
+    logger.info(f"DAYS: {args.train_n}")
 
     k_fold = KFold(2, shuffle=True, random_state=42)
-    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
-    train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, holdout_routes=data_loader.HOLDOUT_ROUTES)
-    train_dataset = data_loader.H5Dataset(train_data)
+    train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
+    train_days = [x.split(".")[0] for x in train_days]
+    train_dataset = data_loader.NumpyDataset(
+        args.data_folders,
+        train_days,
+        holdout_routes=data_loader.HOLDOUT_ROUTES,
+        load_in_memory=False
+    )
 
-    for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(train_dataset.__len__()))):
-        print("="*30)
-        print(f"FOLD: {fold_num}")
-        model = avg_speed.AvgSpeedModel('AVG', train_dataset, idx=train_idx)
-        model.config = train_config
-        model.holdout_routes = holdout_routes
-        pickle.dump(model, open(f"./logs/{args.run_label}/AVG-{fold_num}.pkl", 'wb'))
-    print(f"TRAINING COMPLETE")
+    for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
+        logger.info(f"FOLD: {fold_num}")
+        model = avg_speed.AvgSpeedModel('AVG', train_dataset, train_dataset.config, train_dataset.holdout_routes, idx=train_idx)
+        save_path = Path("logs", f"{args.run_label}", f"AVG-{fold_num}.pkl")
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        pickle.dump(model, open(save_path, 'wb'))
+    logger.info(f"{model.model_name} TRAINING COMPLETE")

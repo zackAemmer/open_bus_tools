@@ -1,6 +1,5 @@
 from functools import reduce
 from pathlib import Path
-import random
 
 import numpy as np
 import torch
@@ -165,7 +164,7 @@ class NumpyDataset(Dataset):
         return sample_data
     def __getitem__(self, index):
         # Load if not in memory, normalize non-embedding columns
-        sample_data = self.find_sample(index)[:]
+        sample_data = self.find_sample(index)[:].astype(np.float32)
         for i, col in enumerate(TRAIN_COLS):
             feat_idx = NUM_FEAT_COLS.index(col)
             sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
@@ -185,7 +184,8 @@ def collate_seq(batch):
     X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
     # Get labels
     Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
-    return ((X_em, X_ct), Y, X_sl)
+    Y_agg = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
+    return ((X_em, X_ct), (Y, Y_agg), X_sl)
 
 
 def collate_seq_static(batch):
@@ -199,7 +199,8 @@ def collate_seq_static(batch):
     X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
     # Get labels
     Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
-    return ((X_em, X_ct), Y, X_sl)
+    Y_agg = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
+    return ((X_em, X_ct), (Y, Y_agg), X_sl)
 
 
 def collate_seq_realtime(batch):
@@ -213,44 +214,53 @@ def collate_seq_realtime(batch):
     X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
     # Get labels
     Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
     # Get grid features in (N x C x L)
     X_gr = padded_batch[:,:,len(NUM_FEAT_COLS):]
     X_gr = torch.swapaxes(X_gr, 0, 1)
     X_gr = torch.swapaxes(X_gr, 1, 2)
-    return ((X_em, X_ct, X_gr), Y, X_sl)
+    return ((X_em, X_ct, X_gr), (Y, Y_agg), X_sl)
 
 
-# def collate_deeptte(batch):
-#     stat_attrs = ['cumul_dist_m', 'cumul_time_s']
-#     info_attrs = ['t_day_of_week', 't_min_of_day']
-#     traj_attrs = GPS_FEATS
-#     attr, traj = {}, {}
-#     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.long)
-#     traj['X_sl'] = X_sl
-#     traj['calc_time_s'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
-#     labels = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
-#     for k in stat_attrs:
-#         attr[k] = torch.tensor([b[k][-1] for b in batch], dtype=torch.float)
-#     for k in info_attrs:
-#         attr[k] = torch.tensor([b[k] for b in batch], dtype=torch.long)
-#     for k in traj_attrs:
-#         traj[k] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[k], dtype=torch.float) for b in batch])
-#     return (attr, traj, labels)
+def collate_deeptte(batch):
+    stat_attrs = ['cumul_dist_m', 'cumul_time_s']
+    info_attrs = ['t_day_of_week', 't_min_of_day']
+    traj_attrs = GPS_FEATS
+    attr, traj = {}, {}
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b, dtype=torch.float) for b in batch])
+    # Get sequence lengths
+    X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
+    traj['X_sl'] = X_sl
+    # Get labels for individual points and full trajectory
+    traj['calc_time_s'] = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    labels = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
+    # Get all continuous and embedding features
+    for k in stat_attrs:
+        attr[k] = torch.tensor([b[-1,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.float)
+    for k in info_attrs:
+        attr[k] = torch.tensor([b[0,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.long)
+    for k in traj_attrs:
+        traj[k] = padded_batch[:,:,[NUM_FEAT_COLS.index(k)]]
+    return (attr, traj, labels)
 
 
-# def collate_deeptte_static(batch):
-#     stat_attrs = ['cumul_dist_m', 'cumul_time_s']
-#     info_attrs = ['t_day_of_week', 't_min_of_day']
-#     traj_attrs = GPS_FEATS+STATIC_FEATS
-#     attr, traj = {}, {}
-#     X_sl = torch.tensor([len(b['calc_time_s']) for b in batch], dtype=torch.long)
-#     traj['X_sl'] = X_sl
-#     traj['calc_time_s'] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b['calc_time_s'], dtype=torch.float) for b in batch])
-#     labels = torch.tensor([b['cumul_time_s_no_norm'][-1] for b in batch], dtype=torch.float)
-#     for k in stat_attrs:
-#         attr[k] = torch.tensor([b[k][-1] for b in batch], dtype=torch.float)
-#     for k in info_attrs:
-#         attr[k] = torch.tensor([b[k] for b in batch], dtype=torch.long)
-#     for k in traj_attrs:
-#         traj[k] = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[k], dtype=torch.float) for b in batch])
-#     return (attr, traj, labels)
+def collate_deeptte_static(batch):
+    stat_attrs = ['cumul_dist_m', 'cumul_time_s']
+    info_attrs = ['t_day_of_week', 't_min_of_day']
+    traj_attrs = GPS_FEATS+STATIC_FEATS
+    attr, traj = {}, {}
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b, dtype=torch.float) for b in batch])
+    # Get sequence lengths
+    X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
+    traj['X_sl'] = X_sl
+    # Get labels for individual points and full trajectory
+    traj['calc_time_s'] = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    labels = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
+    # Get all continuous and embedding features
+    for k in stat_attrs:
+        attr[k] = torch.tensor([b[-1,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.float)
+    for k in info_attrs:
+        attr[k] = torch.tensor([b[0,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.long)
+    for k in traj_attrs:
+        traj[k] = padded_batch[:,:,[NUM_FEAT_COLS.index(k)]]
+    return (attr, traj, labels)

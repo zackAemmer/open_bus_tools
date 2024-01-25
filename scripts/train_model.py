@@ -32,8 +32,8 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
-    # num_workers=4
-    # pin_memory=True
+    # num_workers=0
+    # pin_memory=False
     # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
@@ -64,8 +64,7 @@ if __name__=="__main__":
         include_grid=True if args.model_type.split("_")[-1]=="REALTIME" else False
     )
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
-        print("="*30)
-        print(f"FOLD: {fold_num}")
+        logger.info(f"FOLD: {fold_num}")
         model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
@@ -98,4 +97,4 @@ if __name__=="__main__":
             # limit_val_batches=2,
         )
         trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-    print(f"TRAINING COMPLETE")
+    logger.info(f"{model.model_name} TRAINING COMPLETE")

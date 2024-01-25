@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import lightning.pytorch as pl
 
 from openbustools.traveltime import model_utils, data_loader
-from openbustools.traveltime.models.deeptte import Attr, SpatioTemporal, deeptte_utils
+from openbustools.traveltime.models.deeptte import Attr, SpatioTemporal
 
 
 class EntireEstimator(nn.Module):
@@ -46,7 +46,7 @@ class LocalEstimator(nn.Module):
         out = self.feature_extract(hidden)
         return out
     def eval_on_batch(self, pred, label):
-        loss_fn = nn.HuberLoss()
+        loss_fn = nn.MSELoss()
         loss = loss_fn(label, pred)
         return loss
 
@@ -55,7 +55,6 @@ class Net(pl.LightningModule):
     def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, kernel_size=3, num_filter=32, pooling_method='attention', num_final_fcs=3, final_fc_size=128, alpha=0.3):
         super(Net, self).__init__()
         self.save_hyperparameters()
-        # Training configurations
         self.model_name = model_name
         self.config = config
         self.holdout_routes = holdout_routes
@@ -95,9 +94,7 @@ class Net(pl.LightningModule):
         else:
             return entire_out
     def training_step(self, batch):
-        attr = batch[0]
-        traj = batch[1]
-        labels = batch[2]
+        attr, traj, labels = batch
         # Estimates for full trajectory and individual points
         entire_out, (local_out, local_length) = self(attr, traj)
         _, entire_loss = self.entire_estimate.eval_on_batch(entire_out.squeeze(), attr['cumul_time_s'])
@@ -114,12 +111,11 @@ class Net(pl.LightningModule):
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
     def validation_step(self, batch):
-        attr = batch[0]
-        traj = batch[1]
-        labels = batch[2]
+        attr, traj, labels = batch
         entire_out = self(attr, traj).squeeze()
         pred_dict, entire_loss = self.entire_estimate.eval_on_batch(entire_out, attr['cumul_time_s'])
         self.log_dict(
@@ -131,9 +127,7 @@ class Net(pl.LightningModule):
         )
         return entire_loss
     def predict_step(self, batch):
-        attr = batch[0]
-        traj = batch[1]
-        labels = batch[2]
+        attr, traj, labels = batch
         entire_out = self(attr, traj).squeeze()
         pred_dict, entire_loss = self.entire_estimate.eval_on_batch(entire_out, attr['cumul_time_s'])
         return {'preds': data_loader.denormalize(pred_dict['pred'], self.config['cumul_time_s']), 'labels': labels}
