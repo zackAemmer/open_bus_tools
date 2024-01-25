@@ -136,7 +136,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 90),
+        dates=standardfeeds.get_date_list("2023_03_15", 100),
         static_folder=Path("data/kcm_gtfs"),
         realtime_folder=Path("data/kcm_realtime"),
         dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
@@ -149,7 +149,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 90),
+        dates=standardfeeds.get_date_list("2023_03_15", 100),
         static_folder=Path("data/atb_gtfs"),
         realtime_folder=Path("data/atb_realtime"),
         dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),
@@ -162,7 +162,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 90),
+        dates=standardfeeds.get_date_list("2023_03_15", 100),
         static_folder=Path("data/rut_gtfs"),
         realtime_folder=Path("data/rut_realtime"),
         dem_file=Path("data/rut_spatial/eudtm30m_dem_32632.tif"),

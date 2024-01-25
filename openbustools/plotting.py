@@ -76,14 +76,14 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
 
 def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
     """Plot distributions of labels and key features."""
-    data_folder_list = list(pd.unique(plot_df['data_folder']))
+    data_folder_list = list(pd.unique(plot_df['realtime_foldername']))
     fig, axes = plt.subplots(3,2)
     axes = axes.flatten()
     [ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f')) for ax in axes]
     fig.set_figheight(HEIGHT)
     fig.set_figwidth(WIDTH)
     for i, data_folder in enumerate(data_folder_list):
-        plot_df_folder = plot_df[plot_df['data_folder']==data_folder]
+        plot_df_folder = plot_df[plot_df['realtime_foldername']==data_folder]
         sample_groups = plot_df_folder.groupby('shingle_id')
         metric = sample_groups.count()['locationtime']
         sns.histplot(metric, ax=axes[0], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
