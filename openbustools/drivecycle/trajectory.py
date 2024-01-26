@@ -5,7 +5,7 @@ import lightning.pytorch as pl
 import scipy
 from torch.utils.data import DataLoader
 
-from openbustools import spatial
+from openbustools import spatial, trackcleaning
 from openbustools.traveltime import data_loader
 
 
@@ -61,7 +61,6 @@ class Trajectory():
             self.pred_time_s = np.diff(self.point_attr['cumul_time_s'], prepend=0)
         else:
             self.pred_time_s = np.nan(self.traj_len)
-
     def update_predicted_time(self, model):
         """
         Update the predicted time of the trajectory using a given model.
@@ -69,9 +68,7 @@ class Trajectory():
         Args:
             model: The model used for prediction.
         """
-        samples = self.to_torch()
-        data_loader.normalize_samples(samples, model.config)
-        dataset = data_loader.H5Dataset(samples)
+        dataset = data_loader.trajectoryDataset(self, config=model.config)
         if model.is_nn:
             loader = DataLoader(
                 dataset,
@@ -92,29 +89,16 @@ class Trajectory():
             )
             preds_and_labels = trainer.predict(model=model, dataloaders=loader)
         else:
-            preds_and_labels = model.predict(dataset, 'h')
+            preds_and_labels = model.predict(dataset)
+        # Only 1 element since there is one predicted trajectory
         preds = [x['preds_raw'].flatten() for x in preds_and_labels][0]
+        # The first point is NA travel time since it is the start of the trajectory
         preds[0] = 0
+        # Store times in the dataframe
         self.pred_time_s = preds
+        self.gdf['pred_time_s'] = preds
+        self.pred_cumul_time_s = np.cumsum(preds)
         self.gdf['cumul_time_s'] = np.cumsum(preds)
-
-    def to_torch(self):
-        """
-        Convert the trajectory to format expected for model prediction.
-
-        Returns:
-            dict: A dictionary with ordered features in arrays.
-        """
-        gdf = self.gdf.copy()
-        gdf['t_min_of_day'] = self.traj_attr['t_min_of_day']
-        gdf['t_day_of_week'] = self.traj_attr['t_day_of_week']
-        # Fill modeling features with -1 if not added to trajectory gdf
-        for col in data_loader.NUM_FEAT_COLS:
-            if col not in gdf.columns:
-                gdf[col] = -1
-        feats_n = gdf[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
-        return {0: {'feats_n': feats_n}}
-
     def measured_to_drivecycle(self):
         """
         Convert the trajectory to a DriveCycle object.
@@ -132,7 +116,6 @@ class Trajectory():
         theta = spatial.divide_fwd_back_fill(np.diff(elev, prepend=0), distance)
         cycle = DriveCycle(speed, accel, theta, time, distance)
         return cycle
-
     def gps_to_drivecycle(self):
         """
         Convert the trajectory to a DriveCycle object.
@@ -171,7 +154,6 @@ class DriveCycle():
         self.theta = theta
         self.time = time
         self.distance = distance
-
     def to_df(self):
         """Converts the MomentaryDriveCycle object to a pandas DataFrame.
         

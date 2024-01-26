@@ -1,9 +1,10 @@
-from functools import reduce
 from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
+from openbustools import trackcleaning
 
 
 # Feature columns used at various points in training and testing
@@ -63,11 +64,88 @@ def denormalize(x, config_entry):
 
 
 def create_config(samples):
+    """
+    Create a configuration dictionary of feature mean and std based on the given samples.
+
+    Args:
+        samples (numpy.ndarray): The input samples to calculate from.
+
+    Returns:
+        dict: The configuration dictionary with statistics for each feature column.
+    """
     config = {}
     config['sample_count'] = samples.shape[0]
     for i, col in enumerate(NUM_FEAT_COLS):
         config[col] = (np.mean(samples[:,i]), np.std(samples[:,i]))
     return config
+
+
+class trajectoryDataset(Dataset):
+    """
+    A dataset class for handling trajectory inference.
+
+    Args:
+        traj (Trajectory): The trajectory object containing the track to infer.
+        config (dict): Configuration settings for the dataset.
+
+    Attributes:
+        sample_lookup (dict): A dictionary mapping sample indices to data.
+        config (dict): Configuration settings for the dataset.
+
+    Methods:
+        find_sample(index): Returns the sample data for the given index.
+        __getitem__(index): Returns the normalized sample data for the given index.
+        __len__(): Returns the number of samples in the dataset.
+    """
+    def __init__(self, traj, config):
+        gdf = traj.gdf.copy()
+        gdf['t_min_of_day'] = traj.traj_attr['t_min_of_day']
+        gdf['t_day_of_week'] = traj.traj_attr['t_day_of_week']
+        # Fill modeling features with -1 if not added to trajectory gdf
+        gdf['shingle_id'] = -1
+        gdf['route_id'] = -1
+        for col in NUM_FEAT_COLS:
+            if col not in gdf.columns:
+                gdf[col] = -1
+        _, data_n, _ = trackcleaning.extract_training_features(gdf)
+        self.sample_lookup = {0: data_n}
+        self.config = config
+    def find_sample(self, index):
+        """
+        Returns the sample data for the given index.
+
+        Args:
+            index (int): The index of the sample.
+
+        Returns:
+            ndarray: The sample data.
+        """
+        return self.sample_lookup[index]
+    def __getitem__(self, index):
+        """
+        Returns the normalized sample data for the given index.
+
+        Args:
+            index (int): The index of the sample.
+
+        Returns:
+            ndarray: The normalized sample data.
+        """
+        # Load if not in memory, normalize non-embedding columns
+        sample_data = self.find_sample(index)[:].astype(np.float32)
+        for i, col in enumerate(TRAIN_COLS):
+            feat_idx = NUM_FEAT_COLS.index(col)
+            sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
+        return sample_data
+
+    def __len__(self):
+        """
+        Returns the number of samples in the dataset.
+
+        Returns:
+            int: The number of samples.
+        """
+        return len(self.sample_lookup.keys())
 
 
 class NumpyDataset(Dataset):
@@ -153,6 +231,15 @@ class NumpyDataset(Dataset):
             config_samples = np.concatenate([self.find_sample(i) for i in random_indices])
             self.config = create_config(config_samples)
     def find_sample(self, index):
+        """
+        Returns the sample data for the given index.
+
+        Args:
+            index (int): The index of the sample.
+
+        Returns:
+            ndarray: The sample data.
+        """
         # Lookup rows for sample from array or open file
         day_folder, shingle_start, shingle_length = self.sample_lookup[index]
         sample_data = self.open_data_n_files[day_folder][shingle_start:shingle_start+shingle_length,:]
@@ -163,6 +250,15 @@ class NumpyDataset(Dataset):
             sample_data = np.concatenate([sample_data, grid_data], axis=1)
         return sample_data
     def __getitem__(self, index):
+        """
+        Returns the normalized sample data for the given index.
+
+        Args:
+            index (int): The index of the sample.
+
+        Returns:
+            ndarray: The normalized sample data.
+        """
         # Load if not in memory, normalize non-embedding columns
         sample_data = self.find_sample(index)[:].astype(np.float32)
         for i, col in enumerate(TRAIN_COLS):
@@ -170,6 +266,12 @@ class NumpyDataset(Dataset):
             sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
         return sample_data
     def __len__(self):
+        """
+        Returns the number of samples in the dataset.
+
+        Returns:
+            int: The number of samples.
+        """
         return len(self.sample_lookup.keys())
 
 

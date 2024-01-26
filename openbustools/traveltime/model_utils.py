@@ -147,8 +147,8 @@ def load_results(res_folder):
     all_res['model_archetype'] = all_res['model'].str.split('_').str[0]
     all_res['is_tuned'] = False
     all_res.loc[all_res['model'].str.split('_').str[-1]=='TUNED', 'is_tuned'] = True
-    all_res['plot_order_model'] = all_res['model'].apply(lambda x: model_order.index(x))
-    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: experiment_order.index(x))
+    all_res['plot_order_model'] = all_res['model'].apply(lambda x: MODEL_ORDER.index(x))
+    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: EXPERIMENT_ORDER.index(x))
     all_res = all_res.sort_values(['plot_order_model','plot_order_experiment'])
     return (all_res, all_out)
 
