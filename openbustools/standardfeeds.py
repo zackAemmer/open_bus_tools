@@ -151,8 +151,7 @@ def get_gtfs_shapes(gtfs_folder, epsg=None, stop_dist_filter=None):
     Returns:
         data (GeoDataFrame): A GeoDataFrame containing the unique shapes created from the GTFS files.
     """
-    stops = pd.read_csv(f"{gtfs_folder}stops.txt", low_memory=False, dtype=GTFS_LOOKUP)
-    stop_times = pd.read_csv(f"{gtfs_folder}stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
+    stop_times, stops, trips = load_standard_static(gtfs_folder)
     data = stop_times.merge(stops, on='stop_id').sort_values(['trip_id','stop_sequence'])
     data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.stop_lon, data.stop_lat), crs="EPSG:4326").to_crs(f"EPSG: {epsg}")
     if stop_dist_filter:

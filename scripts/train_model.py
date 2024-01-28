@@ -61,10 +61,10 @@ if __name__=="__main__":
         train_days,
         holdout_routes=data_loader.HOLDOUT_ROUTES,
         load_in_memory=False,
-        include_grid=True if args.model_type.split("_")[-1]=="REALTIME" else False
+        include_grid=True if "REALTIME" in args.model_type.split("_") else False
     )
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
-        logger.info(f"FOLD: {fold_num}")
+        logger.info(f"MODEL: {args.model_type}, FOLD: {fold_num}")
         model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes)
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)

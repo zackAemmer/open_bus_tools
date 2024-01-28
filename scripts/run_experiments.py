@@ -58,17 +58,18 @@ if __name__=="__main__":
     test_days = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     test_days = [x.split(".")[0] for x in test_days]
     for fold_num in range(n_folds):
-        logger.info(f"FOLD: {fold_num}")
+        logger.info(f"MODEL {args.model_type}, FOLD: {fold_num}")
         model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
         res[fold_num] = {}
+
         logger.info(f"EXPERIMENT: SAME CITY")
         test_dataset = data_loader.NumpyDataset(
             args.train_data_folders,
             test_days,
             holdout_routes=model.holdout_routes,
             load_in_memory=False,
-            include_grid=True if args.model_type.split("_")[-1]=="REALTIME" else False,
-            config = model.config
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config
         )
         test_loader = DataLoader(
             test_dataset,
@@ -84,6 +85,7 @@ if __name__=="__main__":
             logger=False,
             inference_mode=True
         )
+        model.label_config = test_dataset.label_config
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
@@ -95,8 +97,8 @@ if __name__=="__main__":
             test_days,
             holdout_routes=model.holdout_routes,
             load_in_memory=False,
-            include_grid=True if args.model_type.split("_")[-1]=="REALTIME" else False,
-            config = model.config
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config
         )
         test_loader = DataLoader(
             test_dataset,
@@ -123,9 +125,9 @@ if __name__=="__main__":
             test_days,
             holdout_routes=model.holdout_routes,
             load_in_memory=False,
-            include_grid=True if args.model_type.split("_")[-1]=="REALTIME" else False,
-            config = model.config,
-            only_holdout=True
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config,
+            only_holdouts=True
         )
         test_loader = DataLoader(
             test_dataset,

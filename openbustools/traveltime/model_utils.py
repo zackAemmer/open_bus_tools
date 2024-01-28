@@ -93,7 +93,7 @@ def fill_tensor_mask(mask, x_sl, drop_first=True):
 
 def basic_train_step(model, batch):
     _x, _y, seq_lens = batch
-    labels, labels_agg = _y
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
     out_agg = model.forward(_x, seq_lens)
     loss = model.loss_fn(out_agg, labels_agg)
     return loss
@@ -101,16 +101,15 @@ def basic_train_step(model, batch):
 
 def basic_pred_step(model, batch):
     _x, _y, seq_lens = batch
-    labels, labels_agg = _y
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
     out_agg = model.forward(_x, seq_lens)
     out_agg = data_loader.denormalize(out_agg, model.config['cumul_time_s'])
-    labels_agg = data_loader.denormalize(labels_agg, model.config['cumul_time_s'])
-    return {'preds': out_agg.detach().cpu().numpy(), 'labels': labels_agg.detach().cpu().numpy()}
+    return {'preds': out_agg.detach().cpu().numpy(), 'labels': labels_agg_raw.detach().cpu().numpy()}
 
 
 def seq_train_step(model, batch):
     _x, _y, seq_lens = batch
-    labels, labels_agg = _y
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
     out = model.forward(_x)
     # Masked loss; init mask here since module knows device
     mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=model.device)
@@ -123,15 +122,13 @@ def seq_train_step(model, batch):
 
 def seq_pred_step(model, batch):
     _x, _y, seq_lens = batch
-    labels, labels_agg = _y
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
     out = model.forward(_x)
     mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=model.device)
     mask = fill_tensor_mask(mask, seq_lens)
     out = data_loader.denormalize(out, model.config['calc_time_s'])
     out_agg = aggregate_tts(out, mask)
-    labels = data_loader.denormalize(labels, model.config['calc_time_s'])
-    labels_agg = aggregate_tts(labels, mask)
-    return {'preds': out_agg.detach().cpu().numpy(), 'labels': labels_agg.detach().cpu().numpy(), 'preds_raw': out.detach().cpu().numpy(), 'labels_raw': labels.detach().cpu().numpy(), 'mask': mask.detach().cpu().numpy()}
+    return {'preds': out_agg.detach().cpu().numpy(), 'labels': labels_agg_raw.detach().cpu().numpy(), 'preds_seq': out.detach().cpu().numpy(), 'labels_seq': labels_raw.detach().cpu().numpy(), 'mask': mask.detach().cpu().numpy()}
 
 
 def load_results(res_folder):

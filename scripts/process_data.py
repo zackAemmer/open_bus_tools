@@ -40,7 +40,6 @@ def process_data(**kwargs):
             continue
 
         # Project to local coordinate system, apply bounding box, center coords
-        #TODO: Speed up?
         data = spatial.create_bounded_gdf(data, 'lon', 'lat', kwargs['epsg'], kwargs['coord_ref_center'], kwargs['grid_bounds'], kwargs['dem_file'])
         logger.debug(f"Created bounded gdf: {len(data):_} points")
         if len(data) == 0:

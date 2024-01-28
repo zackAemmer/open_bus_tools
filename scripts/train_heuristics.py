@@ -5,7 +5,6 @@ import pickle
 
 import lightning.pytorch as pl
 import numpy as np
-import torch
 from sklearn.model_selection import KFold
 
 from openbustools import standardfeeds
@@ -45,10 +44,15 @@ if __name__=="__main__":
         holdout_routes=data_loader.HOLDOUT_ROUTES,
         load_in_memory=False
     )
-
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
-        logger.info(f"FOLD: {fold_num}")
-        model = avg_speed.AvgSpeedModel('AVG', train_dataset, train_dataset.config, train_dataset.holdout_routes, idx=train_idx)
+        logger.info(f"MODEL: HEURISTICS, FOLD: {fold_num}")
+        model = avg_speed.AvgSpeedModel(
+            'AVG',
+            train_dataset,
+            idx=train_idx,
+            config=train_dataset.config,
+            holdout_routes=train_dataset.holdout_routes
+        )
         save_path = Path("logs", f"{args.run_label}", f"AVG-{fold_num}.pkl")
         save_path.parent.mkdir(parents=True, exist_ok=True)
         pickle.dump(model, open(save_path, 'wb'))

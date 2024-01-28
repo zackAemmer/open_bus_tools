@@ -68,7 +68,7 @@ class Trajectory():
         Args:
             model: The model used for prediction.
         """
-        dataset = data_loader.trajectoryDataset(self, config=model.config)
+        dataset = data_loader.trajectoryDataset(self, feat_config=model.config)
         if model.is_nn:
             loader = DataLoader(
                 dataset,

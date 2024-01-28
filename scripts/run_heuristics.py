@@ -4,12 +4,11 @@ from pathlib import Path
 import pickle
 
 import lightning.pytorch as pl
-import numpy as np
 import torch
 
 from openbustools import standardfeeds
 from openbustools.traveltime import data_loader
-from openbustools.traveltime.models import avg_speed, persistent, schedule
+from openbustools.traveltime.models import persistent, schedule
 
 
 if __name__=="__main__":
@@ -57,7 +56,7 @@ if __name__=="__main__":
     test_days = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     test_days = [x.split(".")[0] for x in test_days]
     for fold_num in range(n_folds):
-        logger.info(f"FOLD: {fold_num}")
+        logger.info(f"MODEL: HEURISTICS, FOLD: {fold_num}")
         for mname in res.keys():
             res[mname][fold_num] = {}
         mpath = Path(f"{args.model_folder}{args.run_label}", f"AVG-{fold_num}.pkl")
@@ -71,7 +70,7 @@ if __name__=="__main__":
             test_days,
             holdout_routes=avg_model.holdout_routes,
             load_in_memory=False,
-            config = avg_model.config
+            config=avg_model.config
         )
         preds_and_labels = avg_model.predict(test_dataset)
         res['AVG'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
@@ -86,7 +85,7 @@ if __name__=="__main__":
             test_days,
             holdout_routes=avg_model.holdout_routes,
             load_in_memory=False,
-            config = avg_model.config
+            config=avg_model.config
         )
         preds_and_labels = avg_model.predict(test_dataset)
         res['AVG'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
@@ -101,7 +100,7 @@ if __name__=="__main__":
             test_days,
             holdout_routes=avg_model.holdout_routes,
             load_in_memory=False,
-            config = avg_model.config,
+            config=avg_model.config,
             only_holdouts=True
         )
         preds_and_labels = avg_model.predict(test_dataset)
