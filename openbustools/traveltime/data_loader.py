@@ -137,6 +137,8 @@ class trajectoryDataset(Dataset):
         for i, col in enumerate(TRAIN_COLS):
             feat_idx = NUM_FEAT_COLS.index(col)
             sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
+        # Assert no full-trip travel time labels are 0
+        assert np.min(sample_data_raw[1:,NUM_FEAT_COLS.index('cumul_time_s')]) > 0
         return (sample_data, sample_data_raw)
     def __len__(self):
         """
@@ -351,19 +353,25 @@ def collate_deeptte(batch):
     info_attrs = ['t_day_of_week', 't_min_of_day']
     traj_attrs = GPS_FEATS
     attr, traj = {}, {}
-    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b, dtype=torch.float) for b in batch])
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[0], dtype=torch.float) for b in batch])
+    padded_batch_raw = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[1], dtype=torch.float) for b in batch])
     # Get sequence lengths
-    X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
+    X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
     X_sl_idx = X_sl.unsqueeze(1).long() - 1
     traj['X_sl'] = X_sl
+    # Get normalized labels
+    Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    # Get plain labels
+    Y_raw = padded_batch_raw[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg_raw = torch.gather(torch.swapaxes(padded_batch_raw[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
     # Get labels for individual points and full trajectory
-    traj['calc_time_s'] = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
-    labels = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
+    traj['calc_time_s'] = Y
+    labels = Y_agg_raw
     # Get all continuous and embedding features
     for k in stat_attrs:
-        attr[k] = torch.tensor([b[-1,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.float)
+        attr[k] = torch.tensor([b[0][-1,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.float)
     for k in info_attrs:
-        attr[k] = torch.tensor([b[0,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.long)
+        attr[k] = torch.tensor([b[0][0,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.long)
     for k in traj_attrs:
         traj[k] = padded_batch[:,:,[NUM_FEAT_COLS.index(k)]]
     return (attr, traj, labels)
@@ -374,19 +382,25 @@ def collate_deeptte_static(batch):
     info_attrs = ['t_day_of_week', 't_min_of_day']
     traj_attrs = GPS_FEATS+STATIC_FEATS
     attr, traj = {}, {}
-    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b, dtype=torch.float) for b in batch])
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[0], dtype=torch.float) for b in batch])
+    padded_batch_raw = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[1], dtype=torch.float) for b in batch])
     # Get sequence lengths
-    X_sl = torch.tensor([len(b) for b in batch], dtype=torch.int)
+    X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
     X_sl_idx = X_sl.unsqueeze(1).long() - 1
     traj['X_sl'] = X_sl
+    # Get normalized labels
+    Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    # Get plain labels
+    Y_raw = padded_batch_raw[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg_raw = torch.gather(torch.swapaxes(padded_batch_raw[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
     # Get labels for individual points and full trajectory
-    traj['calc_time_s'] = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
-    labels = torch.tensor([b[-1,NUM_FEAT_COLS.index('cumul_time_s')] for b in batch], dtype=torch.float)
+    traj['calc_time_s'] = Y
+    labels = Y_agg_raw
     # Get all continuous and embedding features
     for k in stat_attrs:
-        attr[k] = torch.tensor([b[-1,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.float)
+        attr[k] = torch.tensor([b[0][-1,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.float)
     for k in info_attrs:
-        attr[k] = torch.tensor([b[0,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.long)
+        attr[k] = torch.tensor([b[0][0,NUM_FEAT_COLS.index(k)] for b in batch], dtype=torch.long)
     for k in traj_attrs:
         traj[k] = padded_batch[:,:,[NUM_FEAT_COLS.index(k)]]
     return (attr, traj, labels)

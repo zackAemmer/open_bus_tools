@@ -28,7 +28,7 @@ class EntireEstimator(nn.Module):
         out = self.feature_extract(hidden)
         return out
     def eval_on_batch(self, pred, label):
-        loss_fn = nn.HuberLoss()
+        loss_fn = nn.MSELoss()
         loss = loss_fn(label, pred)
         return {'label': label.detach().cpu().numpy(), 'pred': pred.detach().cpu().numpy()}, loss
 
