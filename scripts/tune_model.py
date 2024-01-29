@@ -64,7 +64,7 @@ if __name__=="__main__":
             holdout_routes=model.holdout_routes,
             load_in_memory=False,
             include_grid=True if "REALTIME" in args.model_type.split("_") else False,
-            feat_config=model.config
+            config=model.config
         )
         train_idx = np.random.choice(np.arange(len(train_dataset)), 100)
         train_sampler = SequentialSampler(train_idx)

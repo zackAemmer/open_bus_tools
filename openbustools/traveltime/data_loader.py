@@ -205,10 +205,14 @@ class NumpyDataset(Dataset):
                     is_holdout = holdout_mask[shingle_start_indices]
                     if self.only_holdouts:
                         shingle_start_indices = shingle_start_indices[is_holdout]
+                        shingle_lens = shingle_lens[is_holdout]
                     else:
                         shingle_start_indices = shingle_start_indices[~is_holdout]
+                        shingle_lens = shingle_lens[~is_holdout]
                     # Save start point and len of each sample in its array
                     for (i, j) in zip(shingle_start_indices, shingle_lens):
+                        # Make sure shingle is encapsulated but doesn't overflow
+                        assert (shingle_ids[i:i+j] == shingle_ids[i]).all()
                         # Lookup is (file, start, length)
                         self.sample_lookup[sample_index] = (str(day_folder), i, j)
                         sample_index += 1
@@ -265,6 +269,8 @@ class NumpyDataset(Dataset):
         for i, col in enumerate(TRAIN_COLS):
             feat_idx = NUM_FEAT_COLS.index(col)
             sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
+        # Assert no full-trip travel time labels are 0
+        assert np.min(sample_data_raw[1:,NUM_FEAT_COLS.index('cumul_time_s')]) > 0
         return (sample_data, sample_data_raw)
     def __len__(self):
         """

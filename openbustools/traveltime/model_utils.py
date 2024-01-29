@@ -104,7 +104,9 @@ def basic_pred_step(model, batch):
     labels, labels_agg, labels_raw, labels_agg_raw = _y
     out_agg = model.forward(_x, seq_lens)
     out_agg = data_loader.denormalize(out_agg, model.config['cumul_time_s'])
-    return {'preds': out_agg.detach().cpu().numpy(), 'labels': labels_agg_raw.detach().cpu().numpy()}
+    return {
+        'preds': out_agg.detach().cpu().numpy(),
+        'labels': labels_agg_raw.detach().cpu().numpy()}
 
 
 def seq_train_step(model, batch):
@@ -128,7 +130,12 @@ def seq_pred_step(model, batch):
     mask = fill_tensor_mask(mask, seq_lens)
     out = data_loader.denormalize(out, model.config['calc_time_s'])
     out_agg = aggregate_tts(out, mask)
-    return {'preds': out_agg.detach().cpu().numpy(), 'labels': labels_agg_raw.detach().cpu().numpy(), 'preds_seq': out.detach().cpu().numpy(), 'labels_seq': labels_raw.detach().cpu().numpy(), 'mask': mask.detach().cpu().numpy()}
+    return {
+        'preds': out_agg.detach().cpu().numpy(),
+        'labels': labels_agg_raw.detach().cpu().numpy(),
+        'preds_seq': out.detach().cpu().numpy(),
+        'labels_seq': labels_raw.detach().cpu().numpy(),
+        'mask': mask.detach().cpu().numpy()}
 
 
 def load_results(res_folder):

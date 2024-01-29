@@ -85,7 +85,6 @@ if __name__=="__main__":
             logger=False,
             inference_mode=True
         )
-        model.label_config = test_dataset.label_config
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
