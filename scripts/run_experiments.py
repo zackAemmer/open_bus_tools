@@ -1,4 +1,5 @@
 import argparse
+import logging
 from pathlib import Path
 import pickle
 
@@ -13,6 +14,13 @@ from openbustools.traveltime import data_loader, model_utils
 
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
+    logger = logging.getLogger('run_experiments')
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     if torch.cuda.is_available():
         num_workers=4
@@ -36,28 +44,33 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--test_n', required=True)
     args = parser.parse_args()
 
-    print("="*30)
-    print(f"EXPERIMENTS")
-    print(f"RUN: {args.run_label}")
-    print(f"MODEL: {args.model_type}")
-    print(f"TRAIN CITY DATA: {args.train_data_folders}")
-    print(f"TEST CITY DATA: {args.test_data_folders}")
-    print(f"num_workers: {num_workers}")
-    print(f"pin_memory: {pin_memory}")
+    logger.info(f"RUN: {args.run_label}")
+    logger.info(f"MODEL: {args.model_type}")
+    logger.info(f"TRAIN CITY DATA: {args.train_data_folders}")
+    logger.info(f"TEST CITY DATA: {args.test_data_folders}")
+    logger.info(f"START: {args.test_date}")
+    logger.info(f"DAYS: {args.test_n}")
+    logger.info(f"num_workers: {num_workers}")
+    logger.info(f"pin_memory: {pin_memory}")
 
     res = {}
-    n_folds = 5
-    test_dates = standardfeeds.get_date_list(args.test_date, int(args.test_n))
+    n_folds = 2
+    test_days = standardfeeds.get_date_list(args.test_date, int(args.test_n))
+    test_days = [x.split(".")[0] for x in test_days]
     for fold_num in range(n_folds):
-        print("="*30)
-        print(f"FOLD: {fold_num}")
+        logger.info(f"MODEL {args.model_type}, FOLD: {fold_num}")
         model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
         res[fold_num] = {}
 
-        print(f"EXPERIMENT: SAME CITY")
-        test_data, holdout_routes, test_config = data_loader.load_h5(args.train_data_folders, test_dates, holdout_routes=model.holdout_routes, config=model.config)
-        test_dataset = data_loader.H5Dataset(test_data)
-        test_dataset.include_grid = model.include_grid
+        logger.info(f"EXPERIMENT: SAME CITY")
+        test_dataset = data_loader.NumpyDataset(
+            args.train_data_folders,
+            test_days,
+            holdout_routes=model.holdout_routes,
+            load_in_memory=False,
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config
+        )
         test_loader = DataLoader(
             test_dataset,
             collate_fn=model.collate_fn,
@@ -77,10 +90,15 @@ if __name__=="__main__":
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
         res[fold_num]['same_city'] = {'preds':preds, 'labels':labels}
 
-        print(f"EXPERIMENT: DIFFERENT CITY")
-        test_data, holdout_routes, test_config = data_loader.load_h5(args.test_data_folders, test_dates, holdout_routes=model.holdout_routes, config=model.config)
-        test_dataset = data_loader.H5Dataset(test_data)
-        test_dataset.include_grid = model.include_grid
+        logger.info(f"EXPERIMENT: DIFFERENT CITY")
+        test_dataset = data_loader.NumpyDataset(
+            args.test_data_folders,
+            test_days,
+            holdout_routes=model.holdout_routes,
+            load_in_memory=False,
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config
+        )
         test_loader = DataLoader(
             test_dataset,
             collate_fn=model.collate_fn,
@@ -100,10 +118,16 @@ if __name__=="__main__":
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
         res[fold_num]['diff_city'] = {'preds':preds, 'labels':labels}
 
-        print(f"EXPERIMENT: HOLDOUT ROUTES")
-        test_data, holdout_routes, test_config = data_loader.load_h5(args.train_data_folders, test_dates, only_holdout=True, holdout_routes=model.holdout_routes, config=model.config)
-        test_dataset = data_loader.H5Dataset(test_data)
-        test_dataset.include_grid = model.include_grid
+        logger.info(f"EXPERIMENT: HOLDOUT ROUTES")
+        test_dataset = data_loader.NumpyDataset(
+            args.train_data_folders,
+            test_days,
+            holdout_routes=model.holdout_routes,
+            load_in_memory=False,
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config,
+            only_holdouts=True
+        )
         test_loader = DataLoader(
             test_dataset,
             collate_fn=model.collate_fn,
@@ -123,7 +147,7 @@ if __name__=="__main__":
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
         res[fold_num]['holdout'] = {'preds':preds, 'labels':labels}
 
-    p = Path('.') / 'results' / args.run_label
+    p = Path("results") / args.run_label
     p.mkdir(parents=True, exist_ok=True)
-    pickle.dump(res, open(f"./results/{args.run_label}/{args.model_type}.pkl", 'wb'))
-    print(f"EXPERIMENTS COMPLETE")
+    pickle.dump(res, open(p / f"{args.model_type}.pkl", 'wb'))
+    logger.info(f"{model.model_name} EXPERIMENTS COMPLETE")

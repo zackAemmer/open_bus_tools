@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 from torch import nn
 import lightning.pytorch as pl
@@ -44,17 +43,9 @@ class GRU(pl.LightningModule):
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
         return out
     def training_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x)
-        # Masked loss; init mask here since module knows device
-        mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=self.device)
-        mask = model_utils.fill_tensor_mask(mask, seq_lens)
-        out = out[mask]
-        labels = y_norm[mask]
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.seq_train_step(self, batch)
         self.log_dict(
-            {'train_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'train_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -62,17 +53,9 @@ class GRU(pl.LightningModule):
         )
         return loss
     def validation_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x)
-        # Masked loss; init mask here since module knows device
-        mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=self.device)
-        mask = model_utils.fill_tensor_mask(mask, seq_lens)
-        out = out[mask]
-        labels = y_norm[mask]
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.seq_train_step(self, batch)
         self.log_dict(
-            {'valid_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'valid_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -80,15 +63,8 @@ class GRU(pl.LightningModule):
         )
         return loss
     def predict_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x)
-        mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=self.device)
-        mask = model_utils.fill_tensor_mask(mask, seq_lens)
-        out = data_loader.denormalize(out, self.config['calc_time_s'])
-        out_agg = model_utils.aggregate_tts(out, mask)
-        y_agg = model_utils.aggregate_tts(y_no_norm, mask)
-        return {'preds': out_agg.detach().cpu().numpy(), 'labels': y_agg.detach().cpu().numpy(), 'preds_raw': out.detach().cpu().numpy(), 'labels_raw': y_no_norm.detach().cpu().numpy(), 'mask': mask.detach().cpu().numpy()}
+        res = model_utils.seq_pred_step(self, batch)
+        return res
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
@@ -138,17 +114,9 @@ class GRURealtime(pl.LightningModule):
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze(2)
         return out
     def training_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x)
-        # Masked loss; init mask here since module knows device
-        mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=self.device)
-        mask = model_utils.fill_tensor_mask(mask, seq_lens)
-        out = out[mask]
-        labels = y_norm[mask]
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.seq_train_step(self, batch)
         self.log_dict(
-            {'train_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'train_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -156,17 +124,9 @@ class GRURealtime(pl.LightningModule):
         )
         return loss
     def validation_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x)
-        # Masked loss; init mask here since module knows device
-        mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=self.device)
-        mask = model_utils.fill_tensor_mask(mask, seq_lens)
-        out = out[mask]
-        labels = y_norm[mask]
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.seq_train_step(self, batch)
         self.log_dict(
-            {'valid_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'valid_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
@@ -174,15 +134,8 @@ class GRURealtime(pl.LightningModule):
         )
         return loss
     def predict_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x)
-        mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=self.device)
-        mask = model_utils.fill_tensor_mask(mask, seq_lens)
-        out = data_loader.denormalize(out, self.config['calc_time_s'])
-        out_agg = model_utils.aggregate_tts(out, mask)
-        y_agg = model_utils.aggregate_tts(y_no_norm, mask)
-        return {'preds': out_agg.detach().cpu().numpy(), 'labels': y_agg.detach().cpu().numpy(), 'preds_raw': out.detach().cpu().numpy(), 'labels_raw': y_no_norm.detach().cpu().numpy(), 'mask': mask.detach().cpu().numpy()}
+        res = model_utils.seq_pred_step(self, batch)
+        return res
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer

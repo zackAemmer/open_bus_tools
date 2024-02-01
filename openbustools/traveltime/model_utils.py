@@ -9,7 +9,8 @@ import torch
 from openbustools.traveltime.models import transformer
 from openbustools.traveltime.models.deeptte import DeepTTE
 from openbustools.traveltime import data_loader
-from openbustools.traveltime.models import avg_speed, conv, ff, persistent, rnn, schedule
+from openbustools.traveltime.models import conv, ff, rnn
+
 
 HYPERPARAM_DICT = {
     'FF': {
@@ -48,10 +49,8 @@ HYPERPARAM_DICT = {
         'batch_size': 512
     }
 }
-
-model_order = [
-    'AVGH',
-    'AVGM',
+MODEL_ORDER = [
+    'AVG',
     'PERT',
     'SCH',
     'FF','FF_TUNED',
@@ -69,7 +68,7 @@ model_order = [
     'DEEPTTE','DEEPTTE_TUNED',
     'DEEPTTE_STATIC','DEEPTTE_STATIC_TUNED',
 ]
-experiment_order = [
+EXPERIMENT_ORDER = [
     'same_city',
     'holdout',
     'diff_city'
@@ -92,6 +91,53 @@ def fill_tensor_mask(mask, x_sl, drop_first=True):
     return mask
 
 
+def basic_train_step(model, batch):
+    _x, _y, seq_lens = batch
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
+    out_agg = model.forward(_x, seq_lens)
+    loss = model.loss_fn(out_agg, labels_agg)
+    return loss
+
+
+def basic_pred_step(model, batch):
+    _x, _y, seq_lens = batch
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
+    out_agg = model.forward(_x, seq_lens)
+    out_agg = data_loader.denormalize(out_agg, model.config['cumul_time_s'])
+    return {
+        'preds': out_agg.detach().cpu().numpy(),
+        'labels': labels_agg_raw.detach().cpu().numpy()}
+
+
+def seq_train_step(model, batch):
+    _x, _y, seq_lens = batch
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
+    out = model.forward(_x)
+    # Masked loss; init mask here since module knows device
+    mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=model.device)
+    mask = fill_tensor_mask(mask, seq_lens)
+    out = out[mask]
+    labels = labels[mask]
+    loss = model.loss_fn(out, labels)
+    return loss
+
+
+def seq_pred_step(model, batch):
+    _x, _y, seq_lens = batch
+    labels, labels_agg, labels_raw, labels_agg_raw = _y
+    out = model.forward(_x)
+    mask = torch.zeros(max(seq_lens), len(seq_lens), dtype=torch.bool, device=model.device)
+    mask = fill_tensor_mask(mask, seq_lens)
+    out = data_loader.denormalize(out, model.config['calc_time_s'])
+    out_agg = aggregate_tts(out, mask)
+    return {
+        'preds': out_agg.detach().cpu().numpy(),
+        'labels': labels_agg_raw.detach().cpu().numpy(),
+        'preds_seq': out.detach().cpu().numpy(),
+        'labels_seq': labels_raw.detach().cpu().numpy(),
+        'mask': mask.detach().cpu().numpy()}
+
+
 def load_results(res_folder):
     all_res = []
     all_out = []
@@ -105,8 +151,8 @@ def load_results(res_folder):
     all_res['model_archetype'] = all_res['model'].str.split('_').str[0]
     all_res['is_tuned'] = False
     all_res.loc[all_res['model'].str.split('_').str[-1]=='TUNED', 'is_tuned'] = True
-    all_res['plot_order_model'] = all_res['model'].apply(lambda x: model_order.index(x))
-    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: experiment_order.index(x))
+    all_res['plot_order_model'] = all_res['model'].apply(lambda x: MODEL_ORDER.index(x))
+    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: EXPERIMENT_ORDER.index(x))
     all_res = all_res.sort_values(['plot_order_model','plot_order_experiment'])
     return (all_res, all_out)
 
@@ -203,7 +249,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=4,
+            input_size=5,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -215,7 +261,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -227,7 +273,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"FF_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -241,7 +287,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"CONV-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=4,
+            input_size=5,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -253,7 +299,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"CONV_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -265,7 +311,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"CONV_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -279,7 +325,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"GRU-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=4,
+            input_size=5,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -291,7 +337,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"GRU_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -303,7 +349,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"GRU_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -317,7 +363,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"TRSF-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=4,
+            input_size=5,
             collate_fn=data_loader.collate_seq,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -329,7 +375,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"TRSF_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -341,7 +387,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"TRSF_REALTIME-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
@@ -355,7 +401,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"DEEPTTE-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=4,
+            input_size=5,
             collate_fn=data_loader.collate_deeptte,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
         )
@@ -364,7 +410,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"DEEPTTE_STATIC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=8,
+            input_size=9,
             collate_fn=data_loader.collate_deeptte_static,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
         )

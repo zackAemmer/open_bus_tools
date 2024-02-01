@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -13,6 +14,13 @@ from openbustools.traveltime import data_loader, model_utils
 
 if __name__=="__main__":
     pl.seed_everything(42, workers=True)
+    logger = logging.getLogger('tune_model')
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     if torch.cuda.is_available():
         num_workers=4
@@ -35,25 +43,30 @@ if __name__=="__main__":
     parser.add_argument('-tn', '--train_n', required=True)
     args = parser.parse_args()
 
-    print("="*30)
-    print(f"TUNING")
-    print(f"RUN: {args.run_label}")
-    print(f"MODEL: {args.model_type}")
-    print(f"DATA: {args.data_folders}")
-    print(f"num_workers: {num_workers}")
-    print(f"pin_memory: {pin_memory}")
+    logger.info(f"RUN: {args.run_label}")
+    logger.info(f"MODEL: {args.model_type}")
+    logger.info(f"DATA: {args.data_folders}")
+    logger.info(f"START: {args.train_date}")
+    logger.info(f"DAYS: {args.train_n}")
+    logger.info(f"num_workers: {num_workers}")
+    logger.info(f"pin_memory: {pin_memory}")
 
-    n_folds = 5
-    train_dates = standardfeeds.get_date_list(args.train_date, int(args.train_n))
+    n_folds = 2
+    train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
+    train_days = [x.split(".")[0] for x in train_days]
     for fold_num in range(n_folds):
-        print("="*30)
-        print(f"FOLD: {fold_num}")
+        logger.info(f"FOLD: {fold_num}")
         model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
         model.model_name = f"{args.model_type}_TUNED-{fold_num}"
-        train_data, holdout_routes, train_config = data_loader.load_h5(args.data_folders, train_dates, config=model.config)
-        train_dataset = data_loader.H5Dataset(train_data)
-        train_idx = np.random.choice(np.arange(train_dataset.__len__()), 100)
-        train_dataset.include_grid = model.include_grid
+        train_dataset = data_loader.NumpyDataset(
+            args.data_folders,
+            train_days,
+            holdout_routes=model.holdout_routes,
+            load_in_memory=False,
+            include_grid=True if "REALTIME" in args.model_type.split("_") else False,
+            config=model.config
+        )
+        train_idx = np.random.choice(np.arange(len(train_dataset)), 100)
         train_sampler = SequentialSampler(train_idx)
         train_loader = DataLoader(
             train_dataset,
@@ -71,4 +84,4 @@ if __name__=="__main__":
             callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=5)],
         )
         trainer.fit(model=model, train_dataloaders=train_loader)
-    print(f"TUNING COMPLETE")
+    logger.info(f"{model.model_name} TUNING COMPLETE")

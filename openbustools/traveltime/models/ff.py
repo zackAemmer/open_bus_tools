@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import lightning.pytorch as pl
 
@@ -46,46 +45,33 @@ class FF(pl.LightningModule):
         out = torch.cat([x_ct, x_min_em, x_day_em], dim=2)
         idxs = seq_lens.unsqueeze(0).unsqueeze(-1).expand(1, out.shape[1], out.shape[2]) - 1
         first = out[0,:,:].squeeze(0)
-        last = torch.gather(out, 0, idxs).squeeze(0)
+        last = torch.gather(out, 0, idxs.long()).squeeze(0)
         out = self.linear_relu_stack(torch.cat([first, last], dim=1))
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
         return out
     def training_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x, seq_lens)
-        idxs = seq_lens.unsqueeze(0) - 1
-        labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.basic_train_step(self, batch)
         self.log_dict(
-            {'train_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'train_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
     def validation_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x, seq_lens)
-        idxs = seq_lens.unsqueeze(0) - 1
-        labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.basic_train_step(self, batch)
         self.log_dict(
-            {'valid_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'valid_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
     def predict_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x, seq_lens)
-        out = data_loader.denormalize(out, self.config['cumul_time_s'])
-        idxs = seq_lens.unsqueeze(0) - 1
-        labels = torch.gather(y_agg_no_norm, 0, idxs).squeeze()
-        return {'preds': out.detach().cpu().numpy(), 'labels': labels.detach().cpu().numpy()}
+        res = model_utils.basic_pred_step(self, batch)
+        return res
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
@@ -137,46 +123,33 @@ class FFRealtime(pl.LightningModule):
         out = torch.cat([x_ct, x_gr, x_min_em, x_day_em], dim=2)
         idxs = seq_lens.unsqueeze(0).unsqueeze(-1).expand(1, out.shape[1], out.shape[2]) - 1
         first = out[0,:,:].squeeze(0)
-        last = torch.gather(out, 0, idxs).squeeze(0)
+        last = torch.gather(out, 0, idxs.long()).squeeze(0)
         out = self.linear_relu_stack(torch.cat([first, last], dim=1))
         out = self.feature_extract(self.feature_extract_activation(out)).squeeze()
         return out
     def training_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x, seq_lens)
-        idxs = seq_lens.unsqueeze(0) - 1
-        labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.basic_train_step(self, batch)
         self.log_dict(
-            {'train_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'train_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
     def validation_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x, seq_lens)
-        idxs = seq_lens.unsqueeze(0) - 1
-        labels = torch.gather(y_agg_norm, 0, idxs).squeeze()
-        loss = self.loss_fn(out, labels)
+        loss = model_utils.basic_train_step(self, batch)
         self.log_dict(
-            {'valid_loss': loss, 'batch_size': torch.tensor(y_agg_norm.shape[1], dtype=torch.float32)},
+            {'valid_loss': loss},
             on_step=False,
             on_epoch=True,
             prog_bar=True,
+            batch_size=self.batch_size
         )
         return loss
     def predict_step(self, batch):
-        x, y, seq_lens = batch
-        y_norm, y_no_norm, y_agg_norm, y_agg_no_norm = y
-        out = self.forward(x, seq_lens)
-        out = data_loader.denormalize(out, self.config['cumul_time_s'])
-        idxs = seq_lens.unsqueeze(0) - 1
-        labels = torch.gather(y_agg_no_norm, 0, idxs).squeeze()
-        return {'preds': out.detach().cpu().numpy(), 'labels': labels.detach().cpu().numpy()}
+        res = model_utils.basic_pred_step(self, batch)
+        return res
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
