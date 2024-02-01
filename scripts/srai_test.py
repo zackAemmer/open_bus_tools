@@ -29,6 +29,10 @@ from openbustools.traveltime import grid
 
 
 def process_data(**kwargs):
+
+    # Want to calculate embeddings in the processing script
+    # Want to download the OSM/GTFS feeds in the webscraper script
+
     logger.debug(f"PROCESSING: {kwargs['network_name']}")
     for day in kwargs['dates']:
         logger.debug(f"DAY: {day}")
@@ -51,7 +55,7 @@ def process_data(**kwargs):
         # Load GTFS features and join to regions
         loader = GTFSLoader()
         gtfs_file = list(Path('data', 'other_feeds', f"{row['uuid']}_static").glob('*.zip'))[0]
-        features = loader.load(gtfs_file, skip_validation=False)
+        features = loader.load(gtfs_file, skip_validation=True)
         joint = joiner.transform(regions, features)
         # Need to name the index in features; possible bug in GTFSLoader?
         features.index.name = 'feature_id'
@@ -94,8 +98,6 @@ if __name__=="__main__":
 
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
-        if i != 2:
-            continue
         if standardfeeds.validate_realtime_data(row):
             logger.debug(f"{row['provider']}")
             process_data(
