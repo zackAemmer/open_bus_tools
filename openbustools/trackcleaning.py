@@ -1,4 +1,5 @@
 import datetime
+import pickle
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -236,3 +237,8 @@ def extract_training_features(data):
     data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
     data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S30')
     return (data_id, data_n, data_c)
+
+
+def add_osm_embeddings(data, dem_file):
+    osm_feats = pickle.load(open(dem_file.parent / "osm_features_hex2vec.pkl", "rb"))
+    return data

@@ -82,6 +82,12 @@ def process_data(**kwargs):
         if len(data) == 0:
             continue
 
+        # # Add GTFS embeddings
+        # data = trackcleaning.add_gtfs_embeddings(data, kwargs['static_folder'] / best_static)
+
+        # Add OSM embeddings
+        data = trackcleaning.add_osm_embeddings(data, kwargs['dem_file'])
+
         # Calculate realtime grid features
         grid_bounds_xy, _ = spatial.project_bounds(kwargs['grid_bounds'], kwargs['coord_ref_center'], kwargs['epsg'])
         data_grid = grid.RealtimeGrid(grid_bounds_xy, 500)
