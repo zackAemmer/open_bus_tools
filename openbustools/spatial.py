@@ -1,3 +1,5 @@
+import pickle
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -6,6 +8,9 @@ import rasterio
 from rasterio.sample import sample_gen
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from scipy.spatial import KDTree
+import shapely
+from srai.neighbourhoods.h3_neighbourhood import H3Neighbourhood
+from srai.regionalizers import H3Regionalizer
 
 
 def resample_to_len(ary, new_len, xp=None):
@@ -193,6 +198,53 @@ def project_bounds(grid_bounds, coord_ref_center, epsg):
     coord_ref_center_gdf = coord_ref_center_gdf.to_crs(f"EPSG:{epsg}")
     coord_ref_center_prj = [int(coord_ref_center_gdf.geometry[0].x), int(coord_ref_center_gdf.geometry[0].y)]
     return (grid_bounds_prj, coord_ref_center_prj)
+
+
+def create_regions(grid_bounds, embeddings_folder):
+    """
+    Create regions based on the given grid bounds and save them to the spatial folder.
+
+    Args:
+        grid_bounds (list): A list of four coordinates representing the bounding box of the grid.
+        spatial_folder (str): The path to the spatial folder where the regions will be saved.
+    """
+    geo = shapely.Polygon((
+        (grid_bounds[0], grid_bounds[1]),
+        (grid_bounds[0], grid_bounds[3]),
+        (grid_bounds[2], grid_bounds[3]),
+        (grid_bounds[2], grid_bounds[1]),
+        (grid_bounds[0], grid_bounds[1])
+    ))
+    # Define area for embeddings, get H3 regions
+    area = gpd.GeoDataFrame({'region_id': [str(embeddings_folder)], 'geometry': [geo]}, crs='epsg:4326')
+    area.set_index('region_id', inplace=True)
+    regionalizer = H3Regionalizer(resolution=8)
+    regions = regionalizer.transform(area)
+    neighbourhood = H3Neighbourhood(regions_gdf=regions)
+    # Save
+    embeddings_folder.mkdir(parents=True, exist_ok=True)
+    area.to_pickle(embeddings_folder / "area.pkl")
+    regions.to_pickle(embeddings_folder / "regions.pkl")
+    with open(embeddings_folder / 'neighbourhood.pkl', 'wb') as f:
+        pickle.dump(neighbourhood, f)
+    return (area, regions, neighbourhood)
+
+
+def load_regions(embeddings_folder):
+    """
+    Load regions from the specified spatial folder.
+
+    Args:
+        spatial_folder (str): The path to the spatial folder where the regions are saved.
+
+    Returns:
+        tuple: A tuple containing the area, regions, and neighbourhood.
+    """
+    area = pd.read_pickle(embeddings_folder / "area.pkl")
+    regions = pd.read_pickle(embeddings_folder / "regions.pkl")
+    with open(embeddings_folder / 'neighbourhood.pkl', 'rb') as f:
+        neighbourhood = pickle.load(f)
+    return (area, regions, neighbourhood)
 
 
 # def poly_locate_line_points(poly_geo, line_geo):

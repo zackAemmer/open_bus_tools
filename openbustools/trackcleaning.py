@@ -233,12 +233,31 @@ def extract_training_features(data):
             data_n (numpy.ndarray): The numerical feature columns of the data as an array of integers.
             data_c (numpy.ndarray): The categorical feature columns of the data as an array of strings.
     """
-    data_id = data['shingle_id'].to_numpy().astype('int32')
-    data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
+    data_id = data[data_loader.SAMPLE_ID].to_numpy().astype('int32')
+    data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('float32')
     data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S30')
     return (data_id, data_n, data_c)
 
 
-def add_osm_embeddings(data, dem_file):
-    osm_feats = pickle.load(open(dem_file.parent / "osm_features_hex2vec.pkl", "rb"))
+def add_hex_regions(data, embeddings_dir, epsg):
+    area, regions, neighbourhood = spatial.load_regions(embeddings_dir)
+    # Spatial join the data to the regions
+    regions = regions.to_crs(f"epsg:{epsg}").reset_index()[['region_id', 'geometry']]
+    data = data.sjoin(regions, how="left", predicate='within').drop(columns=['index_right'])
+    assert(data['region_id'].isna().sum()==0) # Check that all points have a region
     return data
+
+
+def add_osm_embeddings(data, embeddings_dir):
+    embeddings_osm = pd.read_pickle(embeddings_dir / "embeddings_osm.pkl")
+    embeddings_osm.columns = [f"{i}_osm_embed" for i in embeddings_osm.columns]
+    data = pd.merge(data, embeddings_osm, on='region_id', how='left')
+    assert(data['0_osm_embed'].isna().sum()==0) # Check that all regions have embeddings
+    return data
+
+
+# def add_gtfs_embeddings(data, static_folder):
+#     embeddings_gtfs = pd.read_pickle(static_folder / "spatial_embeddings" / "embeddings_gtfs.pkl")
+#     data = data.merge(embeddings_gtfs, on='region_id', how='left')
+#     assert(data) # Check that all regions have embeddings
+#     return data

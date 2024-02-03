@@ -8,6 +8,7 @@ from openbustools import trackcleaning
 
 
 # Feature columns used at various points in training and testing
+SAMPLE_ID = ["shingle_id"]
 LABEL_FEATS = [
     "calc_time_s",
     "cumul_time_s",
@@ -43,12 +44,15 @@ MISC_CON_FEATS = [
 MISC_CAT_FEATS = [
     "route_id",
 ]
+OSM_FEATS = [f"{i}_osm_embed" for i in range(0, 64)]
 HOLDOUT_ROUTES = [
     'ATB:Line:2_87','ATB:Line:2_72','ATB:Line:2_9','ATB:Line:2_5111',
     '102736','102628','102555','100129','102719','100229'
 ]
-TRAIN_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS
-NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+EMBED_FEATS+MISC_CON_FEATS
+# Columns to normalize and include in X_ct
+TRAIN_COLS = LABEL_FEATS+GPS_FEATS+OSM_FEATS+STATIC_FEATS+DEEPTTE_FEATS
+# All columns used for training and testing
+NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+OSM_FEATS+STATIC_FEATS+DEEPTTE_FEATS+EMBED_FEATS+MISC_CON_FEATS
 
 
 def normalize(x, config_entry):
@@ -198,7 +202,7 @@ class NumpyDataset(Dataset):
                 if day_folder.name in self.train_days:
                     data_file = day_folder / f"{day_folder.name}_sid.npy"
                     # Load shingle ids for the day to get start points and lengths
-                    shingle_ids = np.load(data_file)
+                    shingle_ids = np.load(data_file).flatten()
                     shingle_start_indices = np.where(np.diff(shingle_ids, prepend=np.nan))[0]
                     shingle_lens = np.diff(np.append(shingle_start_indices, len(shingle_ids)))
                     # Separate out the holdout routes
@@ -312,6 +316,26 @@ def collate_seq_static(batch):
     X_em = X_em[0,:,:].unsqueeze(0).repeat(X_em.shape[0],1,1).int()
     # Get all continuous training features
     X_ct = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in GPS_FEATS+STATIC_FEATS]]
+    # Get sequence lengths
+    X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
+    X_sl_idx = X_sl.unsqueeze(1).long() - 1
+    # Get normalized labels
+    Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg = torch.gather(torch.swapaxes(padded_batch[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
+    # Get plain labels
+    Y_raw = padded_batch_raw[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg_raw = torch.gather(torch.swapaxes(padded_batch_raw[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
+    return ((X_em, X_ct), (Y, Y_agg, Y_raw, Y_agg_raw), X_sl)
+
+
+def collate_seq_osm(batch):
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[0], dtype=torch.float) for b in batch])
+    padded_batch_raw = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[1], dtype=torch.float) for b in batch])
+    # Get all embedding features; repeat first point through sequence
+    X_em = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in EMBED_FEATS]]
+    X_em = X_em[0,:,:].unsqueeze(0).repeat(X_em.shape[0],1,1).int()
+    # Get all continuous training features
+    X_ct = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in GPS_FEATS+OSM_FEATS]]
     # Get sequence lengths
     X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
     X_sl_idx = X_sl.unsqueeze(1).long() - 1

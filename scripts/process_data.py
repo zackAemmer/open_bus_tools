@@ -82,11 +82,23 @@ def process_data(**kwargs):
         if len(data) == 0:
             continue
 
-        # # Add GTFS embeddings
-        # data = trackcleaning.add_gtfs_embeddings(data, kwargs['static_folder'] / best_static)
+        # Add hex regions
+        data = trackcleaning.add_hex_regions(data, kwargs['dem_file'].parent / "spatial_embeddings", kwargs['epsg'])
+        logger.debug(f"Added hex regions: {len(data):_} points")
+        if len(data) == 0:
+            continue
 
         # Add OSM embeddings
-        data = trackcleaning.add_osm_embeddings(data, kwargs['dem_file'])
+        data = trackcleaning.add_osm_embeddings(data, kwargs['dem_file'].parent / "spatial_embeddings")
+        logger.debug(f"Added osm embeddings: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
+        # # Add GTFS embeddings
+        # data = trackcleaning.add_gtfs_embeddings(data, kwargs['static_folder'] / best_static)
+        # logger.debug(f"Added gtfs embeddings: {len(data):_} points")
+        # if len(data) == 0:
+        #     continue
 
         # Calculate realtime grid features
         grid_bounds_xy, _ = spatial.project_bounds(kwargs['grid_bounds'], kwargs['coord_ref_center'], kwargs['epsg'])
@@ -142,7 +154,7 @@ if __name__=="__main__":
     process_data(
         network_name="kcm",
         dates=standardfeeds.get_date_list("2023_03_15", 100),
-        static_folder=Path("data/kcm_gtfs"),
+        static_folder=Path("data/kcm_static"),
         realtime_folder=Path("data/kcm_realtime"),
         dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
         timezone="America/Los_Angeles",
@@ -152,31 +164,31 @@ if __name__=="__main__":
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
 
-    process_data(
-        network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 100),
-        static_folder=Path("data/atb_gtfs"),
-        realtime_folder=Path("data/atb_realtime"),
-        dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
-        coord_ref_center=[10.392178466426625,63.430852975179626],
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
+    # process_data(
+    #     network_name="atb",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 100),
+    #     static_folder=Path("data/atb_static"),
+    #     realtime_folder=Path("data/atb_realtime"),
+    #     dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
+    #     coord_ref_center=[10.392178466426625,63.430852975179626],
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
 
-    process_data(
-        network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 100),
-        static_folder=Path("data/rut_gtfs"),
-        realtime_folder=Path("data/rut_realtime"),
-        dem_file=Path("data/rut_spatial/eudtm30m_dem_32632.tif"),
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328],
-        coord_ref_center=[10.742169939719487,59.911212837674746],
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
+    # process_data(
+    #     network_name="rut",
+    #     dates=standardfeeds.get_date_list("2023_03_15", 100),
+    #     static_folder=Path("data/rut_static"),
+    #     realtime_folder=Path("data/rut_realtime"),
+    #     dem_file=Path("data/rut_spatial/eudtm30m_dem_32632.tif"),
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328],
+    #     coord_ref_center=[10.742169939719487,59.911212837674746],
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
 
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():

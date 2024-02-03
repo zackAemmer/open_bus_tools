@@ -17,15 +17,15 @@ HYPERPARAM_DICT = {
         'batch_size': 512,
         'hidden_size': 128,
         'num_layers': 2,
-        'dropout_rate': .2,
+        'dropout_rate': .05,
         'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
     'CONV': {
         'batch_size': 512,
         'hidden_size': 64,
-        'num_layers': 3,
-        'dropout_rate': .1,
+        'num_layers': 2,
+        'dropout_rate': .05,
         'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
@@ -39,9 +39,9 @@ HYPERPARAM_DICT = {
     },
     'TRSF': {
         'batch_size': 512,
-        'hidden_size': 128,
-        'num_layers': 4,
-        'dropout_rate': .1,
+        'hidden_size': 64,
+        'num_layers': 2,
+        'dropout_rate': .05,
         'grid_input_size': 3*4,
         'grid_compression_size': 16
     },
@@ -61,6 +61,7 @@ MODEL_ORDER = [
     'CONV_REALTIME','CONV_REALTIME_TUNED',
     'GRU','GRU_TUNED',
     'GRU_STATIC','GRU_STATIC_TUNED',
+    'GRU_OSM', 'GRU_OSM_TUNED',
     'GRU_REALTIME','GRU_REALTIME_TUNED',
     'TRSF','TRSF_TUNED',
     'TRSF_STATIC','TRSF_STATIC_TUNED',
@@ -339,6 +340,18 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
+    elif model_type=="GRU_OSM":
+        model = rnn.GRU(
+            f"GRU_OSM-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_osm,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
