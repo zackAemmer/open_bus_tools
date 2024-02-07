@@ -256,8 +256,9 @@ def add_osm_embeddings(data, embeddings_dir):
     return data
 
 
-# def add_gtfs_embeddings(data, static_folder):
-#     embeddings_gtfs = pd.read_pickle(static_folder / "spatial_embeddings" / "embeddings_gtfs.pkl")
-#     data = data.merge(embeddings_gtfs, on='region_id', how='left')
-#     assert(data) # Check that all regions have embeddings
-#     return data
+def add_gtfs_embeddings(data, embeddings_dir, best_static):
+    embeddings_osm = pd.read_pickle(embeddings_dir / f"embeddings_gtfs_{best_static}.pkl")
+    embeddings_osm.columns = [f"{i}_gtfs_embed" for i in embeddings_osm.columns]
+    data = pd.merge(data, embeddings_osm, on='region_id', how='left')
+    assert(data['0_gtfs_embed'].isna().sum()==0) # Check that all regions have embeddings
+    return data

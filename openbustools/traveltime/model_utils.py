@@ -19,7 +19,8 @@ HYPERPARAM_DICT = {
         'num_layers': 2,
         'dropout_rate': .05,
         'grid_input_size': 3*4,
-        'grid_compression_size': 16
+        'grid_compression_size': 16,
+        'learn_rate': 1e-3
     },
     'CONV': {
         'batch_size': 512,
@@ -27,7 +28,8 @@ HYPERPARAM_DICT = {
         'num_layers': 2,
         'dropout_rate': .05,
         'grid_input_size': 3*4,
-        'grid_compression_size': 16
+        'grid_compression_size': 16,
+        'learn_rate': 1e-3
     },
     'GRU': {
         'batch_size': 512,
@@ -35,7 +37,8 @@ HYPERPARAM_DICT = {
         'num_layers': 2,
         'dropout_rate': .05,
         'grid_input_size': 3*4,
-        'grid_compression_size': 16
+        'grid_compression_size': 16,
+        'learn_rate': 1e-3
     },
     'TRSF': {
         'batch_size': 512,
@@ -43,7 +46,8 @@ HYPERPARAM_DICT = {
         'num_layers': 2,
         'dropout_rate': .05,
         'grid_input_size': 3*4,
-        'grid_compression_size': 16
+        'grid_compression_size': 16,
+        'learn_rate': 1e-3
     },
     'DEEPTTE': {
         'batch_size': 512
@@ -61,6 +65,7 @@ MODEL_ORDER = [
     'CONV_REALTIME','CONV_REALTIME_TUNED',
     'GRU','GRU_TUNED',
     'GRU_STATIC','GRU_STATIC_TUNED',
+    'GRU_GTFS2VEC', 'GRU_GTFS2VEC_TUNED',
     'GRU_OSM', 'GRU_OSM_TUNED',
     'GRU_REALTIME','GRU_REALTIME_TUNED',
     'TRSF','TRSF_TUNED',
@@ -345,6 +350,18 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
+    elif model_type=="GRU_GTFS2VEC":
+        model = rnn.GRU(
+            f"GRU_GTFS2VEC-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=9+64,
+            collate_fn=data_loader.collate_seq_gtfs2vec,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
     elif model_type=="GRU_OSM":
         model = rnn.GRU(
             f"GRU_OSM-{fold_num}",
@@ -442,7 +459,7 @@ def load_model(model_folder, network_name, model_type, fold_num):
         model_cl = ff.FF
     elif model_archetype=='FF_REALTIME':
         model_cl = ff.FFRealtime
-    elif model_archetype in ['GRU', 'GRU_STATIC']:
+    elif model_archetype in ['GRU', 'GRU_STATIC', 'GRU_GTFS2VEC', 'GRU_OSM']:
         model_cl = rnn.GRU
     elif model_archetype=='GRU_REALTIME':
         model_cl = rnn.GRURealtime

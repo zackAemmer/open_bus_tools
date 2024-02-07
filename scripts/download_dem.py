@@ -54,12 +54,6 @@ if __name__ == "__main__":
     download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", provider_path, [10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395], "eudtm30m_dem.tif")
     spatial.reproject_raster(provider_path / "eudtm30m_dem.tif", provider_path / "eudtm30m_dem_32632.tif", 32632)
 
-    # Download RUT
-    provider_path = Path('data', 'rut_spatial')
-    provider_path.mkdir(parents=True, exist_ok=True)
-    download_dem("https://portal.opentopography.org/API/globaldem?demtype=EU_DTM", provider_path, [10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328], "eudtm30m_dem.tif")
-    spatial.reproject_raster(provider_path / "eudtm30m_dem.tif", provider_path / "eudtm30m_dem_32632.tif", 32632)
-
     # Download Others
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():

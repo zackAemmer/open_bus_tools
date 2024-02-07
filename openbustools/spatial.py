@@ -206,7 +206,7 @@ def create_regions(grid_bounds, embeddings_folder):
 
     Args:
         grid_bounds (list): A list of four coordinates representing the bounding box of the grid.
-        spatial_folder (str): The path to the spatial folder where the regions will be saved.
+        embeddings_folder (str): The path to the embeddings_folder folder where the regions will be saved.
     """
     geo = shapely.Polygon((
         (grid_bounds[0], grid_bounds[1]),

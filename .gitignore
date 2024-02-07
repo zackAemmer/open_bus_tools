@@ -10,6 +10,7 @@
 /.venv/*
 /dist/*
 /logs/*
+/lightning_logs/*
 /cache/*
 /profiler/*
 secret.py
