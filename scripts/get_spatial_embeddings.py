@@ -29,16 +29,17 @@ def get_spatial_embeddings(spatial_folder, static_folder, grid_bounds, embedding
     #     shutil.rmtree(dir_to_wipe)
     # [x.unlink() for x in spatial_folder.glob('*.pkl')]
 
+    # # Check if downloaded properly
+    # osm_dir = list(embeddings_dir.glob('Geofabrik*'))
+    # embeddings = list(embeddings_dir.glob('embeddings_osm.pkl'))
+    # print(len(osm_dir), len(embeddings))
+    # if len(osm_dir) == 0 or len(embeddings) == 0:
+    #     print(embeddings_dir.parent)
+    #     print("Download OSM")
+
     # Create embeddings directory if doesn't exist
     embeddings_dir = Path(spatial_folder, "spatial_embeddings")
     embeddings_dir.mkdir(parents=True, exist_ok=True)
-
-    # Check if downloaded properly
-    osm_dir = list(embeddings_dir.glob('Geofabrik*'))
-    embeddings = list(embeddings_dir.glob('embeddings_osm.pkl'))
-    print(len(osm_dir), len(embeddings))
-    if len(osm_dir) == 0 or len(embeddings) == 0:
-        print("Download OSM")
 
     if not create_new_regions:
         try:
@@ -53,11 +54,7 @@ def get_spatial_embeddings(spatial_folder, static_folder, grid_bounds, embedding
 
     # try:
     #     logger.debug(f"Embedding OSM for {spatial_folder} and {static_folder}")
-    #     # Search for existing OSM pbf files
-    #     if len(list(embeddings_dir.glob('*.osm.pbf'))) > 0:
-    #         loader = OSMPbfLoader(pbf_file=list(embeddings_dir.glob('*.osm.pbf'))[0])
-    #     else:
-    #         loader = OSMPbfLoader(download_source='geofabrik', download_directory=embeddings_dir)
+    #     loader = OSMPbfLoader(download_source='geofabrik', download_directory=embeddings_dir)
     #     # Download OSM pbf file if needed, extract and join regions
     #     features = loader.load(area, HEX2VEC_FILTER)
     #     joiner = IntersectionJoiner()
@@ -74,23 +71,36 @@ def get_spatial_embeddings(spatial_folder, static_folder, grid_bounds, embedding
     # except Exception as e:
     #     logger.debug(e)
 
-    # try:
-    #     logger.debug(f"Embedding GTFS for {spatial_folder}/{static_folder}")
-    #     gtfs_folders = list(static_folder.glob('*'))
-    #     # Need embeddings for each separate GTFS feed date
-    #     for gtfs_folder in gtfs_folders:
-    #         # Import GTFS features and join to regions
-    #         loader = GTFSLoader()
-    #         features = loader.load(gtfs_folder, skip_validation=True)
-    #         joiner = IntersectionJoiner()
-    #         joint = joiner.transform(regions, features)
-    #         embedder_gtfs = GTFS2VecEmbedder()
-    #         embedder_gtfs.fit(regions, features, joint)
-    #         embeddings_gtfs = embedder_gtfs.transform(regions, features, joint)
-    #         # Save
-    #         embeddings_gtfs.to_pickle(embeddings_dir / f"embeddings_gtfs_{gtfs_folder.name}.pkl")
-    # except Exception as e:
-    #     logger.debug(e)
+    try:
+        logger.debug(f"Embedding GTFS for {spatial_folder}/{static_folder}")
+        gtfs_folders = static_folder.glob('*')
+        gtfs_folders = [x for x in gtfs_folders if x.is_dir()]
+        # Need embeddings for each separate GTFS feed date
+        for gtfs_folder in gtfs_folders:
+            # Import GTFS features and join to regions
+            loader = GTFSLoader()
+            logger.debug(f"Trying folder: {gtfs_folder}")
+            try:
+                features = loader.load(gtfs_folder, skip_validation=False)
+            except Exception as e:
+                logger.debug(e)
+                logger.debug(f"Folder {gtfs_folder} failed validation, trying again with skip_validation=True")
+                try:
+                    features = loader.load(gtfs_folder, skip_validation=True)
+                except Exception as e:
+                    logger.debug(e)
+                    logger.debug(f"Folder {gtfs_folder} failed again, skipping")
+                    continue
+            # features = loader.load(gtfs_folder, skip_validation=True)
+            joiner = IntersectionJoiner()
+            joint = joiner.transform(regions, features)
+            embedder_gtfs = GTFS2VecEmbedder()
+            embedder_gtfs.fit(regions, features, joint)
+            embeddings_gtfs = embedder_gtfs.transform(regions, features, joint)
+            # Save
+            embeddings_gtfs.to_pickle(embeddings_dir / f"embeddings_gtfs_{gtfs_folder.name}.pkl")
+    except Exception as e:
+        logger.debug(e)
 
 
 if __name__ == "__main__":
