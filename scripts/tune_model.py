@@ -30,9 +30,9 @@ if __name__=="__main__":
         num_workers=0
         pin_memory=False
         accelerator="cpu"
-    num_workers=0
-    pin_memory=False
-    accelerator="cpu"
+    # num_workers=0
+    # pin_memory=False
+    # accelerator="cpu"
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_type', required=True)
