@@ -355,7 +355,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             f"GRU_GTFS2VEC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=9+64,
+            input_size=5+64,
             collate_fn=data_loader.collate_seq_gtfs2vec,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],

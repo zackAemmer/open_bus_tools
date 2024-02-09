@@ -46,14 +46,16 @@ MISC_CAT_FEATS = [
 ]
 GTFS2VEC_FEATS = [f"{i}_gtfs_embed" for i in range(0, 64)]
 OSM_FEATS = [f"{i}_osm_embed" for i in range(0, 64)]
+SRAI_FEATS = OSM_FEATS+GTFS2VEC_FEATS
+# Columns that should be normalized in the dataloader
+TRAIN_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS
+# All columns used for training and testing
+NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+GTFS2VEC_FEATS+OSM_FEATS+DEEPTTE_FEATS+EMBED_FEATS+MISC_CON_FEATS
+# Routes to not train on
 HOLDOUT_ROUTES = [
     'ATB:Line:2_87','ATB:Line:2_72','ATB:Line:2_9','ATB:Line:2_5111',
     '102736','102628','102555','100129','102719','100229'
 ]
-# Columns to normalize and include in X_ct
-TRAIN_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+GTFS2VEC_FEATS+OSM_FEATS+DEEPTTE_FEATS
-# All columns used for training and testing
-NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+GTFS2VEC_FEATS+OSM_FEATS+DEEPTTE_FEATS+EMBED_FEATS+MISC_CON_FEATS
 
 
 def normalize(x, config_entry):
@@ -243,7 +245,7 @@ class NumpyDataset(Dataset):
             self.config = create_config(config_samples)
     def find_sample(self, index):
         """
-        Returns the sample data for the given index.
+        Returns the memmap pointer and grid data for the given index.
 
         Args:
             index (int): The index of the sample.
@@ -270,13 +272,17 @@ class NumpyDataset(Dataset):
         Returns:
             ndarray: The normalized sample data.
         """
-        # Load if not in memory, normalize non-embedding columns
+        # Load if not in memory
         sample_data = self.find_sample(index)[:].astype(np.float32)
         sample_data_raw = sample_data.copy()
-        for i, col in enumerate(TRAIN_COLS):
-            feat_idx = NUM_FEAT_COLS.index(col)
-            sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
-        # Assert no full-trip travel time labels are 0
+        # Create a mask for columns to be normalized, get config info
+        norm_col_indices = [NUM_FEAT_COLS.index(x) for x in TRAIN_COLS]
+        norm_mask = np.isin(np.arange(sample_data.shape[1]), norm_col_indices)
+        means = np.array([self.config[col][0] for col in TRAIN_COLS], dtype=np.float32)
+        stds = np.array([self.config[col][1] for col in TRAIN_COLS], dtype=np.float32)
+        # Normalize the columns with broadcasting
+        sample_data[:,norm_mask] = (sample_data[:,norm_mask] - means) / stds
+        # Ensure no full-trip travel time labels are 0
         assert np.min(sample_data_raw[1:,NUM_FEAT_COLS.index('cumul_time_s')]) > 0
         return (sample_data, sample_data_raw)
     def __len__(self):
