@@ -5,6 +5,7 @@ import pickle
 import shutil
 
 import geopandas as gpd
+import gtfs_kit as gk
 import numpy as np
 import pandas as pd
 import shapely
@@ -195,32 +196,41 @@ def extract_operator(old_folder, new_folder, source_col, op_name):
             pickle.dump(data, open(f"{new_folder}{file}", "wb"))
 
 
-def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_stop_times, op_name):
-    """
-    Extracts the GTFS data for a specific operator from the old_folder and saves it to the new_folder.
+def extract_operator_gtfs(old_folder, new_folder, area):
+    gtfs_folders = [x for x in list(Path(old_folder).glob('*')) if x.is_dir()]
+    for gtfs_date in gtfs_folders:
+        print(f"Extracting GTFS for {gtfs_date}...")
+        feed = gk.read_feed(gtfs_date, dist_units='km')
+        feed_atb = feed.restrict_to_area(area)
+        feed_atb.write(new_folder / gtfs_date.name)
 
-    Args:
-        old_folder (str): The path to the directory containing the original GTFS data.
-        new_folder (str): The path to the directory where the extracted GTFS data will be saved.
-        source_col_trips (str): The name of the column in the trips.txt file that contains the operator information.
-        source_col_stop_times (str): The name of the column in the stop_times.txt file that contains the operator information.
-        op_name (str): The name of the operator to extract.
-    """
-    gtfs_folders = os.listdir(old_folder)
-    for file in gtfs_folders:
-        if file != ".DS_Store" and len(file)==10:
-            print(f"Extracting {op_name} from {old_folder}{file} to {new_folder}{file}...")
-            # Delete and remake folder if already exists
-            if file in os.listdir(f"{new_folder}"):
-                shutil.rmtree(f"{new_folder}{file}")
-            shutil.copytree(f"{old_folder}{file}", f"{new_folder}{file}")
-            # Read in and overwrite relevant files in new directory
-            z = pd.read_csv(f"{new_folder}{file}/trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
-            st = pd.read_csv(f"{new_folder}{file}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
-            z = z[z[source_col_trips].str[:3]==op_name]
-            st = st[st[source_col_stop_times].str[:3]==op_name]
-            z.to_csv(f"{new_folder}{file}/trips.txt")
-            st.to_csv(f"{new_folder}{file}/stop_times.txt")
+
+# def extract_operator_gtfs(old_folder, new_folder, source_col_trips, source_col_stop_times, op_name):
+#     """
+#     Extracts the GTFS data for a specific operator from the old_folder and saves it to the new_folder.
+
+#     Args:
+#         old_folder (str): The path to the directory containing the original GTFS data.
+#         new_folder (str): The path to the directory where the extracted GTFS data will be saved.
+#         source_col_trips (str): The name of the column in the trips.txt file that contains the operator information.
+#         source_col_stop_times (str): The name of the column in the stop_times.txt file that contains the operator information.
+#         op_name (str): The name of the operator to extract.
+#     """
+#     gtfs_folders = os.listdir(old_folder)
+#     for file in gtfs_folders:
+#         if file != ".DS_Store" and len(file)==10:
+#             print(f"Extracting {op_name} from {old_folder}{file} to {new_folder}{file}...")
+#             # Delete and remake folder if already exists
+#             if file in os.listdir(f"{new_folder}"):
+#                 shutil.rmtree(f"{new_folder}{file}")
+#             shutil.copytree(f"{old_folder}{file}", f"{new_folder}{file}")
+#             # Read in and overwrite relevant files in new directory
+#             z = pd.read_csv(f"{new_folder}{file}/trips.txt", low_memory=False, dtype=GTFS_LOOKUP)
+#             st = pd.read_csv(f"{new_folder}{file}/stop_times.txt", low_memory=False, dtype=GTFS_LOOKUP)
+#             z = z[z[source_col_trips].str[:3]==op_name]
+#             st = st[st[source_col_stop_times].str[:3]==op_name]
+#             z.to_csv(f"{new_folder}{file}/trips.txt")
+#             st.to_csv(f"{new_folder}{file}/stop_times.txt")
 
 
 def get_scheduled_arrival(realtime, static):

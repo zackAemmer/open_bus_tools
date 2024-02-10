@@ -4,7 +4,7 @@ import boto3
 from dotenv import load_dotenv
 load_dotenv()
 
-from openbustools import standardfeeds
+from openbustools import spatial, standardfeeds
 
 
 def download_new_s3_files(data_folder, bucket_name):
@@ -34,5 +34,6 @@ if __name__ == "__main__":
     download_new_s3_files("./data/kcm_realtime/", "gtfs-collection-kcm")
     download_new_s3_files("./data/nwy_realtime/", "gtfs-collection-nwy")
     print(f"Extracting operators from downloaded realtime and static files...")
+    area = spatial.make_polygon((10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395))
+    standardfeeds.extract_operator_gtfs(Path("data", "nwy_static"), Path("data", "atb_static"), area)
     standardfeeds.extract_operator("./data/nwy_realtime/", "./data/atb_realtime/", "operator_id", "ATB")
-    standardfeeds.extract_operator_gtfs("./data/nwy_gtfs/", "./data/atb_gtfs/", "trip_id", "trip_id", "ATB")

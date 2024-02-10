@@ -13,6 +13,27 @@ from srai.neighbourhoods.h3_neighbourhood import H3Neighbourhood
 from srai.regionalizers import H3Regionalizer
 
 
+def make_polygon(bbox):
+    """
+    Create a polygon from a bounding box.
+
+    Args:
+        bbox (tuple): A tuple containing the coordinates of the bounding box in the format (minx, miny, maxx, maxy).
+
+    Returns:
+        shapely.geometry.Polygon: A polygon representing the bounding box.
+    """
+    polygon = shapely.geometry.Polygon([
+        (bbox[0], bbox[1]),
+        (bbox[0], bbox[3]),
+        (bbox[2], bbox[3]),
+        (bbox[2], bbox[1]),
+        (bbox[0], bbox[1])
+    ])
+    gdf = gpd.GeoDataFrame({'geometry': [polygon]}, crs='epsg:4326')
+    return gdf
+
+
 def resample_to_len(ary, new_len, xp=None):
     """
     Resamples an array to a specified length using linear interpolation.
