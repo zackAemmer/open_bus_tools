@@ -7,7 +7,6 @@ from torch.utils.data import Dataset
 from openbustools import trackcleaning
 
 
-# Feature columns used at various points in training and testing
 SAMPLE_ID = ["shingle_id"]
 LABEL_FEATS = [
     "calc_time_s",

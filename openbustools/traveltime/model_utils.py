@@ -59,9 +59,13 @@ MODEL_ORDER = [
     'SCH',
     'FF','FF_TUNED',
     'FF_STATIC','FF_STATIC_TUNED',
+    'FF_GTFS2VEC','FF_GTFS2VEC_TUNED',
+    'FF_OSM','FF_OSM_TUNED',
     'FF_REALTIME','FF_REALTIME_TUNED',
     'CONV','CONV_TUNED',
     'CONV_STATIC','CONV_STATIC_TUNED',
+    'CONV_GTFS2VEC','CONV_GTFS2VEC_TUNED',
+    'CONV_OSM','CONV_OSM_TUNED',
     'CONV_REALTIME','CONV_REALTIME_TUNED',
     'GRU','GRU_TUNED',
     'GRU_STATIC','GRU_STATIC_TUNED',
@@ -70,6 +74,8 @@ MODEL_ORDER = [
     'GRU_REALTIME','GRU_REALTIME_TUNED',
     'TRSF','TRSF_TUNED',
     'TRSF_STATIC','TRSF_STATIC_TUNED',
+    'TRSF_GTFS2VEC','TRSF_GTFS2VEC_TUNED',
+    'TRSF_OSM','TRSF_OSM_TUNED',
     'TRSF_REALTIME','TRSF_REALTIME_TUNED',
     'DEEPTTE','DEEPTTE_TUNED',
     'DEEPTTE_STATIC','DEEPTTE_STATIC_TUNED',
@@ -274,6 +280,30 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
+    elif model_type=="FF_GTFS2VEC":
+        model = ff.FF(
+            f"FF_GTFS2VEC-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
+    elif model_type=="FF_OSM":
+        model = ff.FF(
+            f"FF_OSM-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
     elif model_type=="FF_REALTIME":
         model = ff.FFRealtime(
             f"FF_REALTIME-{fold_num}",
@@ -307,6 +337,30 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_static,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
+    elif model_type=="CONV_GTFS2VEC":
+        model = rnn.CONV(
+            f"CONV_GTFS2VEC-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_gtfs2vec,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
+    elif model_type=="CONV_OSM":
+        model = rnn.CONV(
+            f"CONV_OSM-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_osm,
             batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
             hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
@@ -412,6 +466,30 @@ def make_model(model_type, fold_num, config, holdout_routes=None):
             num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
             dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
         )
+    elif model_type=="TRSF_GTFS2VEC":
+        model = rnn.TRSF(
+            f"TRSF_GTFS2VEC-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_gtfs2vec,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
+    elif model_type=="TRSF_OSM":
+        model = rnn.TRSF(
+            f"TRSF_OSM-{fold_num}",
+            config=config,
+            holdout_routes=holdout_routes,
+            input_size=5+64,
+            collate_fn=data_loader.collate_seq_osm,
+            batch_size=HYPERPARAM_DICT[model_archetype]['batch_size'],
+            hidden_size=HYPERPARAM_DICT[model_archetype]['hidden_size'],
+            num_layers=HYPERPARAM_DICT[model_archetype]['num_layers'],
+            dropout_rate=HYPERPARAM_DICT[model_archetype]['dropout_rate'],
+        )
     elif model_type=="TRSF_REALTIME":
         model = transformer.TRSFRealtime(
             f"TRSF_REALTIME-{fold_num}",
@@ -455,7 +533,7 @@ def load_model(model_folder, network_name, model_type, fold_num):
     model_archetype = model_type.split('_')
     model_archetype = list(filter(lambda a: a != 'TUNED', model_archetype))
     model_archetype = '_'.join(model_archetype[:2])
-    if model_archetype in ['FF', 'FF_STATIC']:
+    if model_archetype in ['FF', 'FF_STATIC', 'FF_GTFS2VEC', 'FF_OSM']:
         model_cl = ff.FF
     elif model_archetype=='FF_REALTIME':
         model_cl = ff.FFRealtime
@@ -463,11 +541,11 @@ def load_model(model_folder, network_name, model_type, fold_num):
         model_cl = rnn.GRU
     elif model_archetype=='GRU_REALTIME':
         model_cl = rnn.GRURealtime
-    elif model_archetype in ['CONV', 'CONV_STATIC']:
+    elif model_archetype in ['CONV', 'CONV_STATIC', 'CONV_GTFS2VEC', 'CONV_OSM']:
         model_cl = conv.CONV
     elif model_archetype=='CONV_REALTIME':
         model_cl = conv.CONVRealtime
-    elif model_archetype in ['TRSF', 'TRSF_STATIC']:
+    elif model_archetype in ['TRSF', 'TRSF_STATIC', 'TRSF_GTFS2VEC', 'TRSF_OSM']:
         model_cl = transformer.TRSF
     elif model_archetype=='TRSF_REALTIME':
         model_cl = transformer.TRSFRealtime

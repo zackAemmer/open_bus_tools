@@ -170,4 +170,4 @@ if __name__ == "__main__":
     calculate_gtfs_embeddings(Path('data', 'kcm_spatial'), Path('data', 'kcm_static'))
     calculate_gtfs_embeddings(Path('data', 'atb_spatial'), Path('data', 'atb_static'))
     for i, row in cleaned_sources.iterrows():
-        calculate_gtfs_embeddings(Path('data','other_feeds',f"{row['uuid']}_static"))
+        calculate_gtfs_embeddings(Path('data', 'other_feeds', f"{row['uuid']}_spatial"), Path('data','other_feeds',f"{row['uuid']}_static"))
