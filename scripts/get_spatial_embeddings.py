@@ -60,7 +60,7 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
     all_features = []
     loader = GTFSLoader()
     joiner = IntersectionJoiner()
-    embedder_gtfs = GTFS2VecEmbedder()
+    embedder_gtfs = GTFS2VecEmbedder(embedding_size=16)
     # Train embedder on all combined GTFS feeds
     for i, folder in enumerate([kcm_embeddings_folder, atb_embeddings_folder]):
         logger.debug(f"Loading area, features from {folder}")

@@ -27,7 +27,7 @@ if __name__ == "__main__":
         except:
             print(f"ERROR downloading {row['provider']} static data")
             continue
-    
+
     # Repeat for KCM
     provider_folder = Path('data', 'kcm_static')
     provider_folder.mkdir(exist_ok=True, parents=True)

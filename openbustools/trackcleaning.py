@@ -77,7 +77,7 @@ def shingle(data, min_break, max_break, resample_shingles=False, min_len=None, m
     return shingled_data
 
 
-def filter_on_points(data, min_filter_dict):
+def filter_on_points(data, min_filter_dict, random_dropout=None):
     """
     Filter the data based on specified minimum and maximum values for each column in min_filter_dict.
 
@@ -92,6 +92,9 @@ def filter_on_points(data, min_filter_dict):
     for col, (min_val, max_val) in min_filter_dict.items():
         data = data[data[col]>min_val].copy()
         data = data[data[col]<max_val].copy()
+    # Randomly drop points
+    if random_dropout is not None:
+        data = data.sample(frac=1.0-random_dropout).copy()
     # Re-calculate geometry features w/o missing points
     data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
     # First pt is dependent on prev trip metrics

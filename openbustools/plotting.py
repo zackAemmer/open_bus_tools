@@ -15,7 +15,7 @@ import statsmodels.api as sm
 
 from openbustools import standardfeeds
 
-HEIGHT=6
+HEIGHT=10
 WIDTH=8
 HEIGHT_WIDE=3
 ASPECT_WIDE=4
@@ -77,7 +77,7 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
 def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
     """Plot distributions of labels and key features."""
     data_folder_list = list(pd.unique(plot_df['realtime_foldername']))
-    fig, axes = plt.subplots(3,2)
+    fig, axes = plt.subplots(4,2)
     axes = axes.flatten()
     [ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f')) for ax in axes]
     fig.set_figheight(HEIGHT)
@@ -111,6 +111,14 @@ def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
         axes[5].set_xlabel("Point CBD-Y (km)")
         axes[5].set_xlim(-20,20)
         # axes[5].xticks(np.arange(min(-30000), max(x)+1, 1.0))
+        metric = plot_df_folder['calc_time_s']
+        sns.histplot(metric, ax=axes[6], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
+        axes[6].set_xlabel("Point Measured Time (s)")
+        axes[6].set_xlim(0,1*60)
+        metric = plot_df_folder['calc_speed_m_s']
+        sns.histplot(metric, ax=axes[7], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
+        axes[7].set_xlabel("Avg Speed (m/s)")
+        axes[7].set_xlim(0,35)
     fig.tight_layout()
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig, axes
