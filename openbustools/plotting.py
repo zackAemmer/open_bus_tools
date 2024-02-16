@@ -22,7 +22,7 @@ ASPECT_WIDE=4
 HEIGHT_SQ=6
 WIDTH_SQ=6
 PLOT_FOLDER="../plots/"
-PALETTE="Set1"
+PALETTE="tab10"
 
 
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
@@ -86,28 +86,28 @@ def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
         plot_df_folder = plot_df[plot_df['realtime_foldername']==data_folder]
         sample_groups = plot_df_folder.groupby('shingle_id')
         metric = sample_groups.count()['locationtime']
-        sns.histplot(metric, ax=axes[0], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[0], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
         axes[0].set_xlabel("Points per Sample (n)")
         axes[0].set_xlim(0,70)
         axes[0].legend(["Seattle (KCM)", "Trondheim (AtB)"])
         metric = sample_groups.last()['cumul_dist_km']
-        sns.histplot(metric, ax=axes[1], stat='density', binwidth=.5, color=sns.color_palette("Set2")[i])
-        axes[1].set_xlabel("Sample Travel Dist (km)")
+        sns.histplot(metric, ax=axes[1], stat='density', binwidth=.5, color=sns.color_palette(PALETTE)[i])
+        axes[1].set_xlabel("Sample Travel Distance (km)")
         axes[1].set_xlim(0,20)
         metric = sample_groups.last()['cumul_time_s']
-        sns.histplot(metric, ax=axes[2], stat='density', binwidth=50, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[2], stat='density', binwidth=50, color=sns.color_palette(PALETTE)[i])
         axes[2].set_xlabel("Sample Travel Time (s)")
         axes[2].set_xlim(-300,3000)
         metric = sample_groups.last()['sch_time_s']
-        sns.histplot(metric, ax=axes[3], stat='density', binwidth=100, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[3], stat='density', binwidth=100, color=sns.color_palette(PALETTE)[i])
         axes[3].set_xlabel("Sample Scheduled Time (s)")
         axes[3].set_xlim(-300,3000)
         metric = plot_df_folder['x_cent']/1000
-        sns.histplot(metric, ax=axes[4], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[4], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
         axes[4].set_xlabel("Point CBD-X (km)")
         axes[4].set_xlim(-20,20)
         metric = plot_df_folder['y_cent']/1000
-        sns.histplot(metric, ax=axes[5], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[5], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
         axes[5].set_xlabel("Point CBD-Y (km)")
         axes[5].set_xlim(-20,20)
         # axes[5].xticks(np.arange(min(-30000), max(x)+1, 1.0))
