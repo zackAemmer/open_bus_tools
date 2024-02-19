@@ -72,7 +72,7 @@ if __name__=="__main__":
             shutil.rmtree(save_dir)
         save_dir.mkdir(parents=True, exist_ok=False)
 
-    k_fold = KFold(2, shuffle=True, random_state=42)
+    k_fold = KFold(5, shuffle=True, random_state=42)
     train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_days = [x.split(".")[0] for x in train_days]
     train_dataset = data_loader.NumpyDataset(
@@ -107,13 +107,13 @@ if __name__=="__main__":
         )
         trainer = pl.Trainer(
             check_val_every_n_epoch=1,
-            max_epochs=2,
+            max_epochs=100,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
             callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
             # profiler=PyTorchProfiler(dirpath="./profiler/", filename=f"{model.model_name}"),
-            limit_train_batches=2,
-            limit_val_batches=2,
+            # limit_train_batches=2,
+            # limit_val_batches=2,
         )
         trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
     logger.info(f"{model.model_name} TRAINING COMPLETE")
