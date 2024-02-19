@@ -7,7 +7,7 @@ from openbustools.traveltime.models import embedding, realtime
 
 
 class CONV(pl.LightningModule):
-    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate, alpha, beta1, beta2):
         super(CONV, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
@@ -19,6 +19,9 @@ class CONV(pl.LightningModule):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
         self.is_nn = True
         self.include_grid = False
         self.loss_fn = torch.nn.MSELoss()
@@ -76,12 +79,12 @@ class CONV(pl.LightningModule):
         res = model_utils.seq_pred_step(self, batch)
         return res
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.alpha, betas=(self.beta1, self.beta2))
         return optimizer
 
 
 class CONVRealtime(pl.LightningModule):
-    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate, grid_input_size, grid_compression_size):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate, alpha, beta1, beta2, grid_input_size, grid_compression_size):
         super(CONVRealtime, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
@@ -93,6 +96,9 @@ class CONVRealtime(pl.LightningModule):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
         self.is_nn = True
         self.include_grid = True
         self.loss_fn = torch.nn.MSELoss()
@@ -157,5 +163,5 @@ class CONVRealtime(pl.LightningModule):
         res = model_utils.seq_pred_step(self, batch)
         return res
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.alpha, betas=(self.beta1, self.beta2))
         return optimizer
