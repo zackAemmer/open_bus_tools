@@ -68,7 +68,7 @@ if __name__=="__main__":
         save_dir.mkdir(parents=True, exist_ok=False)
 
     if args.hyperparameter_search is not None:
-        version = int(args.random_seed) - 1
+        version = f"version_{int(args.random_seed) - 1}"
     else:
         version = None
 
