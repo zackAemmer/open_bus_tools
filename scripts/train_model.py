@@ -72,6 +72,11 @@ if __name__=="__main__":
             shutil.rmtree(save_dir)
         save_dir.mkdir(parents=True, exist_ok=False)
 
+    if args.hyperparameter_search is not None:
+        hyperparameter_dict = model_utils.sample_hyperparameters()
+    else:
+        hyperparameter_dict = None
+
     k_fold = KFold(5, shuffle=True, random_state=42)
     train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_days = [x.split(".")[0] for x in train_days]
@@ -84,7 +89,7 @@ if __name__=="__main__":
     )
     for fold_num, (train_idx, val_idx) in enumerate(k_fold.split(np.arange(len(train_dataset)))):
         logger.info(f"MODEL: {args.model_type}, FOLD: {fold_num}")
-        model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes, args.hyperparameter_search)
+        model = model_utils.make_model(args.model_type, fold_num, train_dataset.config, train_dataset.holdout_routes, hyperparameter_dict)
         train_sampler = SubsetRandomSampler(train_idx)
         val_sampler = SequentialSampler(val_idx)
         train_loader = DataLoader(

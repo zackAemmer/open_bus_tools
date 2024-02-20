@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pickle
 
 import numpy as np
@@ -14,8 +15,8 @@ from openbustools.traveltime.models import conv, ff, rnn
 
 HYPERPARAM_TEST_DICT = {
     'batch_size': [128, 256, 512, 1024],
-    'hidden_size': [16, 32, 64, 128],
-    'num_layers': [1, 2, 4, 6],
+    'hidden_size': [16, 32, 64],
+    'num_layers': [1, 2, 4],
     'dropout_rate': [.05, .1, .2, .4],
     'alpha': [1e-4, 1e-3, 1e-2, 1e-1],
     'beta1': [0.9, 0.95, 0.99],
@@ -188,6 +189,34 @@ def load_results(res_folder):
     return (all_res, all_out)
 
 
+def load_hyper_results(res_folder):
+    all_res = []
+    run_path = Path(res_folder)
+    fold_dirs = list(run_path.glob("*"))
+    fold_dirs.sort()
+    for fold_num, fold_dir in enumerate(fold_dirs):
+        run_dir = list(fold_dir.glob("*"))
+        run_dir.sort()
+        for version_num, version_res in enumerate(run_dir):
+            model = load_model("../logs/", "kcm_hyper_search", "TRSF", fold_num, version=f"version_{version_num}")
+            hyperparams = {
+                "model": "TRSF",
+                "run": res_folder,
+                "fold": fold_num,
+                "version": f"version_{version_num}",
+                "batch_size": model.batch_size,
+                "hidden_size": model.hidden_size,
+                "num_layers": model.num_layers,
+                "dropout_rate": model.dropout_rate,
+                "alpha": model.alpha,
+                "beta1": model.beta1,
+                "beta2": model.beta2,
+            }
+            all_res.append(hyperparams)
+    hyper_res = pd.DataFrame(all_res)
+    return hyper_res
+
+
 def format_model_res(model_res_file):
     model_res = pickle.load(open(model_res_file, 'rb'))
     all_res = []
@@ -272,23 +301,28 @@ def set_feature_extraction(model, feature_extraction=True):
                 param.requires_grad = True
 
 
-def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter_search=None):
+def sample_hyperparameters():
+    hyperparameter_dict = {
+        'batch_size': int(np.random.choice(HYPERPARAM_TEST_DICT['batch_size'])),
+        'hidden_size': int(np.random.choice(HYPERPARAM_TEST_DICT['hidden_size'])),
+        'num_layers': int(np.random.choice(HYPERPARAM_TEST_DICT['num_layers'])),
+        'dropout_rate': float(np.random.choice(HYPERPARAM_TEST_DICT['dropout_rate'])),
+        'alpha': float(np.random.choice(HYPERPARAM_TEST_DICT['alpha'])),
+        'beta1': float(np.random.choice(HYPERPARAM_TEST_DICT['beta1'])),
+        'beta2': float(np.random.choice(HYPERPARAM_TEST_DICT['beta2'])),
+        'grid_input_size': int(np.random.choice(HYPERPARAM_TEST_DICT['grid_input_size'])),
+        'grid_compression_size': int(np.random.choice(HYPERPARAM_TEST_DICT['grid_compression_size'])),
+    }
+    return hyperparameter_dict
+
+
+def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter_dict=None):
     """Allow one main script to be re-used for different model types."""
     model_archetype = model_type.split('_')[0]
-    if hyperparameter_search is not None:
-        hyperparam_dict = {
-            'batch_size': int(np.random.choice(HYPERPARAM_TEST_DICT['batch_size'])),
-            'hidden_size': int(np.random.choice(HYPERPARAM_TEST_DICT['hidden_size'])),
-            'num_layers': int(np.random.choice(HYPERPARAM_TEST_DICT['num_layers'])),
-            'dropout_rate': float(np.random.choice(HYPERPARAM_TEST_DICT['dropout_rate'])),
-            'alpha': float(np.random.choice(HYPERPARAM_TEST_DICT['alpha'])),
-            'beta1': float(np.random.choice(HYPERPARAM_TEST_DICT['beta1'])),
-            'beta2': float(np.random.choice(HYPERPARAM_TEST_DICT['beta2'])),
-            'grid_input_size': int(np.random.choice(HYPERPARAM_TEST_DICT['grid_input_size'])),
-            'grid_compression_size': int(np.random.choice(HYPERPARAM_TEST_DICT['grid_compression_size'])),
-        }
+    if hyperparameter_dict is not None:
+        hyperparameter_dict = hyperparameter_dict
     else:
-        hyperparam_dict = HYPERPARAM_DICT[model_archetype]
+        hyperparameter_dict = HYPERPARAM_DICT[model_archetype]
     if model_type=="FF":
         model = ff.FF(
             f"FF-{fold_num}",
@@ -296,13 +330,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5,
             collate_fn=data_loader.collate_seq,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="FF_STATIC":
         model = ff.FF(
@@ -311,13 +345,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_static,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="FF_GTFS2VEC":
         model = ff.FF(
@@ -326,13 +360,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_static,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="FF_OSM":
         model = ff.FF(
@@ -341,13 +375,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_static,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="FF_REALTIME":
         model = ff.FFRealtime(
@@ -356,15 +390,15 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
-            grid_input_size=hyperparam_dict['grid_input_size'],
-            grid_compression_size=hyperparam_dict['grid_compression_size']
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
+            grid_input_size=hyperparameter_dict['grid_input_size'],
+            grid_compression_size=hyperparameter_dict['grid_compression_size']
         )
     elif model_type=="CONV":
         model = conv.CONV(
@@ -373,13 +407,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5,
             collate_fn=data_loader.collate_seq,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="CONV_STATIC":
         model = conv.CONV(
@@ -388,13 +422,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_static,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="CONV_GTFS2VEC":
         model = rnn.CONV(
@@ -403,13 +437,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_gtfs2vec,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="CONV_OSM":
         model = rnn.CONV(
@@ -418,13 +452,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_osm,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="CONV_REALTIME":
         model = conv.CONVRealtime(
@@ -433,15 +467,15 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
-            grid_input_size=hyperparam_dict['grid_input_size'],
-            grid_compression_size=hyperparam_dict['grid_compression_size']
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
+            grid_input_size=hyperparameter_dict['grid_input_size'],
+            grid_compression_size=hyperparameter_dict['grid_compression_size']
         )
     elif model_type=="GRU":
         model = rnn.GRU(
@@ -450,13 +484,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5,
             collate_fn=data_loader.collate_seq,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="GRU_STATIC":
         model = rnn.GRU(
@@ -465,13 +499,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_static,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="GRU_GTFS2VEC":
         model = rnn.GRU(
@@ -480,13 +514,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_gtfs2vec,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="GRU_OSM":
         model = rnn.GRU(
@@ -495,13 +529,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_osm,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="GRU_REALTIME":
         model = rnn.GRURealtime(
@@ -510,15 +544,15 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
-            grid_input_size=hyperparam_dict['grid_input_size'],
-            grid_compression_size=hyperparam_dict['grid_compression_size']
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
+            grid_input_size=hyperparameter_dict['grid_input_size'],
+            grid_compression_size=hyperparameter_dict['grid_compression_size']
         )
     elif model_type=="TRSF":
         model = transformer.TRSF(
@@ -527,13 +561,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5,
             collate_fn=data_loader.collate_seq,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="TRSF_STATIC":
         model = transformer.TRSF(
@@ -542,13 +576,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_static,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="TRSF_GTFS2VEC":
         model = rnn.TRSF(
@@ -557,13 +591,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_gtfs2vec,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="TRSF_OSM":
         model = rnn.TRSF(
@@ -572,13 +606,13 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5+64,
             collate_fn=data_loader.collate_seq_osm,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="TRSF_REALTIME":
         model = transformer.TRSFRealtime(
@@ -587,15 +621,15 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_seq_realtime,
-            batch_size=hyperparam_dict['batch_size'],
-            hidden_size=hyperparam_dict['hidden_size'],
-            num_layers=hyperparam_dict['num_layers'],
-            dropout_rate=hyperparam_dict['dropout_rate'],
-            alpha=hyperparam_dict['alpha'],
-            beta1=hyperparam_dict['beta1'],
-            beta2=hyperparam_dict['beta2'],
-            grid_input_size=hyperparam_dict['grid_input_size'],
-            grid_compression_size=hyperparam_dict['grid_compression_size']
+            batch_size=hyperparameter_dict['batch_size'],
+            hidden_size=hyperparameter_dict['hidden_size'],
+            num_layers=hyperparameter_dict['num_layers'],
+            dropout_rate=hyperparameter_dict['dropout_rate'],
+            alpha=hyperparameter_dict['alpha'],
+            beta1=hyperparameter_dict['beta1'],
+            beta2=hyperparameter_dict['beta2'],
+            grid_input_size=hyperparameter_dict['grid_input_size'],
+            grid_compression_size=hyperparameter_dict['grid_compression_size']
         )
     elif model_type=="DEEPTTE":
         model = DeepTTE.Net(
@@ -604,7 +638,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=5,
             collate_fn=data_loader.collate_deeptte,
-            batch_size=hyperparam_dict['batch_size'],
+            batch_size=hyperparameter_dict['batch_size'],
         )
     elif model_type=="DEEPTTE_STATIC":
         model = DeepTTE.Net(
@@ -613,16 +647,17 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             holdout_routes=holdout_routes,
             input_size=9,
             collate_fn=data_loader.collate_deeptte_static,
-            batch_size=hyperparam_dict['batch_size'],
+            batch_size=hyperparameter_dict['batch_size'],
         )
     return model
 
 
-def load_model(model_folder, network_name, model_type, fold_num):
+def load_model(model_folder, network_name, model_type, fold_num, version=None):
     """Load latest checkpoint depending on user chosen model type and fold."""
-    last_version = str(sorted([int(x.split('_')[1]) for x in os.listdir(f"{model_folder}{network_name}/{model_type}-{fold_num}")])[-1])
-    last_version = f"version_{last_version}"
-    last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/"))[-1]
+    if version is None:
+        last_version = str(sorted([int(x.split('_')[1]) for x in os.listdir(f"{model_folder}{network_name}/{model_type}-{fold_num}")])[-1])
+        version = f"version_{last_version}"
+    last_ckpt = sorted(os.listdir(f"{model_folder}{network_name}/{model_type}-{fold_num}/{version}/checkpoints/"))[-1]
     model_archetype = model_type.split('_')
     model_archetype = list(filter(lambda a: a != 'TUNED', model_archetype))
     model_archetype = '_'.join(model_archetype[:2])
@@ -645,7 +680,7 @@ def load_model(model_folder, network_name, model_type, fold_num):
     elif model_archetype in ['DEEPTTE', 'DEEPTTE_STATIC']:
         model_cl = DeepTTE.Net
     try:
-        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False).eval()
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{version}/checkpoints/{last_ckpt}", strict=False).eval()
     except RuntimeError:
-        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{last_version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
+        model = model_cl.load_from_checkpoint(f"{model_folder}{network_name}/{model_type}-{fold_num}/{version}/checkpoints/{last_ckpt}", strict=False, map_location=torch.device('cpu')).eval()
     return model
