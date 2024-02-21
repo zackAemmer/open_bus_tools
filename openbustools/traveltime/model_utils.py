@@ -16,7 +16,7 @@ from openbustools.traveltime.models import conv, ff, rnn
 HYPERPARAM_TEST_DICT = {
     'batch_size': [128, 256, 512, 1024],
     'hidden_size': [16, 32, 64],
-    'num_layers': [1, 2, 4],
+    'num_layers': [1, 2, 3, 4],
     'dropout_rate': [.05, .1, .2, .4],
     'alpha': [1e-4, 1e-3, 1e-2, 1e-1],
     'beta1': [0.9, 0.95, 0.99],
@@ -59,13 +59,13 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16,
     },
     'TRSF': {
-        'batch_size': 1024,
-        'hidden_size': 64,
-        'num_layers': 2,
-        'dropout_rate': .1,
+        'batch_size': 256,
+        'hidden_size': 16,
+        'num_layers': 1,
+        'dropout_rate': .4,
         'alpha': 1e-3,
-        'beta1': 0.9,
-        'beta2': 0.99,
+        'beta1': 0.95,
+        'beta2': 0.90,
         'grid_input_size': 3*4,
         'grid_compression_size': 16,
     },
@@ -175,7 +175,10 @@ def load_results(res_folder):
     all_out = []
     for model_res_file in os.listdir(res_folder):
         if model_res_file.split('.')[-1]=='pkl':
-            res, out = format_model_res(f"{res_folder}{model_res_file}")
+            try:
+                res, out = format_model_res(f"{res_folder}{model_res_file}")
+            except:
+                continue
             all_res.append(res)
             all_out.append(out)
     all_res = pd.concat(all_res)
@@ -183,9 +186,12 @@ def load_results(res_folder):
     all_res['model_archetype'] = all_res['model'].str.split('_').str[0]
     all_res['is_tuned'] = False
     all_res.loc[all_res['model'].str.split('_').str[-1]=='TUNED', 'is_tuned'] = True
-    all_res['plot_order_model'] = all_res['model'].apply(lambda x: MODEL_ORDER.index(x))
-    all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: EXPERIMENT_ORDER.index(x))
-    all_res = all_res.sort_values(['plot_order_model','plot_order_experiment'])
+    try:
+        all_res['plot_order_model'] = all_res['model'].apply(lambda x: MODEL_ORDER.index(x))
+        all_res['plot_order_experiment'] = all_res['experiment_name'].apply(lambda x: EXPERIMENT_ORDER.index(x))
+        all_res = all_res.sort_values(['plot_order_model','plot_order_experiment'])
+    except:
+        pass
     return (all_res, all_out)
 
 
@@ -198,7 +204,7 @@ def load_hyper_results(res_folder):
         run_dir = list(fold_dir.glob("*"))
         run_dir.sort()
         for version_num, version_res in enumerate(run_dir):
-            model = load_model("../logs/", "kcm_hyper_search", "TRSF", fold_num, version=f"version_{version_num}")
+            model = load_model("../logs/", res_folder.split("/")[-2], "TRSF", fold_num, version=f"version_{version_num}")
             hyperparams = {
                 "model": "TRSF",
                 "run": res_folder,
