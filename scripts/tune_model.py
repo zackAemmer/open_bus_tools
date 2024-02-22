@@ -51,12 +51,14 @@ if __name__=="__main__":
     logger.info(f"num_workers: {num_workers}")
     logger.info(f"pin_memory: {pin_memory}")
 
-    n_folds = 2
+    n_folds = 5
     train_days = standardfeeds.get_date_list(args.train_date, int(args.train_n))
     train_days = [x.split(".")[0] for x in train_days]
     for fold_num in range(n_folds):
         logger.info(f"FOLD: {fold_num}")
         model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
+        model.train()
+        model.batch_size = 10
         model.model_name = f"{args.model_type}_TUNED-{fold_num}"
         train_dataset = data_loader.NumpyDataset(
             args.data_folders,
