@@ -43,7 +43,7 @@ MISC_CON_FEATS = [
 MISC_CAT_FEATS = [
     "route_id",
 ]
-GTFS2VEC_FEATS = [f"{i}_gtfs_embed" for i in range(0, 64)]
+GTFS2VEC_FEATS = [f"{i}_gtfs_embed" for i in range(0, 16)]
 OSM_FEATS = [f"{i}_osm_embed" for i in range(0, 64)]
 SRAI_FEATS = OSM_FEATS+GTFS2VEC_FEATS
 # Columns that should be normalized in the dataloader

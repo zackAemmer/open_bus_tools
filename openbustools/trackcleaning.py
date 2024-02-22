@@ -95,6 +95,7 @@ def filter_on_points(data, min_filter_dict, random_dropout=None):
     # Randomly drop points
     if random_dropout is not None:
         data = data.sample(frac=1.0-random_dropout).copy()
+        data = data.sort_values(['shingle_id', 'locationtime'])
     # Re-calculate geometry features w/o missing points
     data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
     # First pt is dependent on prev trip metrics
@@ -260,8 +261,8 @@ def add_osm_embeddings(data, embeddings_dir):
 
 
 def add_gtfs_embeddings(data, embeddings_dir, best_static):
-    embeddings_osm = pd.read_pickle(embeddings_dir / f"embeddings_gtfs_{best_static}.pkl")
-    embeddings_osm.columns = [f"{i}_gtfs_embed" for i in embeddings_osm.columns]
-    data = pd.merge(data, embeddings_osm, on='region_id', how='left')
+    embeddings_gtfs = pd.read_pickle(embeddings_dir / f"embeddings_gtfs_{best_static}.pkl")
+    embeddings_gtfs.columns = [f"{i}_gtfs_embed" for i in embeddings_gtfs.columns]
+    data = pd.merge(data, embeddings_gtfs, on='region_id', how='left')
     assert(data['0_gtfs_embed'].isna().sum()==0) # Check that all regions have embeddings
     return data

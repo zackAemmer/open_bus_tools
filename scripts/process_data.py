@@ -52,13 +52,13 @@ def process_data(**kwargs):
             continue
 
         # Filter on attributes of individual points (may be invalid after recalculation)
-        data = trackcleaning.filter_on_points(data, {'calc_dist_m': (0, 5_000), 'calc_time_s': (0, 2*60), 'elev_m': (-400, 20_000)}, random_dropout=0.5)
+        data = trackcleaning.filter_on_points(data, {'calc_dist_m': (0, 10_000), 'calc_time_s': (0, 5*60), 'elev_m': (-400, 20_000)}, random_dropout=0.4)
         logger.debug(f"Filtered points: {len(data):_} points")
         if len(data) == 0:
             continue
 
         # Filter on attributes of full tracks (remove all invalid trajectories)
-        data = trackcleaning.filter_on_tracks(data, {'calc_dist_m': (0, 5_000), 'calc_time_s': (0, 2*60), 'calc_speed_m_s': (0, 35)})
+        data = trackcleaning.filter_on_tracks(data, {'calc_dist_m': (0, 10_000), 'calc_time_s': (0, 5*60), 'calc_speed_m_s': (0, 35)})
         logger.debug(f"Filtered tracks: {len(data):_} points")
         if len(data) == 0:
             continue
@@ -153,7 +153,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_02_13", 365-120),
+        dates=standardfeeds.get_date_list("2023_02_13", 180),
         static_folder=Path("data/kcm_static"),
         realtime_folder=Path("data/kcm_realtime"),
         dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
@@ -166,7 +166,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_02_13", 365),
+        dates=standardfeeds.get_date_list("2023_02_13", 180),
         static_folder=Path("data/atb_static"),
         realtime_folder=Path("data/atb_realtime"),
         dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),

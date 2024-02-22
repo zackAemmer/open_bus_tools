@@ -30,7 +30,7 @@ class TRSF(pl.LightningModule):
         self.day_em = embedding.DayEmbedding()
         self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
         # Positional encoding
-        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.hidden_size)
+        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.input_size)
         # Reshape for multihead attention
         self.attn_reshape = nn.Linear(in_features=self.input_size, out_features=self.hidden_size)
         # Encoder
@@ -108,7 +108,7 @@ class TRSFRealtime(pl.LightningModule):
         self.day_em = embedding.DayEmbedding()
         self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
         # Positional encoding
-        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.hidden_size+self.grid_compression_size)
+        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.input_size+self.grid_compression_size)
         # Reshape for multihead attention
         self.attn_reshape = nn.Linear(in_features=self.input_size+self.grid_compression_size, out_features=self.hidden_size)
         # Encoder

@@ -48,18 +48,18 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16,
 },
     'GRU': {
-        'batch_size': 1024,
-        'hidden_size': 64,
+        'batch_size': 512,
+        'hidden_size': 16,
         'num_layers': 2,
-        'dropout_rate': .1,
+        'dropout_rate': .4,
         'alpha': 1e-3,
-        'beta1': 0.9,
-        'beta2': 0.99,
+        'beta1': 0.95,
+        'beta2': 0.90,
         'grid_input_size': 3*4,
         'grid_compression_size': 16,
     },
     'TRSF': {
-        'batch_size': 256,
+        'batch_size': 1024,
         'hidden_size': 16,
         'num_layers': 1,
         'dropout_rate': .4,
@@ -364,8 +364,8 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             f"FF_GTFS2VEC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=5+64,
-            collate_fn=data_loader.collate_seq_static,
+            input_size=5+16,
+            collate_fn=data_loader.collate_seq_gtfs2vec,
             batch_size=hyperparameter_dict['batch_size'],
             hidden_size=hyperparameter_dict['hidden_size'],
             num_layers=hyperparameter_dict['num_layers'],
@@ -380,7 +380,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             config=config,
             holdout_routes=holdout_routes,
             input_size=5+64,
-            collate_fn=data_loader.collate_seq_static,
+            collate_fn=data_loader.collate_seq_osm,
             batch_size=hyperparameter_dict['batch_size'],
             hidden_size=hyperparameter_dict['hidden_size'],
             num_layers=hyperparameter_dict['num_layers'],
@@ -437,11 +437,11 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="CONV_GTFS2VEC":
-        model = rnn.CONV(
+        model = conv.CONV(
             f"CONV_GTFS2VEC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=5+64,
+            input_size=5+16,
             collate_fn=data_loader.collate_seq_gtfs2vec,
             batch_size=hyperparameter_dict['batch_size'],
             hidden_size=hyperparameter_dict['hidden_size'],
@@ -452,7 +452,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="CONV_OSM":
-        model = rnn.CONV(
+        model = conv.CONV(
             f"CONV_OSM-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
@@ -518,7 +518,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             f"GRU_GTFS2VEC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=5+64,
+            input_size=5+16,
             collate_fn=data_loader.collate_seq_gtfs2vec,
             batch_size=hyperparameter_dict['batch_size'],
             hidden_size=hyperparameter_dict['hidden_size'],
@@ -591,11 +591,11 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="TRSF_GTFS2VEC":
-        model = rnn.TRSF(
+        model = transformer.TRSF(
             f"TRSF_GTFS2VEC-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,
-            input_size=5+64,
+            input_size=5+16,
             collate_fn=data_loader.collate_seq_gtfs2vec,
             batch_size=hyperparameter_dict['batch_size'],
             hidden_size=hyperparameter_dict['hidden_size'],
@@ -606,7 +606,7 @@ def make_model(model_type, fold_num, config, holdout_routes=None, hyperparameter
             beta2=hyperparameter_dict['beta2'],
         )
     elif model_type=="TRSF_OSM":
-        model = rnn.TRSF(
+        model = transformer.TRSF(
             f"TRSF_OSM-{fold_num}",
             config=config,
             holdout_routes=holdout_routes,

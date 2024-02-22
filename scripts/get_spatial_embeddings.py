@@ -70,7 +70,7 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
         feed_dates = list(set(static_dir.glob('*')) - set(static_dir.glob('*.zip')))
         feed_date = feed_dates[0]
         logger.debug(f"Using feed from {feed_date}")
-        features = loader.load(feed_date, skip_validation=True, area=area)
+        features = loader.load(feed_date, skip_validation=True)
         all_areas.append(area)
         all_regions.append(regions)
         all_features.append(features)
@@ -82,7 +82,7 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
         feed_dates = list(set(static_dir.glob('*')) - set(static_dir.glob('*.zip')))
         feed_date = feed_dates[0]
         logger.debug(f"Using feed from {feed_date}")
-        features = loader.load(feed_date, skip_validation=True, area=area)
+        features = loader.load(feed_date, skip_validation=True)
         all_areas.append(area)
         all_regions.append(regions)
         all_features.append(features)
@@ -110,7 +110,7 @@ def calculate_gtfs_embeddings(spatial_folder, static_folder):
     for gtfs_file in gtfs_folders:
         logger.debug(f"Embedding GTFS for {gtfs_file}")
         # Extract GTFS features and join to regions
-        features = loader.load(area=area, gtfs_file=gtfs_file, skip_validation=True)
+        features = loader.load(gtfs_file=gtfs_file, skip_validation=True)
         joint = joiner.transform(regions, features)
         # Use pretrained embedder to transform features to embeddings
         embedder_gtfs.fit(regions, features, joint)
