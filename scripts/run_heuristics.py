@@ -88,11 +88,11 @@ if __name__=="__main__":
             config=avg_model.config
         )
         preds_and_labels = avg_model.predict(test_dataset)
-        res['AVG'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+        res['AVG'][fold_num]['diff_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
         preds_and_labels = per_tim_model.predict(test_dataset)
-        res['PERT'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+        res['PERT'][fold_num]['diff_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
         preds_and_labels = sch_model.predict(test_dataset)
-        res['SCH'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+        res['SCH'][fold_num]['diff_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
         logger.info(f"EXPERIMENT: HOLDOUT ROUTES")
         test_dataset = data_loader.NumpyDataset(
@@ -104,11 +104,11 @@ if __name__=="__main__":
             only_holdouts=True
         )
         preds_and_labels = avg_model.predict(test_dataset)
-        res['AVG'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+        res['AVG'][fold_num]['holdout'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
         preds_and_labels = per_tim_model.predict(test_dataset)
-        res['PERT'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+        res['PERT'][fold_num]['holdout'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
         preds_and_labels = sch_model.predict(test_dataset)
-        res['SCH'][fold_num]['same_city'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+        res['SCH'][fold_num]['holdout'] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
     p = Path("results") / args.run_label
     p.mkdir(parents=True, exist_ok=True)
