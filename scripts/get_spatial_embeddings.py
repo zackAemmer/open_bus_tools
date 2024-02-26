@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 from pathlib import Path
 import shutil
 
@@ -53,6 +54,15 @@ from openbustools import spatial
 #     try_date = try_date + datetime.timedelta(days=3)
 
 
+def add_missing_embedding_columns(features, n=24, prefixes=["directions_at_", "trips_at_"], fill_value=np.nan):
+    res = features.copy()
+    for i in range(n):
+        for prefix in prefixes:
+            if f"{prefix}{i}" not in res.columns:
+                res[f"{prefix}{i}"] = np.nan
+    return res
+
+
 def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_embeddings_folder):
     logger.debug(f"Creating combined GTFS embedder")
     all_areas = []
@@ -60,7 +70,7 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
     all_features = []
     loader = GTFSLoader()
     joiner = IntersectionJoiner()
-    embedder_gtfs = GTFS2VecEmbedder(embedding_size=16)
+    embedder_gtfs = GTFS2VecEmbedder(embedding_size=64)
     # Train embedder on all combined GTFS feeds
     for i, folder in enumerate([kcm_embeddings_folder, atb_embeddings_folder]):
         logger.debug(f"Loading area, features from {folder}")
@@ -71,6 +81,7 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
         feed_date = feed_dates[0]
         logger.debug(f"Using feed from {feed_date}")
         features = loader.load(feed_date, skip_validation=True)
+        features = add_missing_embedding_columns(features)
         all_areas.append(area)
         all_regions.append(regions)
         all_features.append(features)
@@ -83,6 +94,7 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
         feed_date = feed_dates[0]
         logger.debug(f"Using feed from {feed_date}")
         features = loader.load(feed_date, skip_validation=True)
+        features = add_missing_embedding_columns(features)
         all_areas.append(area)
         all_regions.append(regions)
         all_features.append(features)
@@ -91,8 +103,8 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
     all_regions = pd.concat(all_regions)
     all_features = pd.concat(all_features)
     # Fit embedder to all GTFS feeds and save
-    joint = joiner.transform(regions, features)
-    embedder_gtfs.fit(regions, features, joint)
+    joint = joiner.transform(all_regions, all_features)
+    embedder_gtfs.fit(all_regions, all_features, joint)
     embedder_gtfs.save(Path("data", "pretrained_embeddings", "gtfs2vec"))
 
 
@@ -111,12 +123,11 @@ def calculate_gtfs_embeddings(spatial_folder, static_folder):
         logger.debug(f"Embedding GTFS for {gtfs_file}")
         # Extract GTFS features and join to regions
         features = loader.load(gtfs_file=gtfs_file, skip_validation=True)
+        features = add_missing_embedding_columns(features)
         joint = joiner.transform(regions, features)
         # Use pretrained embedder to transform features to embeddings
-        embedder_gtfs.fit(regions, features, joint)
         embeddings_gtfs = embedder_gtfs.transform(regions, features, joint)
         assert(embeddings_gtfs.isna().sum().sum()==0) # Check that all regions have embeddings
-        # Save
         embeddings_gtfs.to_pickle(embeddings_dir / f"embeddings_gtfs_{gtfs_file.name}.pkl")
 
 
@@ -160,11 +171,11 @@ if __name__ == "__main__":
     # Create one combined GTFS embedder
     create_combined_gtfs_embedder(cleaned_sources, Path('data','kcm_spatial'), Path('data','atb_spatial'))
 
-    # Get OSM embeddings
-    calculate_osm_embeddings(Path('data','kcm_spatial'))
-    calculate_osm_embeddings(Path('data','atb_spatial'))
-    for i, row in cleaned_sources.iterrows():
-        calculate_osm_embeddings(Path('data','other_feeds',f"{row['uuid']}_spatial"))
+    # # Get OSM embeddings
+    # calculate_osm_embeddings(Path('data','kcm_spatial'))
+    # calculate_osm_embeddings(Path('data','atb_spatial'))
+    # for i, row in cleaned_sources.iterrows():
+    #     calculate_osm_embeddings(Path('data','other_feeds',f"{row['uuid']}_spatial"))
 
     # Get GTFS embeddings
     calculate_gtfs_embeddings(Path('data', 'kcm_spatial'), Path('data', 'kcm_static'))

@@ -26,7 +26,7 @@ HYPERPARAM_TEST_DICT = {
 }
 HYPERPARAM_DICT = {
     'FF': {
-        'batch_size': 1024,
+        'batch_size': 512,
         'hidden_size': 64,
         'num_layers': 2,
         'dropout_rate': .1,
@@ -37,7 +37,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16,
     },
     'CONV': {
-        'batch_size': 1024,
+        'batch_size': 512,
         'hidden_size': 64,
         'num_layers': 2,
         'dropout_rate': .1,
@@ -59,7 +59,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16,
     },
     'TRSF': {
-        'batch_size': 1024,
+        'batch_size': 512,
         'hidden_size': 16,
         'num_layers': 1,
         'dropout_rate': .4,
@@ -70,7 +70,7 @@ HYPERPARAM_DICT = {
         'grid_compression_size': 16,
     },
     'DEEPTTE': {
-        'batch_size': 1024
+        'batch_size': 512
     }
 }
 MODEL_ORDER = [
