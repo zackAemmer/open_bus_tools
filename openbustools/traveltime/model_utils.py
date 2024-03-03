@@ -14,9 +14,9 @@ from openbustools.traveltime.models import conv, ff, rnn
 
 
 HYPERPARAM_TEST_DICT = {
-    'batch_size': [128, 256, 512, 1024],
+    'batch_size': [512],
     'hidden_size': [16, 32, 64],
-    'num_layers': [1, 2, 3, 4],
+    'num_layers': [2, 3, 4],
     'dropout_rate': [.05, .1, .2, .4],
     'alpha': [1e-4, 1e-3, 1e-2, 1e-1],
     'beta1': [0.9, 0.95, 0.99],
@@ -27,45 +27,45 @@ HYPERPARAM_TEST_DICT = {
 HYPERPARAM_DICT = {
     'FF': {
         'batch_size': 512,
-        'hidden_size': 64,
-        'num_layers': 2,
+        'hidden_size': 32,
+        'num_layers': 3,
         'dropout_rate': .1,
-        'alpha': 1e-3,
-        'beta1': 0.9,
-        'beta2': 0.99,
+        'alpha': 1e-1,
+        'beta1': 0.90,
+        'beta2': 0.95,
         'grid_input_size': 3*4,
         'grid_compression_size': 16,
     },
     'CONV': {
         'batch_size': 512,
-        'hidden_size': 64,
-        'num_layers': 2,
+        'hidden_size': 32,
+        'num_layers': 3,
         'dropout_rate': .1,
-        'alpha': 1e-3,
-        'beta1': 0.9,
-        'beta2': 0.99,
+        'alpha': 1e-1,
+        'beta1': 0.90,
+        'beta2': 0.95,
         'grid_input_size': 3*4,
         'grid_compression_size': 16,
 },
     'GRU': {
         'batch_size': 512,
-        'hidden_size': 16,
-        'num_layers': 2,
-        'dropout_rate': .4,
-        'alpha': 1e-3,
-        'beta1': 0.95,
-        'beta2': 0.90,
+        'hidden_size': 32,
+        'num_layers': 3,
+        'dropout_rate': .1,
+        'alpha': 1e-1,
+        'beta1': 0.90,
+        'beta2': 0.95,
         'grid_input_size': 3*4,
         'grid_compression_size': 16,
     },
     'TRSF': {
         'batch_size': 512,
-        'hidden_size': 16,
-        'num_layers': 1,
-        'dropout_rate': .4,
-        'alpha': 1e-3,
-        'beta1': 0.95,
-        'beta2': 0.90,
+        'hidden_size': 32,
+        'num_layers': 3,
+        'dropout_rate': .1,
+        'alpha': 1e-1,
+        'beta1': 0.90,
+        'beta2': 0.95,
         'grid_input_size': 3*4,
         'grid_compression_size': 16,
     },
@@ -195,7 +195,7 @@ def load_results(res_folder):
     return (all_res, all_out)
 
 
-def load_hyper_results(res_folder):
+def load_hyper_results(res_folder, model_name):
     all_res = []
     run_path = Path(res_folder)
     fold_dirs = list(run_path.glob("*"))
@@ -204,9 +204,9 @@ def load_hyper_results(res_folder):
         run_dir = list(fold_dir.glob("*"))
         run_dir.sort()
         for version_num, version_res in enumerate(run_dir):
-            model = load_model("../logs/", res_folder.split("/")[-2], "TRSF", fold_num, version=f"version_{version_num}")
+            model = load_model("../logs/", res_folder.split("/")[-2], model_name, fold_num, version=f"version_{version_num}")
             hyperparams = {
-                "model": "TRSF",
+                "model": model_name,
                 "run": res_folder,
                 "fold": fold_num,
                 "version": f"version_{version_num}",
