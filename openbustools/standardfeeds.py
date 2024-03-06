@@ -12,6 +12,7 @@ import shapely
 from shapely.geometry import LineString
 
 from openbustools import spatial
+from openbustools.drivecycle import trajectory
 
 
 # Set of unified feature names and dtypes for variables in the GTFS data
@@ -338,12 +339,96 @@ def date_to_service_id(date_str, gtfs_folder):
     return list(valid_service_ids.service_id)
 
 
+def get_realtime_trip(realtime_folder, day, veh_id, start_epoch, end_epoch):
+    # Load corresponding realtime data
+    file_path = Path(realtime_folder, f"{day}.pkl")
+    data = pd.read_pickle(file_path)
+    data = data[data['vehicleid'].astype(int).astype(str)==veh_id]
+    data = data[data['locationtime'].astype(int)>=start_epoch]
+    data = data[data['locationtime'].astype(int)<=end_epoch]
+    return data
+
+
+def get_realtime_trajectory(phone_traj, realtime_folder, dem_file):
+    metadata_phone = phone_traj.traj_attr
+    data_realtime = get_realtime_trip(realtime_folder, metadata_phone['t_day'], metadata_phone['veh_id'], metadata_phone['start_epoch'], metadata_phone['end_epoch'])
+    # Adjust phone trajectory metadata for the realtime
+    metadata_realtime = metadata_phone.copy()
+    metadata_realtime.update({
+        "start_epoch_realtime": data_realtime['locationtime'].iloc[0].astype(int),
+        "end_epoch": data_realtime['locationtime'].iloc[-1].astype(int)
+    })
+    # Create trajectory
+    realtime_traj = trajectory.Trajectory(
+        point_attr={
+            "lon": data_realtime.lon.to_numpy(),
+            "lat": data_realtime.lat.to_numpy(),
+            "cumul_time_s": (data_realtime.locationtime - metadata_phone['start_epoch']).to_numpy(),
+        },
+        traj_attr=metadata_realtime,
+        coord_ref_center=metadata_realtime['coord_ref_center'],
+        epsg=metadata_realtime['epsg'],
+        apply_filter=metadata_realtime['apply_filter'],
+        dem_file=dem_file,
+    )
+    return realtime_traj
+
+
+def get_phone_trajectory(phone_trajectory_folder, timezone, epsg, coord_ref_center, apply_filter, chop_n=None):
+    """
+    Create a trajectory object from phone sensor data.
+
+    Args:
+        phone_trajectory_folder (str): The path to the folder containing the phone sensor data.
+        timezone (str): The timezone of the data.
+        epsg (int): The EPSG code for the desired coordinate reference system.
+        coord_ref_center (list): The coordinates of the reference center.
+        apply_filter (bool): Whether to apply a filter to the data.
+        chop_n (int, optional): The number of rows to remove from the beginning and end of the data. Defaults to None.
+
+    Returns:
+        trajectory.Trajectory: A trajectory object created from the phone sensor data.
+    """
+    metadata_phone, data_phone = combine_phone_sensors(phone_trajectory_folder, timezone, chop_n)
+    # Add args to trajectory metadata
+    metadata_phone['timezone'] = timezone
+    metadata_phone['coord_ref_center'] = coord_ref_center
+    metadata_phone['epsg'] = epsg
+    metadata_phone['apply_filter'] = apply_filter
+    metadata_phone['chop_n'] = chop_n
+    # Clean up sensor data
+    data_phone.loc[data_phone['speed']<0, 'speed'] = np.nan
+    data_phone.loc[data_phone['bearing']<0, 'bearing'] = np.nan
+    data_phone = data_phone.bfill()
+    # Create trajectory
+    phone_traj = trajectory.Trajectory(
+        point_attr={
+            "lon": data_phone.longitude.to_numpy(),
+            "lat": data_phone.latitude.to_numpy(),
+            "measured_elev_m": data_phone.altitudeAboveMeanSeaLevel.to_numpy(),
+            "measured_speed_m_s": data_phone.speed.to_numpy(),
+            "measured_bear_d": data_phone.bearing.to_numpy(),
+            "measured_accel_m_s2": np.diff(data_phone.speed.to_numpy(), prepend=0), # Can be accelerometer or speed derivative
+            "measured_theta_d": data_phone.pitch.to_numpy() - np.mean(data_phone.pitch.to_numpy()),
+            "cumul_time_s": data_phone.cumul_time_s.to_numpy(),
+        },
+        traj_attr=metadata_phone,
+        coord_ref_center=coord_ref_center,
+        epsg=epsg,
+        apply_filter=apply_filter
+    )
+
+    return phone_traj
+
+
 def combine_phone_sensors(phone_folder, timezone, chop_n=None):
     """
     Combines sensor data from different files into a single dataframe.
 
     Args:
         phone_folder (str): The path to the folder containing the sensor data files.
+        timezone (str): The timezone of the data.
+        chop_n (int, optional): The number of rows to remove from the beginning and end of the data. Defaults to None.
 
     Returns:
         pandas.DataFrame: A dataframe containing the combined sensor data.
@@ -353,21 +438,21 @@ def combine_phone_sensors(phone_folder, timezone, chop_n=None):
     location = location[location['seconds_elapsed'] > 0] # Remove cached sensor readings
     location.index = pd.to_datetime(location['time'], unit='ns')
     location = location.tz_localize('UTC').tz_convert(timezone)
-    location = location.resample('S').mean().drop(columns=['time'])
+    location = location.resample('s').mean().drop(columns=['time'])
     location['epoch_time_s'] = location.index.strftime('%s').astype(int)
     # Accelerometer
     accelerometer = pd.read_csv(Path(phone_folder, "Accelerometer.csv"))[['time','seconds_elapsed','y']]
     accelerometer = accelerometer[accelerometer['seconds_elapsed'] > 0]
     accelerometer.index = pd.to_datetime(accelerometer['time'], unit='ns')
     accelerometer = accelerometer.tz_localize('UTC').tz_convert(timezone)
-    accelerometer = accelerometer.resample('S').mean().drop(columns=['time'])
+    accelerometer = accelerometer.resample('s').mean().drop(columns=['time'])
     accelerometer['epoch_time_s'] = accelerometer.index.strftime('%s').astype(int)
     # Orientation
     orientation = pd.read_csv(Path(phone_folder, "Orientation.csv"))[['time','seconds_elapsed','pitch']]
     orientation = orientation[orientation['seconds_elapsed'] > 0]
     orientation.index = pd.to_datetime(orientation['time'], unit='ns')
     orientation = orientation.tz_localize('UTC').tz_convert(timezone)
-    orientation = orientation.resample('S').mean().drop(columns=['time'])
+    orientation = orientation.resample('s').mean().drop(columns=['time'])
     orientation['epoch_time_s'] = orientation.index.strftime('%s').astype(int)
     orientation['pitch'] = orientation['pitch'] * 180 / np.pi
     # Join dataframes

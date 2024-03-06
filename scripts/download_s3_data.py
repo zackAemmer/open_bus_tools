@@ -19,6 +19,7 @@ def download_new_s3_files(data_folder, bucket_name):
         print(f"Successfully connected to S3")
         # Get list of files that are not already downloaded
         new_files = [x for x in available_files if x not in downloaded_files]
+        # new_files = standardfeeds.get_date_list('2024_02_06', 7)
         print(f"Found {len(new_files)} new files to download out of {len(available_files)} files in the specified bucket")
         # Download all new files to same data folder
         for i, file_name in enumerate(new_files):
