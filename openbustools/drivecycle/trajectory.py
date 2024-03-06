@@ -99,72 +99,100 @@ class Trajectory():
         self.gdf['pred_time_s'] = preds
         self.pred_cumul_time_s = np.cumsum(preds)
         self.gdf['cumul_time_s'] = np.cumsum(preds)
-    def measured_to_drivecycle(self):
+    def to_fastsim_cycle(self):
         """
-        Convert the trajectory to a DriveCycle object.
-
-        Returns:
-            DriveCycle: A DriveCycle object representing the trajectory.
+        Convert the trajectory to a FastSim cycle; use measured values if available.
         """
-        # Time from model or known
-        time = self.pred_time_s
-        # All motion values taken from point measurements
-        accel = self.point_attr['measured_accel_m_s2']
-        speed = self.point_attr['measured_speed_m_s']
-        elev = self.point_attr['measured_elev_m']
+        # Distance in m
         distance = self.gdf['calc_dist_m'].to_numpy()
-        theta = spatial.divide_fwd_back_fill(np.diff(elev, prepend=0), distance)
-        cycle = DriveCycle(speed, accel, theta, time, distance)
-        return cycle
-    def gps_to_drivecycle(self):
-        """
-        Convert the trajectory to a DriveCycle object.
-
-        Returns:
-            DriveCycle: A DriveCycle object representing the trajectory.
-        """
-        # Time from model or known
+        # Time in seconds
         time = self.pred_time_s
-        # All motion values derived from GPS distances and times
-        distance = self.gdf['calc_dist_m'].to_numpy()
-        speed = distance[1:] / time[1:]
-        accel = np.diff(speed, prepend=0) / time[1:]
-        theta = spatial.divide_fwd_back_fill(np.diff(self.gdf['calc_elev_m'].to_numpy()), distance[1:])
-        cycle = DriveCycle(speed, accel, theta, time[1:], distance[1:])
+        # Speed in m/s
+        if "measured_speed_m_s" in self.point_attr.keys():
+            speed = self.point_attr['measured_speed_m_s']
+        else:
+            # All motion values derived from GPS distances and times
+            speed = spatial.divide_fwd_back_fill(distance, time)
+        # Grade in %/100
+        if "measured_elev_m" in self.point_attr.keys():
+            elev = self.point_attr['measured_elev_m']
+        else:
+            elev = self.gdf['calc_elev_m'].to_numpy()
+        grade = spatial.divide_fwd_back_fill(np.diff(elev, prepend=elev[0]), distance)
+        # Dictionary of cycle values for Fastsim
+        cycle = {
+            'cycGrade': grade,
+            'mps': speed,
+            'time_s': np.cumsum(time),
+            'road_type': np.zeros(self.traj_len),
+        }
         return cycle
+    # def measured_to_drivecycle(self):
+    #     """
+    #     Convert the trajectory to a DriveCycle object.
+
+    #     Returns:
+    #         DriveCycle: A DriveCycle object representing the trajectory.
+    #     """
+    #     # Time from model or known
+    #     time = self.pred_time_s
+    #     # All motion values taken from point measurements
+    #     accel = self.point_attr['measured_accel_m_s2']
+    #     speed = self.point_attr['measured_speed_m_s']
+    #     elev = self.point_attr['measured_elev_m']
+    #     distance = self.gdf['calc_dist_m'].to_numpy()
+    #     theta = spatial.divide_fwd_back_fill(np.diff(elev, prepend=0), distance)
+    #     cycle = DriveCycle(speed, accel, theta, time, distance)
+    #     return cycle
+    # def gps_to_drivecycle(self):
+    #     """
+    #     Convert the trajectory to a DriveCycle object.
+
+    #     Returns:
+    #         DriveCycle: A DriveCycle object representing the trajectory.
+    #     """
+    #     # Time from model or known
+    #     time = self.pred_time_s
+    #     # All motion values derived from GPS distances and times
+    #     distance = self.gdf['calc_dist_m'].to_numpy()
+    #     speed = distance[1:] / time[1:]
+    #     accel = np.diff(speed, prepend=0) / time[1:]
+    #     theta = spatial.divide_fwd_back_fill(np.diff(self.gdf['calc_elev_m'].to_numpy()), distance[1:])
+    #     cycle = DriveCycle(speed, accel, theta, time[1:], distance[1:])
+    #     return cycle
 
 
-class DriveCycle():
-    """
-    Acceleration and velocity measured at each point in the trajectory.
-    Time is known or predicted. Distance is from GPS points.
-    Velocity, theta and acceleration are used in force calculations.
-    Time is used in power calculations.
+# class DriveCycle():
+#     """
+#     Acceleration and velocity measured at each point in the trajectory.
+#     Time is known or predicted. Distance is from GPS points.
+#     Velocity, theta and acceleration are used in force calculations.
+#     Time is used in power calculations.
     
-    Attributes:
-        velocity (list): List of velocity values.
-        acceleration (list): List of acceleration values.
-        theta (list): List of theta values.
-        time (list): List of time values.
-        distance (list): List of distance values.
-    """
-    def __init__(self, velocity, acceleration, theta, time, distance):
-        self.velocity = velocity
-        self.acceleration = acceleration
-        self.theta = theta
-        self.time = time
-        self.distance = distance
-    def to_df(self):
-        """Converts the MomentaryDriveCycle object to a pandas DataFrame.
+#     Attributes:
+#         velocity (list): List of velocity values.
+#         acceleration (list): List of acceleration values.
+#         theta (list): List of theta values.
+#         time (list): List of time values.
+#         distance (list): List of distance values.
+#     """
+#     def __init__(self, velocity, acceleration, theta, time, distance):
+#         self.velocity = velocity
+#         self.acceleration = acceleration
+#         self.theta = theta
+#         self.time = time
+#         self.distance = distance
+#     def to_df(self):
+#         """Converts the MomentaryDriveCycle object to a pandas DataFrame.
         
-        Returns:
-            pandas.DataFrame: DataFrame containing the velocity, acceleration, theta, time, and distance values.
-        """
-        df = pd.DataFrame({
-            'Velocity': self.velocity,
-            'Acceleration': self.acceleration,
-            'Theta': self.theta,
-            'Time': self.time,
-            'Distance': self.distance
-        })
-        return df
+#         Returns:
+#             pandas.DataFrame: DataFrame containing the velocity, acceleration, theta, time, and distance values.
+#         """
+#         df = pd.DataFrame({
+#             'Velocity': self.velocity,
+#             'Acceleration': self.acceleration,
+#             'Theta': self.theta,
+#             'Time': self.time,
+#             'Distance': self.distance
+#         })
+#         return df

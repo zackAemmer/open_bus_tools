@@ -153,7 +153,7 @@ def sample_raster(points, dem_file):
 def divide_fwd_back_fill(arr1, arr2):
     """
     Divide two arrays element-wise, while handling division by zero.
-    Forward fill the resulting array to replace NaN values.
+    Forward fill then back fill the resulting array to replace NaN values.
 
     Args:
         arr1 (numpy.ndarray): The numerator array.
