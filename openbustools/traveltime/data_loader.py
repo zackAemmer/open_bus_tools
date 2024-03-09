@@ -91,7 +91,7 @@ class trajectoryDataset(Dataset):
     A dataset class for handling trajectory inference.
 
     Args:
-        traj (Trajectory): The trajectory object containing the track to infer.
+        trajectories (list): Trajectories to use for inference.
         config (dict): Configuration settings for the dataset.
 
     Attributes:
@@ -103,19 +103,23 @@ class trajectoryDataset(Dataset):
         __getitem__(index): Returns the normalized sample data for the given index.
         __len__(): Returns the number of samples in the dataset.
     """
-    def __init__(self, traj, config):
-        gdf = traj.gdf.copy()
-        gdf['t_min_of_day'] = traj.traj_attr['t_min_of_day']
-        gdf['t_day_of_week'] = traj.traj_attr['t_day_of_week']
-        # Fill modeling features with -1 if not added to trajectory gdf
-        gdf['shingle_id'] = -1
-        gdf['route_id'] = -1
-        for col in NUM_FEAT_COLS:
-            if col not in gdf.columns:
-                gdf[col] = -1
-        _, data_n, _ = trackcleaning.extract_training_features(gdf)
-        self.sample_lookup = {0: data_n}
+    def __init__(self, trajectories, config):
+        self.trajectories = trajectories
         self.config = config
+        self.sample_lookup = {}
+        # Fill any missing features with -1
+        for i, traj in enumerate(self.trajectories):
+            traj_df = traj.gdf.copy()
+            traj_df[SAMPLE_ID] = i
+            traj_df['t_min_of_day'] = 60*9
+            traj_df['t_day_of_week'] = 4
+            for col in SAMPLE_ID+NUM_FEAT_COLS+MISC_CAT_FEATS:
+                if col not in traj_df.columns:
+                    traj_df[col] = -1
+            # data_id = traj_df[SAMPLE_ID].to_numpy().astype('int32')
+            data_n = traj_df[NUM_FEAT_COLS].to_numpy().astype('float32')
+            # data_c = traj_df[MISC_CAT_FEATS].to_numpy().astype('S30')
+            self.sample_lookup[i] = data_n
     def find_sample(self, index):
         """
         Returns the sample data for the given index.
@@ -137,13 +141,17 @@ class trajectoryDataset(Dataset):
         Returns:
             ndarray: The normalized sample data.
         """
-        # Load if not in memory, normalize non-embedding columns
+        # Load if not in memory
         sample_data = self.find_sample(index)[:].astype(np.float32)
         sample_data_raw = sample_data.copy()
-        for i, col in enumerate(TRAIN_COLS):
-            feat_idx = NUM_FEAT_COLS.index(col)
-            sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
-        # Assert no full-trip travel time labels are 0
+        # Create a mask for columns to be normalized, get config info
+        norm_col_indices = [NUM_FEAT_COLS.index(x) for x in TRAIN_COLS]
+        norm_mask = np.isin(np.arange(sample_data.shape[1]), norm_col_indices)
+        means = np.array([self.config[col][0] for col in TRAIN_COLS], dtype=np.float32)
+        stds = np.array([self.config[col][1] for col in TRAIN_COLS], dtype=np.float32)
+        # Normalize the columns with broadcasting
+        sample_data[:,norm_mask] = (sample_data[:,norm_mask] - means) / stds
+        # Ensure no full-trip travel time labels are 0
         assert np.min(sample_data_raw[1:,NUM_FEAT_COLS.index('cumul_time_s')]) > 0
         return (sample_data, sample_data_raw)
     def __len__(self):

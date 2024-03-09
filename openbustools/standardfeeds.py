@@ -454,3 +454,17 @@ def combine_phone_sensors(phone_folder, timezone, chop_n=None):
         'chop_n': chop_n
     }
     return (metadata, all_sensors)
+
+
+def segmentize_route_shapes(static_feed, epsg, point_sep_m=300):
+    route_shapes = static_feed.geometrize_shapes().set_crs(4326).to_crs(epsg)
+    # Get regularly spaced points on each shape in the static feed
+    distances = [np.arange(0,line.length,point_sep_m) for line in route_shapes['geometry']]
+    shape_ids = np.repeat(route_shapes['shape_id'], [len(x) for x in distances])
+    seq_ids = [np.arange(len(x)) for x in distances]
+    points = [line.interpolate(d) for line, d in zip(route_shapes['geometry'], distances)]
+    route_shape_points = gpd.GeoDataFrame(geometry=np.concatenate(points), crs=epsg)
+    route_shape_points['shape_id'] = shape_ids.values
+    route_shape_points['seq_id'] = np.concatenate(seq_ids)
+    route_shape_points = {k:d for k, d in route_shape_points.groupby("shape_id")}
+    return route_shape_points

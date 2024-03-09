@@ -55,50 +55,12 @@ class Trajectory():
         self.gdf = self.gdf.fillna(0)
         # Get elevation if DEM passed
         if dem_file:
-            self.gdf['calc_elev_m'] = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_file)
+            self.gdf['elev_m'] = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), dem_file)
         # Set predicted travel time values if they are known
         if 'cumul_time_s' in self.point_attr.keys():
             self.pred_time_s = np.diff(self.point_attr['cumul_time_s'], prepend=0)
         else:
-            self.pred_time_s = np.nan(self.traj_len)
-    def update_predicted_time(self, model):
-        """
-        Update the predicted time of the trajectory using a given model.
-
-        Args:
-            model: The model used for prediction.
-        """
-        dataset = data_loader.trajectoryDataset(self, feat_config=model.config)
-        if model.is_nn:
-            loader = DataLoader(
-                dataset,
-                collate_fn=model.collate_fn,
-                batch_size=model.batch_size,
-                shuffle=False,
-                drop_last=False,
-                num_workers=0,
-                pin_memory=False
-            )
-            trainer = pl.Trainer(
-                accelerator='cpu',
-                logger=False,
-                inference_mode=True,
-                enable_progress_bar=False,
-                enable_checkpointing=False,
-                enable_model_summary=False
-            )
-            preds_and_labels = trainer.predict(model=model, dataloaders=loader)
-        else:
-            preds_and_labels = model.predict(dataset)
-        # Only 1 element since there is one predicted trajectory
-        preds = [x['preds_raw'].flatten() for x in preds_and_labels][0]
-        # The first point is NA travel time since it is the start of the trajectory
-        preds[0] = 0
-        # Store times in the dataframe
-        self.pred_time_s = preds
-        self.gdf['pred_time_s'] = preds
-        self.pred_cumul_time_s = np.cumsum(preds)
-        self.gdf['cumul_time_s'] = np.cumsum(preds)
+            self.pred_time_s = np.repeat(np.nan, self.traj_len)
     def to_fastsim_cycle(self):
         """
         Convert the trajectory to a FastSim cycle; use measured values if available.
@@ -117,7 +79,7 @@ class Trajectory():
         if "measured_elev_m" in self.point_attr.keys():
             elev = self.point_attr['measured_elev_m']
         else:
-            elev = self.gdf['calc_elev_m'].to_numpy()
+            elev = self.gdf['elev_m'].to_numpy()
         grade = spatial.divide_fwd_back_fill(np.diff(elev, prepend=elev[0]), distance)
         # Dictionary of cycle values for Fastsim
         cycle = {
@@ -127,3 +89,41 @@ class Trajectory():
             'road_type': np.zeros(self.traj_len),
         }
         return cycle
+
+
+def predict_trajectory_times(trajectories, model):
+    """
+    Update the predicted time of the trajectory using a given model.
+
+    Args:
+        model: The model used for prediction.
+    """
+    dataset = data_loader.trajectoryDataset(trajectories, model.config)
+    if model.is_nn:
+        loader = DataLoader(
+            dataset,
+            collate_fn=model.collate_fn,
+            batch_size=model.batch_size,
+            shuffle=False,
+            drop_last=False,
+            num_workers=0,
+            pin_memory=False
+        )
+        trainer = pl.Trainer(
+            accelerator='cpu',
+            logger=False,
+            inference_mode=True,
+            enable_progress_bar=False,
+            enable_checkpointing=False,
+            enable_model_summary=False
+        )
+        preds_and_labels = trainer.predict(model=model, dataloaders=loader)
+    else:
+        preds_and_labels = model.predict(dataset)
+    preds = [x['preds_seq'].flatten() for x in preds_and_labels]
+    return preds
+    # # Store times in the dataframe
+    # self.pred_time_s = preds
+    # self.gdf['pred_time_s'] = preds
+    # self.pred_cumul_time_s = np.cumsum(preds)
+    # self.gdf['cumul_time_s'] = np.cumsum(preds)
