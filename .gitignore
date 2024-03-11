@@ -20,6 +20,9 @@ secret.py
 !/data/more_gtfs_sources.csv
 !/data/cleaned_sources.csv
 !/data/FASTSim_py_veh_db.csv
+!/data/hd_udds.csv
+!/data/manhattan.csv
+!/data/orange_county.csv
 /notebooks/cache/*
 /notebooks/checkpoints/*
 /notebooks/files/*
