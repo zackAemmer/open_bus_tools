@@ -33,16 +33,16 @@ class Trajectory():
         if resample_len:
             for key in self.point_attr.keys():
                 self.point_attr[key] = spatial.resample_to_len(self.point_attr[key], resample_len)
-        if apply_filter:
-            for key in self.point_attr.keys():
-                polyorder = 3
-                window_len = max([polyorder + 1, self.traj_len // 20])
-                self.point_attr[key] = scipy.signal.savgol_filter(self.point_attr[key], window_length=window_len, polyorder=polyorder)
-                if key == 'measured_speed_m_s':
-                    self.point_attr[key] = np.clip(self.point_attr[key], a_min=0, a_max=None)
-                elif key == 'measured_bear_d':
-                    self.point_attr[key][self.point_attr[key]<0] = self.point_attr[key][self.point_attr[key]<0] + 360
-                    self.point_attr[key][self.point_attr[key]>360] = self.point_attr[key][self.point_attr[key]>360] - 360
+        # if apply_filter:
+        #     for key in self.point_attr.keys():
+        #         polyorder = 3
+        #         window_len = max([polyorder + 1, self.traj_len // 20])
+        #         self.point_attr[key] = scipy.signal.savgol_filter(self.point_attr[key], window_length=window_len, polyorder=polyorder)
+        #         if key == 'measured_speed_m_s':
+        #             self.point_attr[key] = np.clip(self.point_attr[key], a_min=0, a_max=None)
+        #         elif key == 'measured_bear_d':
+        #             self.point_attr[key][self.point_attr[key]<0] = self.point_attr[key][self.point_attr[key]<0] + 360
+        #             self.point_attr[key][self.point_attr[key]>360] = self.point_attr[key][self.point_attr[key]>360] - 360
         # Create GeoDataFrame and calculate metrics
         gdf = self.point_attr.copy()
         gdf.update({'geometry': gpd.points_from_xy(self.point_attr['lon'], self.point_attr['lat'])})
@@ -81,9 +81,10 @@ class Trajectory():
         else:
             elev = self.gdf['elev_m'].to_numpy()
         grade = spatial.divide_fwd_back_fill(np.diff(elev, prepend=elev[0]), distance)
+        grade = np.clip(grade, a_min=-0.25, a_max=0.25)
         # Dictionary of cycle values for Fastsim
         cycle = {
-            'cycGrade': np.zeros(self.traj_len),
+            'cycGrade': grade,
             'mps': speed,
             'time_s': np.cumsum(time),
             'road_type': np.zeros(self.traj_len),
@@ -122,8 +123,3 @@ def predict_trajectory_times(trajectories, model):
         preds_and_labels = model.predict(dataset)
     preds = [x['preds_seq'].flatten() for x in preds_and_labels]
     return preds
-    # # Store times in the dataframe
-    # self.pred_time_s = preds
-    # self.gdf['pred_time_s'] = preds
-    # self.pred_cumul_time_s = np.cumsum(preds)
-    # self.gdf['cumul_time_s'] = np.cumsum(preds)

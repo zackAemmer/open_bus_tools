@@ -311,11 +311,50 @@ def date_to_service_id(date_str, gtfs_folder):
     return list(valid_service_ids.service_id)
 
 
-def get_realtime_trip(realtime_folder, day, veh_id, start_epoch, end_epoch):
+def get_gnss_trip(gnss_solution_file, start_epoch, end_epoch):
+    data = pd.read_csv(gnss_solution_file, sep='\s+', header=None)
+    data.columns = ["day", "time", "lat", "lon", "elev_m", "Q", "ns", "sdn", "sde", "sdu", "sdne", "sdeu", "sdun", "age", "ratio"]
+    data['locationtime'] = (pd.to_datetime(data.day.astype(str) + " " + data.time.astype(str)).astype(int) * 1e-9).astype(int)
+    data = data[data['locationtime']>=start_epoch]
+    data = data[data['locationtime']<=end_epoch]
+    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326")
+    data = data.groupby('locationtime').first().reset_index()
+    return data
+
+
+def get_gnss_trajectory(phone_traj, gnss_solution_file):
+    metadata_phone = phone_traj.traj_attr
+    data_gnss = get_gnss_trip(gnss_solution_file, metadata_phone['start_epoch'], metadata_phone['end_epoch'])
+    # gnss_trajectory['calc_dist_m'], gnss_trajectory['calc_bear_d'], gnss_trajectory['calc_time_s'] = spatial.calculate_gps_metrics(gnss_trajectory, "lon", "lat", "locationtime")
+
+    # Adjust phone trajectory metadata for the realtime
+    metadata_gnss = metadata_phone.copy()
+    metadata_gnss.update({
+        "start_epoch_gnss": data_gnss['locationtime'].iloc[0].astype(int),
+        "end_epoch_gnss": data_gnss['locationtime'].iloc[-1].astype(int)
+    })
+    # Create trajectory
+    gnss_traj = trajectory.Trajectory(
+        point_attr={
+            "lon": data_gnss.lon.to_numpy(),
+            "lat": data_gnss.lat.to_numpy(),
+            "locationtime": data_gnss.locationtime.to_numpy(),
+            "cumul_time_s": (data_gnss.locationtime - metadata_gnss['start_epoch']).to_numpy(),
+            "measured_elev_m": data_gnss.elev_m.to_numpy(),
+        },
+        traj_attr=metadata_gnss,
+        coord_ref_center=metadata_gnss['coord_ref_center'],
+        epsg=metadata_gnss['epsg'],
+        apply_filter=metadata_gnss['apply_filter']
+    )
+    return gnss_traj
+
+
+def get_realtime_trip(realtime_folder, day, veh_id, start_epoch, end_epoch, veh_id_col='vehicleid'):
     # Load corresponding realtime data
     file_path = Path(realtime_folder, f"{day}.pkl")
     data = pd.read_pickle(file_path)
-    data = data[data['vehicleid'].astype(int).astype(str)==veh_id]
+    data = data[data[veh_id_col].astype(int).astype(str)==veh_id]
     data = data[data['locationtime'].astype(int)>=start_epoch]
     data = data[data['locationtime'].astype(int)<=end_epoch]
     return data
@@ -323,7 +362,7 @@ def get_realtime_trip(realtime_folder, day, veh_id, start_epoch, end_epoch):
 
 def get_realtime_trajectory(phone_traj, realtime_folder, dem_file):
     metadata_phone = phone_traj.traj_attr
-    data_realtime = get_realtime_trip(realtime_folder, metadata_phone['t_day'], metadata_phone['veh_id'], metadata_phone['start_epoch'], metadata_phone['end_epoch'])
+    data_realtime = get_realtime_trip(realtime_folder, metadata_phone['t_day'], metadata_phone['veh_id'], metadata_phone['start_epoch'], metadata_phone['end_epoch'], veh_id_col='vehicle_id')
     # Adjust phone trajectory metadata for the realtime
     metadata_realtime = metadata_phone.copy()
     metadata_realtime.update({
@@ -335,7 +374,8 @@ def get_realtime_trajectory(phone_traj, realtime_folder, dem_file):
         point_attr={
             "lon": data_realtime.lon.to_numpy(),
             "lat": data_realtime.lat.to_numpy(),
-            "cumul_time_s": (data_realtime.locationtime - metadata_phone['start_epoch']).to_numpy(),
+            "locationtime": data_realtime.locationtime.to_numpy(),
+            "cumul_time_s": (data_realtime.locationtime - metadata_realtime['start_epoch']).to_numpy(),
         },
         traj_attr=metadata_realtime,
         coord_ref_center=metadata_realtime['coord_ref_center'],
