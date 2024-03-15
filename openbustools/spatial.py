@@ -8,6 +8,7 @@ import rasterio
 from rasterio.sample import sample_gen
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from scipy.spatial import KDTree
+import scipy
 import shapely
 from srai.neighbourhoods.h3_neighbourhood import H3Neighbourhood
 from srai.regionalizers import H3Regionalizer
@@ -32,29 +33,6 @@ def make_polygon(bbox):
     ])
     gdf = gpd.GeoDataFrame({'geometry': [polygon]}, crs='epsg:4326')
     return gdf
-
-
-def resample_to_len(ary, new_len, xp=None):
-    """
-    Resamples an array to a specified length using linear interpolation.
-
-    Args:
-        ary (ndarray): The input array to be resampled.
-        new_len (int): The desired length of the resampled array.
-        xp (ndarray, optional): The x-coordinates of the input array. If not provided, it is assumed to be a linearly spaced array.
-
-    Returns:
-        ndarray: The resampled array.
-    """
-    if xp is None:
-        xp = np.arange(0, ary.shape[0], 1)
-    eval_x = np.linspace(np.min(xp), np.max(xp), new_len)
-    # If 1D, interp directly, else apply along axis
-    if ary.ndim == 1:
-        res = np.interp(eval_x, xp, ary)
-    else:
-        res = np.apply_along_axis(lambda y: np.interp(eval_x, xp, y), 0, ary)
-    return res
 
 
 def calculate_gps_metrics(gdf, lon_col, lat_col, time_col=None):
@@ -166,8 +144,7 @@ def divide_fwd_back_fill(arr1, arr2):
         res = arr1 / arr2
     res[res==-np.inf] = np.nan
     res[res==np.inf] = np.nan
-    res = pd.Series(res).ffill()
-    res = res.bfill().to_numpy()
+    res = pd.Series(res).ffill().bfill().to_numpy()
     return res
 
 
@@ -268,77 +245,11 @@ def load_regions(embeddings_folder):
     return (area, regions, neighbourhood)
 
 
-# def poly_locate_line_points(poly_geo, line_geo):
-#     if line_geo.intersects(poly_geo):
-#         intersection = line_geo.intersection(poly_geo)
-#         first_point = intersection.boundary.geoms[0]
-#         last_point = intersection.boundary.geoms[-1]
-#         res = (line_geo.project(first_point)*111111, line_geo.project(last_point)*111111)
-#         return res
-#     else:
-#         return None
-# intersected_trips['line_locs'] = intersected_trips.apply(lambda x: poly_locate_line_points(x['geometry_x'], x['geometry_y']), axis=1)
-
-
-# def create_grid_of_shingles(point_resolution, grid_bounds, coord_ref_center):
-#     # Create grid of coordinates to use as inference inputs
-#     x_val = np.linspace(grid_bounds[0], grid_bounds[2], point_resolution)
-#     y_val = np.linspace(grid_bounds[1], grid_bounds[3], point_resolution)
-#     X,Y = np.meshgrid(x_val,y_val)
-#     x_spacing = (grid_bounds[2] - grid_bounds[0]) / point_resolution
-#     y_spacing = (grid_bounds[3] - grid_bounds[1]) / point_resolution
-#     # Create shingle samples with only geometric variables
-#     shingles = []
-#     # All horizontal shingles W-E and E-W
-#     for i in range(X.shape[0]):
-#         curr_shingle = {}
-#         curr_shingle["x"] = list(X[i,:])
-#         curr_shingle["y"] = list(Y[i,:])
-#         curr_shingle["dist_calc_km"] = [x_spacing/1000 for x in curr_shingle["x"]]
-#         curr_shingle["bearing"] = [0 for x in curr_shingle["x"]]
-#         shingles.append(curr_shingle)
-#         rev_shingle = {}
-#         rev_shingle["x"] = list(np.flip(X[i,:]))
-#         rev_shingle["y"] = list(np.flip(Y[i,:]))
-#         rev_shingle["dist_calc_km"] = [x_spacing/1000 for x in rev_shingle["x"]]
-#         rev_shingle["bearing"] = [180 for x in rev_shingle["x"]]
-#         shingles.append(rev_shingle)
-#     # All vertical shingles N-S and S-N
-#     for j in range(X.shape[1]):
-#         curr_shingle = {}
-#         curr_shingle["x"] = list(X[:,j])
-#         curr_shingle["y"] = list(Y[:,j])
-#         curr_shingle["dist_calc_km"] = [y_spacing/1000 for x in curr_shingle["x"]]
-#         curr_shingle["bearing"] = [-90 for x in curr_shingle["x"]]
-#         shingles.append(curr_shingle)
-#         rev_shingle = {}
-#         rev_shingle["x"] = list(np.flip(X[:,j]))
-#         rev_shingle["y"] = list(np.flip(Y[:,j]))
-#         rev_shingle["dist_calc_km"] = [y_spacing/1000 for x in rev_shingle["x"]]
-#         rev_shingle["bearing"] = [90 for x in rev_shingle["x"]]
-#         shingles.append(rev_shingle)
-#     # Add dummy and calculated variables
-#     shingle_id = 0
-#     for curr_shingle in shingles:
-#         curr_shingle['lat'] = curr_shingle['y']
-#         curr_shingle['lon'] = curr_shingle['x']
-#         curr_shingle['shingle_id'] = [shingle_id for x in curr_shingle['lon']]
-#         curr_shingle['timeID'] = [60*9 for x in curr_shingle['lon']]
-#         curr_shingle['weekID'] = [3 for x in curr_shingle['lon']]
-#         curr_shingle['x_cent'] = [x - coord_ref_center[0] for x in curr_shingle['x']]
-#         curr_shingle['y_cent'] = [y - coord_ref_center[1] for y in curr_shingle['y']]
-#         curr_shingle['locationtime'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['time_calc_s'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['dist_cumulative_km'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['time_cumulative_s'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['speed_m_s'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['timeID_s'] = [1 for x in curr_shingle['lon']]
-#         shingle_id += 1
-#     # Convert to tabular format, create shingle lookup
-#     res_dict = {}
-#     for cname in shingles[0].keys():
-#         res_dict[cname] = []
-#         vals = np.array([s[cname] for s in shingles]).flatten()
-#         res_dict[cname].extend(vals)
-#     res = pd.DataFrame(res_dict)
-#     return res
+def apply_sg_filter(sequence, polyorder=3, clip_min=None, clip_max=None):
+    window_len = max([polyorder + 1, len(sequence) // 20])
+    filtered_sequence = scipy.signal.savgol_filter(sequence, window_length=window_len, polyorder=polyorder)
+    if clip_min is not None:
+        filtered_sequence = np.clip(filtered_sequence, a_min=clip_min, a_max=None)
+    if clip_max is not None:
+        filtered_sequence = np.clip(filtered_sequence, a_min=None, a_max=clip_max)
+    return filtered_sequence

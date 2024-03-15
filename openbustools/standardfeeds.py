@@ -311,191 +311,6 @@ def date_to_service_id(date_str, gtfs_folder):
     return list(valid_service_ids.service_id)
 
 
-def get_gnss_trip(gnss_solution_file, start_epoch, end_epoch):
-    data = pd.read_csv(gnss_solution_file, sep='\s+', header=None)
-    data.columns = ["day", "time", "lat", "lon", "elev_m", "Q", "ns", "sdn", "sde", "sdu", "sdne", "sdeu", "sdun", "age", "ratio"]
-    data['locationtime'] = (pd.to_datetime(data.day.astype(str) + " " + data.time.astype(str)).astype(int) * 1e-9).astype(int)
-    data = data[data['locationtime']>=start_epoch]
-    data = data[data['locationtime']<=end_epoch]
-    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326")
-    data = data.groupby('locationtime').first().reset_index()
-    return data
-
-
-def get_gnss_trajectory(phone_traj, gnss_solution_file):
-    metadata_phone = phone_traj.traj_attr
-    data_gnss = get_gnss_trip(gnss_solution_file, metadata_phone['start_epoch'], metadata_phone['end_epoch'])
-    # gnss_trajectory['calc_dist_m'], gnss_trajectory['calc_bear_d'], gnss_trajectory['calc_time_s'] = spatial.calculate_gps_metrics(gnss_trajectory, "lon", "lat", "locationtime")
-
-    # Adjust phone trajectory metadata for the realtime
-    metadata_gnss = metadata_phone.copy()
-    metadata_gnss.update({
-        "start_epoch_gnss": data_gnss['locationtime'].iloc[0].astype(int),
-        "end_epoch_gnss": data_gnss['locationtime'].iloc[-1].astype(int)
-    })
-    # Create trajectory
-    gnss_traj = trajectory.Trajectory(
-        point_attr={
-            "lon": data_gnss.lon.to_numpy(),
-            "lat": data_gnss.lat.to_numpy(),
-            "locationtime": data_gnss.locationtime.to_numpy(),
-            "cumul_time_s": (data_gnss.locationtime - metadata_gnss['start_epoch']).to_numpy(),
-            "measured_elev_m": data_gnss.elev_m.to_numpy(),
-        },
-        traj_attr=metadata_gnss,
-        coord_ref_center=metadata_gnss['coord_ref_center'],
-        epsg=metadata_gnss['epsg'],
-        apply_filter=metadata_gnss['apply_filter']
-    )
-    return gnss_traj
-
-
-def get_realtime_trip(realtime_folder, day, veh_id, start_epoch, end_epoch, veh_id_col='vehicleid'):
-    # Load corresponding realtime data
-    file_path = Path(realtime_folder, f"{day}.pkl")
-    data = pd.read_pickle(file_path)
-    data = data[data[veh_id_col].astype(int).astype(str)==veh_id]
-    data = data[data['locationtime'].astype(int)>=start_epoch]
-    data = data[data['locationtime'].astype(int)<=end_epoch]
-    return data
-
-
-def get_realtime_trajectory(phone_traj, realtime_folder, dem_file):
-    metadata_phone = phone_traj.traj_attr
-    data_realtime = get_realtime_trip(realtime_folder, metadata_phone['t_day'], metadata_phone['veh_id'], metadata_phone['start_epoch'], metadata_phone['end_epoch'], veh_id_col='vehicle_id')
-    # Adjust phone trajectory metadata for the realtime
-    metadata_realtime = metadata_phone.copy()
-    metadata_realtime.update({
-        "start_epoch_realtime": data_realtime['locationtime'].iloc[0].astype(int),
-        "end_epoch_realtime": data_realtime['locationtime'].iloc[-1].astype(int)
-    })
-    # Create trajectory
-    realtime_traj = trajectory.Trajectory(
-        point_attr={
-            "lon": data_realtime.lon.to_numpy(),
-            "lat": data_realtime.lat.to_numpy(),
-            "locationtime": data_realtime.locationtime.to_numpy(),
-            "cumul_time_s": (data_realtime.locationtime - metadata_realtime['start_epoch']).to_numpy(),
-        },
-        traj_attr=metadata_realtime,
-        coord_ref_center=metadata_realtime['coord_ref_center'],
-        epsg=metadata_realtime['epsg'],
-        apply_filter=metadata_realtime['apply_filter'],
-        dem_file=dem_file,
-    )
-    return realtime_traj
-
-
-def get_phone_trajectory(phone_trajectory_folder, timezone, epsg, coord_ref_center, apply_filter, chop_n=None):
-    """
-    Create a trajectory object from phone sensor data.
-
-    Args:
-        phone_trajectory_folder (str): The path to the folder containing the phone sensor data.
-        timezone (str): The timezone of the data.
-        epsg (int): The EPSG code for the desired coordinate reference system.
-        coord_ref_center (list): The coordinates of the reference center.
-        apply_filter (bool): Whether to apply a filter to the data.
-        chop_n (int, optional): The number of rows to remove from the beginning and end of the data. Defaults to None.
-
-    Returns:
-        trajectory.Trajectory: A trajectory object created from the phone sensor data.
-    """
-    metadata_phone, data_phone = combine_phone_sensors(phone_trajectory_folder, timezone, chop_n)
-    # Add args to trajectory metadata
-    metadata_phone['coord_ref_center'] = coord_ref_center
-    metadata_phone['epsg'] = epsg
-    metadata_phone['apply_filter'] = apply_filter
-    # Clean up sensor data
-    data_phone.loc[data_phone['speed']<0, 'speed'] = np.nan
-    data_phone.loc[data_phone['bearing']<0, 'bearing'] = np.nan
-    data_phone = data_phone.bfill()
-    # Create trajectory
-    phone_traj = trajectory.Trajectory(
-        point_attr={
-            "lon": data_phone.longitude.to_numpy(),
-            "lat": data_phone.latitude.to_numpy(),
-            "measured_elev_m": data_phone.altitudeAboveMeanSeaLevel.to_numpy(),
-            "measured_speed_m_s": data_phone.speed.to_numpy(),
-            "measured_bear_d": data_phone.bearing.to_numpy(),
-            "measured_accel_m_s2": np.diff(data_phone.speed.to_numpy(), prepend=0), # Can be accelerometer or speed derivative
-            "measured_theta_d": data_phone.pitch.to_numpy() - np.mean(data_phone.pitch.to_numpy()),
-            "cumul_time_s": data_phone.cumul_time_s.to_numpy(),
-        },
-        traj_attr=metadata_phone,
-        coord_ref_center=coord_ref_center,
-        epsg=epsg,
-        apply_filter=apply_filter
-    )
-    return phone_traj
-
-
-def combine_phone_sensors(phone_folder, timezone, chop_n=None):
-    """
-    Combines sensor data from different files into a single dataframe.
-
-    Args:
-        phone_folder (str): The path to the folder containing the sensor data files.
-        timezone (str): The timezone of the data.
-        chop_n (int, optional): The number of rows to remove from the beginning and end of the data. Defaults to None.
-
-    Returns:
-        pandas.DataFrame: A dataframe containing the combined sensor data.
-    """
-    # Location; defines time index start
-    location = pd.read_csv(Path(phone_folder, "Location.csv"))[['time','seconds_elapsed','longitude','latitude','altitudeAboveMeanSeaLevel','bearing','speed']]
-    location = location[location['seconds_elapsed'] > 0] # Remove cached sensor readings
-    location.index = pd.to_datetime(location['time'], unit='ns')
-    location = location.tz_localize('UTC').tz_convert(timezone)
-    location = location.resample('s').mean().drop(columns=['time'])
-    location['epoch_time_s'] = location.index.strftime('%s').astype(int)
-    # Accelerometer
-    accelerometer = pd.read_csv(Path(phone_folder, "Accelerometer.csv"))[['time','seconds_elapsed','y']]
-    accelerometer = accelerometer[accelerometer['seconds_elapsed'] > 0]
-    accelerometer.index = pd.to_datetime(accelerometer['time'], unit='ns')
-    accelerometer = accelerometer.tz_localize('UTC').tz_convert(timezone)
-    accelerometer = accelerometer.resample('s').mean().drop(columns=['time'])
-    accelerometer['epoch_time_s'] = accelerometer.index.strftime('%s').astype(int)
-    # Orientation
-    orientation = pd.read_csv(Path(phone_folder, "Orientation.csv"))[['time','seconds_elapsed','pitch']]
-    orientation = orientation[orientation['seconds_elapsed'] > 0]
-    orientation.index = pd.to_datetime(orientation['time'], unit='ns')
-    orientation = orientation.tz_localize('UTC').tz_convert(timezone)
-    orientation = orientation.resample('s').mean().drop(columns=['time'])
-    orientation['epoch_time_s'] = orientation.index.strftime('%s').astype(int)
-    orientation['pitch'] = orientation['pitch'] * 180 / np.pi
-    # Join dataframes
-    all_sensors = location.merge(accelerometer, on='epoch_time_s', how='left')
-    all_sensors = all_sensors.merge(orientation, on='epoch_time_s', how='left')
-    all_sensors = all_sensors.ffill()
-    all_sensors = all_sensors.groupby('epoch_time_s', as_index=False).mean()
-    if chop_n:
-        all_sensors = all_sensors.iloc[chop_n:-chop_n,:]
-    all_sensors['cumul_time_s'] = all_sensors['epoch_time_s'] - all_sensors['epoch_time_s'].min()
-    # Metadata
-    annotation = pd.read_csv(Path(phone_folder, "Annotation.csv"))
-    veh_id, short_name = str(phone_folder).split("/")[-1].split("-")[0:2] 
-    start_timestamp = pd.to_datetime(int(all_sensors.iloc[0].epoch_time_s), unit='s').tz_localize('UTC').tz_convert(timezone)
-    t_day = start_timestamp.strftime('%Y_%m_%d')
-    t_min_of_day = int(start_timestamp.strftime('%H:%M:%S').split(":")[0])*60 + int(start_timestamp.strftime('%H:%M:%S').split(":")[1])
-    t_day_of_week = start_timestamp.strftime('%w')
-    start_epoch = int(all_sensors.iloc[0].epoch_time_s)
-    end_epoch = int(all_sensors.iloc[-1].epoch_time_s)
-    metadata = {
-        'folder': phone_folder,
-        'short_name': short_name,
-        'veh_id': veh_id,
-        't_day': t_day,
-        't_min_of_day': t_min_of_day,
-        't_day_of_week': t_day_of_week,
-        'start_epoch': start_epoch,
-        'end_epoch': end_epoch,
-        'timezone': timezone,
-        'chop_n': chop_n
-    }
-    return (metadata, all_sensors)
-
-
 def segmentize_route_shapes(static_feed, epsg, point_sep_m=300):
     route_shapes = static_feed.geometrize_shapes().set_crs(4326).to_crs(epsg)
     # Get regularly spaced points on each shape in the static feed
@@ -508,3 +323,148 @@ def segmentize_route_shapes(static_feed, epsg, point_sep_m=300):
     route_shape_points['seq_id'] = np.concatenate(seq_ids)
     route_shape_points = {k:d for k, d in route_shape_points.groupby("shape_id")}
     return route_shape_points
+
+
+def get_gnss_trip(gnss_solution_file, start_epoch, end_epoch, time_offset=18):
+    data = pd.read_csv(gnss_solution_file, sep='\s+', header=None)
+    data.columns = ["day", "time", "lat", "lon", "elev_m", "Q", "ns", "sdn", "sde", "sdu", "sdne", "sdeu", "sdun", "age", "ratio"]
+    data['locationtime'] = (pd.to_datetime(data.day.astype(str) + " " + data.time.astype(str)).astype(int) * 1e-9).astype(int) - time_offset
+    data = data[data['locationtime']>=start_epoch]
+    data = data[data['locationtime']<=end_epoch]
+    data = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data.lon, data.lat), crs="EPSG:4326")
+    data = data.groupby('locationtime').first().reset_index()
+    return data
+
+
+def get_realtime_trip(realtime_folder, day, veh_id, start_epoch, end_epoch, veh_id_col='vehicleid'):
+    # Load corresponding realtime data
+    file_path = Path(realtime_folder, f"{day}.pkl")
+    data = pd.read_pickle(file_path)
+    data = data[data[veh_id_col].astype(int).astype(str)==veh_id]
+    data = data[data['locationtime'].astype(int)>=start_epoch]
+    data = data[data['locationtime'].astype(int)<=end_epoch]
+    return data
+
+
+def get_phone_trip(phone_folder, timezone, chop_n=None, time_offset=0):
+    """
+    Combines sensor data from different files into a single dataframe.
+
+    Args:
+        phone_folder (str): The path to the folder containing the sensor data files.
+        timezone (str): The timezone of the data.
+        chop_n (int, optional): The number of rows to remove from the beginning and end of the data. Defaults to None.
+        time_offset (int, optional): The time offset to add to the location data to match GPS time. Defaults to 19.
+
+    Returns:
+        pandas.DataFrame: A dataframe containing the combined sensor data.
+    """
+    # Location; defines time index start
+    location = pd.read_csv(Path(phone_folder, "Location.csv"))[['time','longitude','latitude','altitudeAboveMeanSeaLevel','bearing','speed']]
+    location['locationtime'] = (location['time'] * 1e-9).astype(int) + time_offset
+    # Accelerometer
+    accelerometer = pd.read_csv(Path(phone_folder, "Accelerometer.csv"))[['time','y']]
+    accelerometer['locationtime'] = (accelerometer['time'] * 1e-9).astype(int) + time_offset
+    # Orientation
+    orientation = pd.read_csv(Path(phone_folder, "Orientation.csv"))[['time','pitch']]
+    orientation['locationtime'] = (orientation['time'] * 1e-9).astype(int) + time_offset
+    orientation['pitch'] = orientation['pitch'] * 180 / np.pi
+    # Join dataframes
+    all_sensors = location.merge(accelerometer, on='locationtime', how='left')
+    all_sensors = all_sensors.merge(orientation, on='locationtime', how='left')
+    all_sensors = all_sensors.ffill().bfill()
+    all_sensors = all_sensors.groupby('locationtime', as_index=False).mean()
+    if chop_n:
+        all_sensors = all_sensors.iloc[chop_n:-chop_n,:]
+    all_sensors['cumul_time_s'] = all_sensors['locationtime'] - all_sensors['locationtime'].min()
+    # Metadata
+    annotation = pd.read_csv(Path(phone_folder, "Annotation.csv"))
+    veh_id, short_name = str(phone_folder).split("/")[-1].split("-")[0:2] 
+    start_timestamp = pd.to_datetime(int(all_sensors.iloc[0].locationtime), unit='s').tz_localize('UTC').tz_convert(timezone)
+    t_day = start_timestamp.strftime('%Y_%m_%d')
+    t_min_of_day = int(start_timestamp.strftime('%H:%M:%S').split(":")[0])*60 + int(start_timestamp.strftime('%H:%M:%S').split(":")[1])
+    t_day_of_week = start_timestamp.strftime('%w')
+    start_epoch = int(all_sensors.iloc[0].locationtime)
+    end_epoch = int(all_sensors.iloc[-1].locationtime)
+    metadata = {
+        'folder': phone_folder,
+        'short_name': short_name,
+        'veh_id': veh_id,
+        't_day': t_day,
+        't_min_of_day': t_min_of_day,
+        't_day_of_week': t_day_of_week,
+        'start_epoch': start_epoch,
+        'end_epoch': end_epoch,
+        'timezone': timezone,
+        'chop_n': chop_n,
+        'time_offset': time_offset,
+    }
+    return (metadata, all_sensors)
+
+
+def get_gnss_trajectory(phone_traj, gnss_solution_file, resample=False):
+    metadata_phone = phone_traj.traj_attr
+    data_gnss = get_gnss_trip(gnss_solution_file, metadata_phone['start_epoch'], metadata_phone['end_epoch'])
+    # Adjust phone trajectory metadata for the realtime
+    metadata_gnss = metadata_phone.copy()
+    metadata_gnss.update({
+        "start_epoch_gnss": data_gnss['locationtime'].iloc[0].astype(int),
+        "end_epoch_gnss": data_gnss['locationtime'].iloc[-1].astype(int),
+    })
+    # Create trajectory
+    gnss_traj = trajectory.Trajectory(
+        point_attr={
+            "lon": data_gnss.lon.to_numpy(),
+            "lat": data_gnss.lat.to_numpy(),
+            "locationtime": data_gnss.locationtime.to_numpy(),
+            "measured_elev_m": data_gnss.elev_m.to_numpy(),
+        },
+        traj_attr=metadata_gnss,
+        resample=resample
+    )
+    return gnss_traj
+
+
+def get_realtime_trajectory(phone_traj, realtime_folder, resample=False):
+    metadata_phone = phone_traj.traj_attr
+    data_realtime = get_realtime_trip(realtime_folder, metadata_phone['t_day'], metadata_phone['veh_id'], metadata_phone['start_epoch'], metadata_phone['end_epoch'], veh_id_col='vehicle_id')
+    # Adjust phone trajectory metadata for the realtime
+    metadata_realtime = metadata_phone.copy()
+    metadata_realtime.update({
+        "start_epoch_realtime": data_realtime['locationtime'].iloc[0].astype(int),
+        "end_epoch_realtime": data_realtime['locationtime'].iloc[-1].astype(int),
+    })
+    # Create trajectory
+    realtime_traj = trajectory.Trajectory(
+        point_attr={
+            "lon": data_realtime.lon.to_numpy(),
+            "lat": data_realtime.lat.to_numpy(),
+            "locationtime": data_realtime.locationtime.to_numpy(),
+        },
+        traj_attr=metadata_realtime,
+        resample=resample
+    )
+    return realtime_traj
+
+
+def get_phone_trajectory(phone_trajectory_folder, timezone, epsg, coord_ref_center, dem_file, chop_n=None, resample=False):
+    metadata_phone, data_phone = get_phone_trip(phone_trajectory_folder, timezone, chop_n)
+    # Add args to trajectory metadata
+    metadata_phone['coord_ref_center'] = coord_ref_center
+    metadata_phone['epsg'] = epsg
+    metadata_phone['dem_file'] = dem_file
+    # Create trajectory
+    phone_traj = trajectory.Trajectory(
+        point_attr={
+            "lon": data_phone.longitude.to_numpy(),
+            "lat": data_phone.latitude.to_numpy(),
+            "locationtime": data_phone.locationtime.to_numpy(),
+            "measured_elev_m": data_phone.altitudeAboveMeanSeaLevel.to_numpy(),
+            "measured_speed_m_s": data_phone.speed.to_numpy(),
+            "measured_bear_d": data_phone.bearing.to_numpy(),
+            "measured_pitch_d": data_phone.pitch.to_numpy(),
+        },
+        traj_attr=metadata_phone,
+        resample=resample
+    )
+    return phone_traj
