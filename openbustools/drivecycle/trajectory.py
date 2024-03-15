@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import lightning.pytorch as pl
 import scipy
+import torch
 from torch.utils.data import DataLoader
 
 from openbustools import spatial, trackcleaning
@@ -51,39 +52,9 @@ class Trajectory():
         self.gdf['x_cent'] = self.gdf['x'] - self.traj_attr['coord_ref_center'][0]
         self.gdf['y_cent'] = self.gdf['y'] - self.traj_attr['coord_ref_center'][1]
         self.gdf['calc_elev_m'] = spatial.sample_raster(self.gdf[['x','y']].to_numpy(), self.traj_attr['dem_file'])
-    # def to_fastsim_cycle(self):
-    #     """
-    #     Convert the trajectory to a FastSim cycle; use measured values if available.
-    #     """
-    #     # Distance in m
-    #     smoothed = spatial.apply_sg_filter(gdf['calc_speed_m_s'].to_numpy(), 8, 0, 30)
-    #     distance = self.gdf['calc_dist_m'].to_numpy()
-    #     # Time in seconds
-    #     time = self.gdf['calc_time_s'].to_numpy()
-    #     # Speed in m/s
-    #     if "measured_speed_m_s" in self.point_attr.keys():
-    #         speed = self.point_attr['measured_speed_m_s']
-    #     else:
-    #         # All motion values derived from GPS distances and times
-    #         speed = spatial.divide_fwd_back_fill(distance, time)
-    #     # Grade in %/100
-    #     if "measured_elev_m" in self.point_attr.keys():
-    #         elev = self.point_attr['measured_elev_m']
-    #     else:
-    #         elev = self.gdf['elev_m'].to_numpy()
-    #     grade = spatial.divide_fwd_back_fill(np.diff(elev, prepend=elev[0]), distance)
-    #     grade = np.clip(grade, a_min=-0.25, a_max=0.25)
-    #     # Dictionary of cycle values for Fastsim
-    #     cycle = {
-    #         'cycGrade': grade,
-    #         'mps': speed,
-    #         'time_s': np.cumsum(time),
-    #         'road_type': np.zeros(self.traj_len),
-    #     }
-    #     return cycle
 
 
-def predict_trajectory_times(trajectories, model):
+def predict_speeds(trajectories, model):
     """
     Update the predicted time of the trajectory using a given model.
 
@@ -92,17 +63,25 @@ def predict_trajectory_times(trajectories, model):
     """
     dataset = data_loader.trajectoryDataset(trajectories, model.config)
     if model.is_nn:
+        if torch.cuda.is_available():
+            num_workers = 4
+            pin_memory = True
+            accelerator = "cuda"
+        else:
+            num_workers = 0
+            pin_memory = False
+            accelerator = "cpu"
         loader = DataLoader(
             dataset,
             collate_fn=model.collate_fn,
             batch_size=model.batch_size,
             shuffle=False,
             drop_last=False,
-            num_workers=0,
-            pin_memory=False
+            num_workers=num_workers,
+            pin_memory=pin_memory
         )
         trainer = pl.Trainer(
-            accelerator='cpu',
+            accelerator=accelerator,
             logger=False,
             inference_mode=True,
             enable_progress_bar=False,
@@ -112,5 +91,5 @@ def predict_trajectory_times(trajectories, model):
         preds_and_labels = trainer.predict(model=model, dataloaders=loader)
     else:
         preds_and_labels = model.predict(dataset)
-    preds = [x['preds_seq'].flatten() for x in preds_and_labels]
-    return preds
+    # preds = [x['preds_seq'].flatten() for x in preds_and_labels]
+    return preds_and_labels

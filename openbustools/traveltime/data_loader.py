@@ -111,8 +111,8 @@ class trajectoryDataset(Dataset):
         for i, traj in enumerate(self.trajectories):
             traj_df = traj.gdf.copy()
             traj_df[SAMPLE_ID] = i
-            traj_df['t_min_of_day'] = 60*9
-            traj_df['t_day_of_week'] = 4
+            traj_df['t_min_of_day'] = traj.traj_attr['t_min_of_day']
+            traj_df['t_day_of_week'] = traj.traj_attr['t_day_of_week']
             for col in SAMPLE_ID+NUM_FEAT_COLS+MISC_CAT_FEATS:
                 if col not in traj_df.columns:
                     traj_df[col] = -1
