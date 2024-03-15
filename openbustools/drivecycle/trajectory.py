@@ -39,10 +39,12 @@ class Trajectory():
         if 'locationtime' in self.point_attr.keys():
             df['calc_dist_m'],  df['calc_bear_d'],  df['calc_time_s'] = spatial.calculate_gps_metrics(df, 'lon', 'lat', time_col='locationtime')
             df['calc_speed_m_s'] = df['calc_dist_m'] / df['calc_time_s']
+            df['cumul_time_s'] = df['locationtime'] - self.traj_attr['start_epoch']
         else:
             df['calc_dist_m'], df['calc_bear_d'] = spatial.calculate_gps_metrics(df, 'lon', 'lat')
             df['calc_time_s'] = np.zeros(len(df))
-        df['cumul_time_s'] = df['locationtime'] - self.traj_attr['start_epoch']
+            df['calc_speed_m_s'] = np.zeros(len(df))
+            df['cumul_time_s'] = np.ones(len(df))
         df['shingle_id'] = 0
         df = df.ffill().bfill()
         # Add calculated values from geometry, timestamps
@@ -63,14 +65,14 @@ def predict_speeds(trajectories, model):
     """
     dataset = data_loader.trajectoryDataset(trajectories, model.config)
     if model.is_nn:
-        if torch.cuda.is_available():
-            num_workers = 4
-            pin_memory = True
-            accelerator = "cuda"
-        else:
-            num_workers = 0
-            pin_memory = False
-            accelerator = "cpu"
+        # if torch.cuda.is_available():
+        #     num_workers = 4
+        #     pin_memory = True
+        #     accelerator = "cuda"
+        # else:
+        num_workers = 0
+        pin_memory = False
+        accelerator = "cpu"
         loader = DataLoader(
             dataset,
             collate_fn=model.collate_fn,
@@ -91,5 +93,4 @@ def predict_speeds(trajectories, model):
         preds_and_labels = trainer.predict(model=model, dataloaders=loader)
     else:
         preds_and_labels = model.predict(dataset)
-    # preds = [x['preds_seq'].flatten() for x in preds_and_labels]
     return preds_and_labels
