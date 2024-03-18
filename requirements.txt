@@ -23,6 +23,7 @@ botocore==1.34.45
 branca==0.7.1
 certifi==2024.2.2
 cffi==1.16.0
+cftime==1.6.3
 charset-normalizer==3.3.2
 click==8.1.7
 click-plugins==1.1.1
@@ -64,6 +65,7 @@ gtfs_kit==6.1.0
 h11==0.14.0
 h3==4.0.0b2
 h3ronpy==0.20.0
+hatanaka==2.8.1
 haversine==2.8.1
 httpcore==1.0.3
 httpx==0.26.0
@@ -112,7 +114,9 @@ multidict==6.0.5
 nbclient==0.9.0
 nbconvert==7.16.1
 nbformat==5.9.2
+ncompress==1.0.2
 nest-asyncio==1.6.0
+netCDF4==1.6.5
 networkx==3.2.1
 notebook==7.1.0
 notebook_shim==0.2.4
@@ -227,6 +231,7 @@ websocket-client==1.7.0
 Werkzeug==3.0.1
 widgetsnbextension==4.0.10
 wrapt==1.16.0
+xarray==2024.2.0
 xyzservices==2023.10.1
 yarl==1.9.4
 zipp==3.17.0
