@@ -25,6 +25,39 @@ PLOT_FOLDER="../plots/"
 PALETTE="tab10"
 
 
+def drive_cycle_energy_plot(plot_simdrives, title_text="throwaway"):
+    plot_in_vars = {
+        "Speed (mph)": "mph",
+        "Grade (%/100)": "grade"
+    }
+    plot_out_vars = {
+        "Total (kW)": "ess_kw_out_ach",
+        "Acceleration (kW)": "accel_kw",
+        "Rolling (kW)": "rr_kw",
+        "Loss (kW)": "ess_loss_kw",
+        "Ascent (kW)": "ascent_kw",
+        "Drag (kW)": "drag_kw",
+        "Aux (kW)": "aux_in_kw"
+    }
+    fig, axes = plt.subplots(len(plot_in_vars)+len(plot_out_vars), len(plot_simdrives), figsize=(15,20))
+    if axes.ndim == 1:
+        axes = axes.reshape(1,-1)
+    fig.tight_layout()
+    for traj_n in range(len(plot_simdrives)):
+        axes[0,traj_n].set_title(f"Trajectory {traj_n}")
+        sim_drive = plot_simdrives[traj_n]
+        for i, (title, var) in enumerate(plot_in_vars.items()):
+            ax = axes[i,traj_n]
+            ax.set_ylabel(title)
+            ax.plot(sim_drive.cyc.time_s, getattr(sim_drive.cyc, var))
+        for i, (title, var) in enumerate(plot_out_vars.items()):
+            i += len(plot_in_vars)
+            ax = axes[i,traj_n]
+            ax.set_ylabel(title)
+            ax.plot(sim_drive.cyc.time_s, getattr(sim_drive, var))
+    return None
+
+
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
     fig.set_figheight(HEIGHT)

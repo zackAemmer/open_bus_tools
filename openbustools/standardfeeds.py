@@ -321,6 +321,7 @@ def segmentize_route_shapes(static_feed, epsg, point_sep_m=300):
     route_shape_points = gpd.GeoDataFrame(geometry=np.concatenate(points), crs=epsg)
     route_shape_points['shape_id'] = shape_ids.values
     route_shape_points['seq_id'] = np.concatenate(seq_ids)
+    route_shape_points['dist_shape_m'] = np.concatenate(distances)
     route_shape_points = {k:d for k, d in route_shape_points.groupby("shape_id")}
     return route_shape_points
 
