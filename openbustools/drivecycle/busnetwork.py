@@ -1,3 +1,4 @@
+from datetime import datetime
 import geopandas as gpd
 import gtfs_kit as gk
 import numpy as np
@@ -14,39 +15,94 @@ from openbustools.drivecycle import trajectory
 from openbustools.traveltime import data_loader
 
 
-def get_trajectories(static_dir, epsg, coord_ref_center, dem_file, point_sep_m=300):
-    # Load a static feed and break each shape into regularly spaced points
-    static_feed = gk.read_feed(static_dir, dist_units="km")
-    route_shape_points = standardfeeds.segmentize_route_shapes(static_feed, epsg=epsg, point_sep_m=point_sep_m)
-    # Create trajectory for each shape
+def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, point_sep_m=300, min_traj_n=4):
+    # Load static feed restricted to target day
+    static_feed = gk.read_feed(static_dir, dist_units="km").restrict_to_dates([str.replace(target_day,'_','')])
+    # Filter trips to active day of week
+    t_day_of_week = datetime.strptime(target_day, "%Y_%m_%d").weekday()
+    active_service_ids = static_feed.calendar[static_feed.calendar.iloc[:,t_day_of_week+1]==1]['service_id'].to_numpy()
+    trips = static_feed.get_trips()
+    trips = trips[trips['service_id'].isin(active_service_ids)]
+    # Get starting minute for trips
+    stop_times = static_feed.get_stop_times()
+    stop_times['t_hour'] = stop_times['departure_time'].str.split(':').str[0].astype(int)
+    stop_times.loc[stop_times['t_hour'] > 23, 't_hour'] = stop_times.loc[stop_times['t_hour'] > 23, 't_hour'] - 24
+    stop_times['t_min'] = stop_times['departure_time'].str.split(':').str[1].astype(int)
+    stop_times['t_min_of_day'] = stop_times['t_hour'] * 60 + stop_times['t_min']
+    stop_times = stop_times.sort_values('stop_sequence').groupby('trip_id').first().reset_index()[['trip_id','t_min_of_day']]
+    trips = trips.merge(stop_times, on='trip_id')
+    trips['t_day_of_week'] = t_day_of_week
+    # Break each shape into regularly spaced points
+    route_shape_points = standardfeeds.segmentize_shapes(static_feed, epsg=epsg, point_sep_m=point_sep_m)
+    # Assemble trajectory for each trip from trip information and shape geometry
     trajectories = []
-    for shape_id, df in route_shape_points.items():
+    for trip_id, df in trips.groupby('trip_id'):
+        shape_df = route_shape_points[df['shape_id'].iloc[0]]
         traj = trajectory.Trajectory(
             point_attr={
-                "lon": df.to_crs(4326).geometry.x.to_numpy(),
-                "lat": df.to_crs(4326).geometry.y.to_numpy(),
-                "seq_id": df.seq_id.to_numpy(),
+                'lon': shape_df.to_crs(4326).geometry.x.to_numpy(),
+                'lat': shape_df.to_crs(4326).geometry.y.to_numpy(),
+                'seq_id': shape_df.seq_id.to_numpy(),
             },
             traj_attr={
-                'shape_id': shape_id,
-                "coord_ref_center": coord_ref_center,
-                "epsg": epsg,
-                "dem_file": dem_file,
-                "t_min_of_day": 9*60,
-                "t_day_of_week": 4,
+                'trip_id': trip_id,
+                'shape_id': df['shape_id'].iloc[0],
+                'route_id': df['route_id'].iloc[0],
+                'direction_id': df['direction_id'].iloc[0],
+                'block_id': df['block_id'].iloc[0],
+                'service_id': df['service_id'].iloc[0],
+                'coord_ref_center': coord_ref_center,
+                'epsg': epsg,
+                'dem_file': dem_file,
+                't_min_of_day': df['t_min_of_day'].iloc[0],
+                't_day_of_week': df['t_day_of_week'].iloc[0],
             },
             resample=False
         )
-        if len(traj.gdf) > 10:
+        if len(traj.gdf) >= min_traj_n:
             trajectories.append(traj)
         else:
-            print(f"Skipping shape {shape_id} with only {len(traj.gdf)} points")
+            print(f"Skipping trip {trip_id} with only {len(traj.gdf)} points")
     return trajectories
 
 
+def predict_speeds(trajectories, model):
+    dataset = data_loader.trajectoryDataset(trajectories, model.config)
+    if model.is_nn:
+        if torch.cuda.is_available():
+            num_workers = 4
+            pin_memory = True
+            accelerator = "cuda"
+        else:
+            num_workers = 0
+            pin_memory = False
+            accelerator = "cpu"
+        loader = DataLoader(
+            dataset,
+            collate_fn=model.collate_fn,
+            batch_size=model.batch_size,
+            shuffle=False,
+            drop_last=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory
+        )
+        trainer = pl.Trainer(
+            accelerator=accelerator,
+            logger=False,
+            inference_mode=True,
+            enable_progress_bar=False,
+            enable_checkpointing=False,
+            enable_model_summary=False
+        )
+        preds_and_labels = trainer.predict(model=model, dataloaders=loader)
+    else:
+        preds_and_labels = model.predict(dataset)
+    return preds_and_labels
+
+
 def update_travel_times(trajectories, model):
-    # Fill trajectory travel time based on predicted speeds
-    preds = trajectory.predict_speeds(trajectories, model)
+    # Replace trajectory travel time based on predicted speeds
+    preds = predict_speeds(trajectories, model)
     res = []
     for batch in preds:
         batch['mask'][0,:] = True
@@ -60,15 +116,15 @@ def update_travel_times(trajectories, model):
         traj.gdf['cumul_time_s'] = traj.gdf['calc_time_s'].cumsum() - traj.gdf['calc_time_s'].iloc[0]
 
 
-def get_trajectory_energy(traj):
+def get_trajectory_energy(traj, veh_file):
     cycle_pred = {
         "cycGrade": np.clip(spatial.divide_fwd_back_fill(np.diff(traj.gdf['calc_elev_m'], prepend=traj.gdf['calc_elev_m'].iloc[0]), traj.gdf['calc_dist_m']), -0.15, 0.15),
-        "mps": spatial.apply_sg_filter(traj.gdf["pred_speed_m_s"].to_numpy(), 8, 0, 30),
+        "mps": spatial.apply_sg_filter(traj.gdf["pred_speed_m_s"].to_numpy(), polyorder=8, clip_min=0, clip_max=30),
         "time_s": traj.gdf['cumul_time_s'].to_numpy(),
         "road_type": np.zeros(len(traj.gdf))
     }
     cycle_pred = fsim.cycle.Cycle.from_dict(fsim.cycle.resample(cycle_pred, new_dt=1)).to_rust()
-    veh = fsim.vehicle.Vehicle.from_vehdb(63, veh_file=Path("..", "data", "FASTSim_py_veh_db.csv")).to_rust()
+    veh = fsim.vehicle.Vehicle.from_vehdb(63, veh_file=veh_file).to_rust()
     sim_drive_pred = fsim.simdrive.RustSimDrive(cycle_pred, veh)
     sim_drive_pred.sim_drive()
     sim_drive_pred = fsim.simdrive.copy_sim_drive(sim_drive_pred, 'python')

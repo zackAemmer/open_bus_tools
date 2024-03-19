@@ -124,6 +124,23 @@ def get_date_list(start, n_days):
     return [f"{date.strftime('%Y_%m_%d')}.pkl" for date in date_list]
 
 
+def get_trip_start_and_end_times(static_feed):
+    stop_times = static_feed.get_stop_times()
+    stop_times = stop_times.sort_values(['trip_id','stop_sequence'])[['trip_id','departure_time']]
+    stop_times_first = stop_times.groupby('trip_id').first()
+    stop_times_last = stop_times.groupby('trip_id').last()
+    stop_times = stop_times_first.merge(stop_times_last, on='trip_id', suffixes=('_first','_last'))
+    stop_times = stop_times.reset_index()
+    stop_times['t_hour_first'] = stop_times['departure_time_first'].str.split(':').str[0].astype(int)
+    stop_times['t_min_first'] = stop_times['departure_time_first'].str.split(':').str[1].astype(int)
+    stop_times['t_min_of_day_first'] = stop_times['t_hour_first']*60 + stop_times['t_min_first']
+    stop_times['t_hour_last'] = stop_times['departure_time_last'].str.split(':').str[0].astype(int)
+    stop_times['t_min_last'] = stop_times['departure_time_last'].str.split(':').str[1].astype(int)
+    stop_times['t_min_of_day_last'] = stop_times['t_hour_last']*60 + stop_times['t_min_last']
+    stop_times = stop_times[['trip_id','t_min_of_day_first','t_min_of_day_last']].copy()
+    return stop_times
+
+
 def get_gtfs_shapes_lookup(gtfs_folder):
     """
     Get uniquely identified route shapes:trip_ids lookup from GTFS files.
@@ -311,13 +328,13 @@ def date_to_service_id(date_str, gtfs_folder):
     return list(valid_service_ids.service_id)
 
 
-def segmentize_route_shapes(static_feed, epsg, point_sep_m=300):
-    route_shapes = static_feed.geometrize_shapes().set_crs(4326).to_crs(epsg)
+def segmentize_shapes(static_feed, epsg, point_sep_m=300):
+    shape_geometries = static_feed.geometrize_shapes().copy().set_crs(4326).to_crs(epsg)
     # Get regularly spaced points on each shape in the static feed
-    distances = [np.arange(0,line.length,point_sep_m) for line in route_shapes['geometry']]
-    shape_ids = np.repeat(route_shapes['shape_id'], [len(x) for x in distances])
+    distances = [np.arange(0,line.length,point_sep_m) for line in shape_geometries['geometry']]
+    shape_ids = np.repeat(shape_geometries['shape_id'], [len(x) for x in distances])
     seq_ids = [np.arange(len(x)) for x in distances]
-    points = [line.interpolate(d) for line, d in zip(route_shapes['geometry'], distances)]
+    points = [line.interpolate(d) for line, d in zip(shape_geometries['geometry'], distances)]
     route_shape_points = gpd.GeoDataFrame(geometry=np.concatenate(points), crs=epsg)
     route_shape_points['shape_id'] = shape_ids.values
     route_shape_points['seq_id'] = np.concatenate(seq_ids)
