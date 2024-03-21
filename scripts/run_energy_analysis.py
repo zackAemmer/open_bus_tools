@@ -100,24 +100,24 @@ if __name__=="__main__":
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # network_energy_analysis(
-    #     network_name="kcm",
-    #     static_dir=Path("data","kcm_static"),
-    #     model_dir=Path("logs","kcm","GRU-4"),
-    #     dem_file = Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
-    #     veh_file = Path("data","FASTSim_py_veh_db.csv"),
-    #     epsg=32148,
-    #     coord_ref_center=[386910,69022],
-    #     target_day="2024_01_03",
-    #     start_step=2
-    # )
+    network_energy_analysis(
+        network_name="kcm",
+        static_dir=Path("data","kcm_static"),
+        model_dir=Path("logs","kcm","GRU-4"),
+        dem_file = Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
+        veh_file = Path("data","FASTSim_py_veh_db.csv"),
+        epsg=32148,
+        coord_ref_center=[386910,69022],
+        target_day="2024_01_03",
+        start_step=0
+    )
 
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iloc[:].iterrows():
         network_energy_analysis(
             network_name=row['uuid'],
             static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-            model_dir=Path('data','other_feeds', f"{row['uuid']}_models", "lightning_logs"),
+            model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs"),
             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
             veh_file = Path("data","FASTSim_py_veh_db.csv"),
             epsg=row['epsg_code'],

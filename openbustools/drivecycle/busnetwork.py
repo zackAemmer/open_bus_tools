@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import lightning.pytorch as pl
 import scipy
+from sklearn.cluster import KMeans
 import torch
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -29,8 +30,10 @@ def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, p
     stop_times.loc[stop_times['t_hour'] > 23, 't_hour'] = stop_times.loc[stop_times['t_hour'] > 23, 't_hour'] - 24
     stop_times['t_min'] = stop_times['departure_time'].str.split(':').str[1].astype(int)
     stop_times['t_min_of_day'] = stop_times['t_hour'] * 60 + stop_times['t_min']
-    stop_times = stop_times.sort_values('stop_sequence').groupby('trip_id').first().reset_index()[['trip_id','t_min_of_day']]
-    trips = trips.merge(stop_times, on='trip_id')
+    stop_times_start = stop_times.sort_values('stop_sequence').groupby('trip_id').first().reset_index()[['trip_id','t_min_of_day']]
+    stop_times_end = stop_times.sort_values('stop_sequence').groupby('trip_id').last().reset_index()[['trip_id','t_min_of_day']]
+    trips = trips.merge(stop_times_start, on='trip_id', suffixes=('','_start'))
+    trips = trips.merge(stop_times_end, on='trip_id', suffixes=('','_end'))
     trips['t_day_of_week'] = t_day_of_week
     # Break each shape into regularly spaced points
     route_shape_points = standardfeeds.segmentize_shapes(static_feed, epsg=epsg, point_sep_m=point_sep_m)
@@ -55,6 +58,7 @@ def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, p
                 'epsg': epsg,
                 'dem_file': dem_file,
                 't_min_of_day': df['t_min_of_day'].iloc[0],
+                't_min_of_day_end': df['t_min_of_day_end'].iloc[0],
                 't_day_of_week': df['t_day_of_week'].iloc[0],
             },
             resample=False
@@ -152,3 +156,70 @@ class CycleInputResult():
         self.time_s = np.array(fastsim_res.cyc.time_s)
         self.mph = np.array(fastsim_res.cyc.mph)
         self.grade = np.array(fastsim_res.cyc.grade)
+
+
+def get_energy_results(network_trajs, network_cycles, n_depots=1, deadhead_eff=0.49):
+    # Pull info from the trajectories (input) and cycles (fastsim outputs)
+    network_id = network_trajs[0].traj_attr['dem_file'].parent.name.split("_")[0]
+    trip_ids = [t.traj_attr['trip_id'] for t in network_trajs]
+    block_ids = [t.traj_attr['block_id'] for t in network_trajs]
+    # If the agency doesn't report blocks treat each trip as a block
+    if pd.isna(block_ids).any():
+        block_ids = np.arange(len(trip_ids))
+    num_trips = len(trip_ids)
+    num_blocks = len(set(block_ids))
+    trip_efficiencies = [1/cycle.electric_kwh_per_mi for cycle in network_cycles]
+    total_kwh = [np.sum(c.ess_kw_out_ach) / 3600 for c in network_cycles]
+    start_loc = [t.gdf.iloc[0].geometry for t in network_trajs]
+    end_loc = [t.gdf.iloc[-1].geometry for t in network_trajs]
+    t_min_of_day = [t.traj_attr['t_min_of_day'] for t in network_trajs]
+    t_min_of_day_end = [t.traj_attr['t_min_of_day_end'] for t in network_trajs]
+    distance = [int(np.sum(t.gdf['calc_dist_m'])) for t in network_trajs]
+    # Create a dataframe with rows for each trip in the network on the target day
+    df = pd.DataFrame({
+        'network_id': network_id,
+        'block_id': block_ids,
+        'trip_id': trip_ids,
+        't_min_of_day': t_min_of_day,
+        't_min_of_day_end': t_min_of_day_end,
+        'efficiency': trip_efficiencies,
+        'total_kwh': total_kwh,
+        'start_loc': start_loc,
+        'end_loc': end_loc,
+        'distance': distance,
+        'num_trips': num_trips,
+        'num_blocks': num_blocks,
+    })
+    df = df.sort_values(['network_id','block_id','t_min_of_day'])
+    # Get down time between trips
+    df['t_min_down'] = df.groupby('block_id').apply(func=lambda x: x['t_min_of_day'].shift(-1, fill_value=x['t_min_of_day_end'].iloc[-1]) - x['t_min_of_day_end'], include_groups=False).to_numpy()
+    # Get manhattan distance between trips
+    df['start_loc_next'] = df.groupby('block_id').apply(func=lambda x: x['start_loc'].shift(-1, fill_value=x['end_loc'].iloc[-1])).to_numpy()
+    df['trip_deadhead_dist_m'] = spatial.manhattan_distance(np.array([loc.x for loc in df['start_loc_next']]), np.array([loc.y for loc in df['start_loc_next']]), np.array([loc.x for loc in df['end_loc']]), np.array([loc.y for loc in df['end_loc']]))
+    df['trip_deadhead_kwh'] = df['trip_deadhead_dist_m'] / 1000 / deadhead_eff
+    # Get theoretical depot locations with kmeans on block starting locations
+    kmeans = KMeans(n_clusters=n_depots, random_state=0, n_init="auto").fit(np.array([(loc.x, loc.y) for loc in df.groupby('block_id').first()['start_loc']]))
+    depot_assigned = kmeans.labels_
+    depot_locations = kmeans.cluster_centers_
+    # Get distance from start and end of each block to its assigned depot
+    depot_assignments = pd.DataFrame({
+        "block_id": df.groupby('block_id').first().index,
+        "block_start_x": [bs.x for bs in df.groupby('block_id').first()['start_loc']],
+        "block_start_y": [bs.y for bs in df.groupby('block_id').first()['start_loc']],
+        "block_end_x": [bs.x for bs in df.groupby('block_id').last()['end_loc']],
+        "block_end_y": [bs.y for bs in df.groupby('block_id').last()['end_loc']],
+        "depot_id": depot_assigned,
+    })
+    depot_locations = pd.DataFrame({
+        "depot_id": range(n_depots),
+        "depot_x": depot_locations[:,0],
+        "depot_y": depot_locations[:,1],
+    })
+    depot_assignments = pd.merge(depot_assignments, depot_locations, on="depot_id")
+    depot_assignments['block_deadhead_start_dist_m'] = depot_assignments.apply(lambda x: spatial.manhattan_distance(x['block_start_x'], x['block_start_y'], x['depot_x'], x['depot_y']), axis=1)
+    depot_assignments['block_deadhead_end_dist_m'] = depot_assignments.apply(lambda x: spatial.manhattan_distance(x['block_end_x'], x['block_end_y'], x['depot_x'], x['depot_y']), axis=1)
+    depot_assignments['block_deadhead_start_kwh'] = depot_assignments['block_deadhead_start_dist_m'] / 1000 / deadhead_eff
+    depot_assignments['block_deadhead_end_kwh'] = depot_assignments['block_deadhead_end_dist_m'] / 1000 / deadhead_eff
+    depot_assignments = depot_assignments[['block_id','depot_id','block_deadhead_start_kwh','block_deadhead_end_kwh']].copy()
+    df = pd.merge(df, depot_assignments, on="block_id")
+    return df, depot_locations

@@ -14,6 +14,22 @@ from srai.neighbourhoods.h3_neighbourhood import H3Neighbourhood
 from srai.regionalizers import H3Regionalizer
 
 
+def manhattan_distance(x1, y1, x2, y2):
+    """
+    Calculate the Manhattan distance between two points in a 2D plane.
+    
+    Args:
+        x1 (float): The x-coordinate of the first point.
+        y1 (float): The y-coordinate of the first point.
+        x2 (float): The x-coordinate of the second point.
+        y2 (float): The y-coordinate of the second point.
+    
+    Returns:
+        float: The Manhattan distance between the two points.
+    """
+    return abs(x1 - x2) + abs(y1 - y2)
+
+
 def make_polygon(bbox):
     """
     Create a polygon from a bounding box.
