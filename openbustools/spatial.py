@@ -264,7 +264,7 @@ def load_regions(embeddings_folder):
 def apply_sg_filter(sequence, polyorder=3, clip_min=None, clip_max=None):
     # window len <= sequence len
     # polyorder < window len
-    window_len = max([len(sequence) // 20, len(sequence)])
+    window_len = min([len(sequence) // 20, len(sequence)])
     polyorder = min([polyorder, window_len-1])
     filtered_sequence = scipy.signal.savgol_filter(sequence, window_length=window_len, polyorder=polyorder)
     if clip_min is not None:

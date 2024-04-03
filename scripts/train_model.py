@@ -51,7 +51,7 @@ if __name__=="__main__":
 
     logger.info(f"RUN: {args.run_label}")
     logger.info(f"MODEL: {args.model_type}")
-    logger.info(f"DATA: {args.data_folders}")
+    logger.info(f"DATA: {len(args.data_folders)}, {args.data_folders}")
     logger.info(f"START: {args.train_date}")
     logger.info(f"DAYS: {args.train_n}")
     logger.info(f"num_workers: {num_workers}")

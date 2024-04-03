@@ -13,7 +13,7 @@ import scipy.stats as stats
 import seaborn as sns
 import statsmodels.api as sm
 
-from openbustools import standardfeeds
+from openbustools import standardfeeds, spatial
 
 HEIGHT=10
 WIDTH=8
@@ -31,32 +31,66 @@ def drive_cycle_energy_plot(plot_simdrives, title_text="throwaway"):
         "Grade (%/100)": "grade"
     }
     plot_out_vars = {
-        "Total (kW)": "ess_kw_out_ach",
-        "Acceleration (kW)": "accel_kw",
-        "Rolling (kW)": "rr_kw",
-        "Loss (kW)": "ess_loss_kw",
-        "Ascent (kW)": "ascent_kw",
-        "Drag (kW)": "drag_kw",
-        "Aux (kW)": "aux_in_kw"
+        "Total (kWh)": "ess_kw_out_ach",
+        "Acceleration (kWh)": "accel_kw",
+        "Rolling (kWh)": "rr_kw",
+        "Loss (kWh)": "ess_loss_kw",
+        "Ascent (kWh)": "ascent_kw",
+        "Drag (kWh)": "drag_kw",
+        "Aux (kWh)": "aux_in_kw"
     }
-    fig, axes = plt.subplots(len(plot_in_vars)+len(plot_out_vars), len(plot_simdrives), figsize=(15,20))
+    ax_lims = {
+        "Speed (mph)": [0, 70],
+        "Grade (%/100)": [-10, 10],
+        "Total (kWh)": [0, 100],
+        "Acceleration (kWh)": [0, 5],
+        "Rolling (kWh)": [0, 50],
+        "Loss (kWh)": [0, 5],
+        "Ascent (kWh)": [0, 15],
+        "Drag (kWh)": [0, 50],
+        "Aux (kWh)": [0, 20]
+    }
+    fig, axes = plt.subplots(len(plot_in_vars)+len(plot_out_vars), len(plot_simdrives), figsize=(20,20))
     if axes.ndim == 1:
         axes = axes.reshape(1,-1)
     fig.tight_layout()
     for traj_n in range(len(plot_simdrives)):
         axes[0,traj_n].set_title(f"Trajectory {traj_n}")
         sim_drive = plot_simdrives[traj_n]
-        for i, (title, var) in enumerate(plot_in_vars.items()):
-            ax = axes[i,traj_n]
-            ax.set_ylabel(title)
-            ax.plot(sim_drive.cyc.time_s, getattr(sim_drive.cyc, var))
-        for i, (title, var) in enumerate(plot_out_vars.items()):
-            i += len(plot_in_vars)
-            ax = axes[i,traj_n]
-            ax.set_ylabel(title)
-            ax.plot(sim_drive.cyc.time_s, getattr(sim_drive, var))
+        for source, res in sim_drive.items():
+            for i, (title, var) in enumerate(plot_in_vars.items()):
+                ax = axes[i,traj_n]
+                ax.set_ylabel(title)
+                ax.plot(res[1].cyc.time_s, getattr(res[1].cyc, var), label=source)
+            for i, (title, var) in enumerate(plot_out_vars.items()):
+                i += len(plot_in_vars)
+                ax = axes[i,traj_n]
+                ax.set_ylabel(title)
+                ax.set_ylim(ax_lims[title])
+                ax.plot(res[1].cyc.time_s, np.cumsum(getattr(res[1], var)) / 60 /60, label=source)
+    axes[0,0].legend()
     return None
 
+
+def drive_cycle_comparison(plot_energy_res, title_text="throwaway"):
+    fig, axes = plt.subplots(2,1,figsize=(15,6))
+    fig.tight_layout()
+    axes = axes.flatten()
+    sns.lineplot(x=plot_energy_res['agg'][0].time_s, y=plot_energy_res['agg'][0].mps, ax=axes[0], label="Aggregated")
+    sns.lineplot(x=plot_energy_res['pred'][0].time_s, y=plot_energy_res['pred'][0].mps, ax=axes[0], label="Predicted")
+    agg_smooth = spatial.apply_sg_filter(plot_energy_res['agg'][0].mps, 8, 0, 30)
+    pred_smooth = spatial.apply_sg_filter(plot_energy_res['pred'][0].mps, 8, 0, 30)
+    sns.lineplot(x=plot_energy_res['agg'][0].time_s, y=agg_smooth, ax=axes[1], label="Aggregated")
+    sns.lineplot(x=plot_energy_res['pred'][0].time_s, y=pred_smooth, ax=axes[1], label="Predicted")
+    axes[0].set_title("Example Drive Cycle Constructed with Aggregated vs. Predicted Speed Methods")
+    axes[0].set_ylabel("Speed (m/s)")
+    axes[1].set_ylabel("Smoothed Speed (m/s)")
+    axes[1].set_xlabel("Time (s)")
+    axes[1].legend("")
+    axes[0].set_ylim(0, 20)
+    axes[1].set_ylim(0, 20)
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
+    return None
 
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
