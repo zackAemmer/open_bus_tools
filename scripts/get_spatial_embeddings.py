@@ -13,20 +13,6 @@ from srai.loaders.osm_loaders.filters import HEX2VEC_FILTER
 from openbustools import spatial
 
 
-# # Remove existing embeddings if desired
-# dir_to_wipe = Path(spatial_folder, "spatial_embeddings")
-# if dir_to_wipe.exists():
-#     shutil.rmtree(dir_to_wipe)
-# [x.unlink() for x in spatial_folder.glob('*.pkl')]
-
-# # Check if downloaded properly
-# osm_dir = list(embeddings_dir.glob('Geofabrik*'))
-# embeddings = list(embeddings_dir.glob('embeddings_osm.pkl'))
-# print(len(osm_dir), len(embeddings))
-# if len(osm_dir) == 0 or len(embeddings) == 0:
-#     print(embeddings_dir.parent)
-#     print("Download OSM")
-
 # # My temporary fix for GTFSLoader issues where the first wednesday does not have any trips
 # # Can be caused by service alerts or calendar starting way prior to actual trips
 # # Only use start date range tied to service ids; service alerts go back before actual trips start
@@ -86,18 +72,21 @@ def create_combined_gtfs_embedder(cleaned_sources, kcm_embeddings_folder, atb_em
         all_regions.append(regions)
         all_features.append(features)
     for i, row in cleaned_sources.iterrows():
-        logger.debug(f"Loading area, features from {row['uuid']}")
-        static_dir = Path('data','other_feeds',f"{row['uuid']}_static")
-        embeddings_dir = Path('data','other_feeds',f"{row['uuid']}_spatial", "spatial_embeddings")
-        area, regions, neighbourhood = spatial.load_regions(embeddings_dir)
-        feed_dates = list(set(static_dir.glob('*')) - set(static_dir.glob('*.zip')))
-        feed_date = feed_dates[0]
-        logger.debug(f"Using feed from {feed_date}")
-        features = loader.load(feed_date, skip_validation=True)
-        features = add_missing_embedding_columns(features)
-        all_areas.append(area)
-        all_regions.append(regions)
-        all_features.append(features)
+        try:
+            logger.debug(f"Loading area, features from {row['uuid']}")
+            static_dir = Path('data','other_feeds',f"{row['uuid']}_static")
+            embeddings_dir = Path('data','other_feeds',f"{row['uuid']}_spatial", "spatial_embeddings")
+            area, regions, neighbourhood = spatial.load_regions(embeddings_dir)
+            feed_dates = list(set(static_dir.glob('*')) - set(static_dir.glob('*.zip')))
+            feed_date = feed_dates[0]
+            logger.debug(f"Using feed from {feed_date}")
+            features = loader.load(feed_date, skip_validation=True)
+            features = add_missing_embedding_columns(features)
+            all_areas.append(area)
+            all_regions.append(regions)
+            all_features.append(features)
+        except Exception as e:
+            logger.error(f"Error loading {row['provider']}: {e}")
     logger.debug(f"Combining all areas, regions, features and fitting GTFS embedder")
     all_areas = pd.concat(all_areas)
     all_regions = pd.concat(all_regions)
@@ -162,20 +151,20 @@ if __name__ == "__main__":
 
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
 
-    # # Create regions
-    # _, _, _ = spatial.create_regions([-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442], Path('data','kcm_spatial'))
-    # _, _, _ = spatial.create_regions([10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395], Path('data','atb_spatial'))
-    # for i, row in cleaned_sources.iterrows():
-    #     spatial.create_regions([row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], Path('data','other_feeds',f"{row['uuid']}_spatial"))
+    # Create regions
+    _, _, _ = spatial.create_regions([-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442], Path('data','kcm_spatial','spatial_embeddings'))
+    _, _, _ = spatial.create_regions([10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395], Path('data','atb_spatial','spatial_embeddings'))
+    for i, row in cleaned_sources.iterrows():
+        spatial.create_regions([row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']], Path('data','other_feeds',f"{row['uuid']}_spatial","spatial_embeddings"))
 
     # Create one combined GTFS embedder
     create_combined_gtfs_embedder(cleaned_sources, Path('data','kcm_spatial'), Path('data','atb_spatial'))
 
-    # # Get OSM embeddings
-    # calculate_osm_embeddings(Path('data','kcm_spatial'))
-    # calculate_osm_embeddings(Path('data','atb_spatial'))
-    # for i, row in cleaned_sources.iterrows():
-    #     calculate_osm_embeddings(Path('data','other_feeds',f"{row['uuid']}_spatial"))
+    # Get OSM embeddings
+    calculate_osm_embeddings(Path('data','kcm_spatial'))
+    calculate_osm_embeddings(Path('data','atb_spatial'))
+    for i, row in cleaned_sources.iterrows():
+        calculate_osm_embeddings(Path('data','other_feeds',f"{row['uuid']}_spatial"))
 
     # Get GTFS embeddings
     calculate_gtfs_embeddings(Path('data', 'kcm_spatial'), Path('data', 'kcm_static'))
