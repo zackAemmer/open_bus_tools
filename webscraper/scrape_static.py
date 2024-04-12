@@ -16,6 +16,8 @@ if __name__ == "__main__":
         provider_folder.mkdir(exist_ok=True, parents=True)
         localized_date = datetime.datetime.now().astimezone(pytz.timezone(row['tz_str']))
         localized_date_str = localized_date.strftime("%Y_%m_%d")
+
+        # Download and extract recent zip feed
         try:
             response = requests.get(row['static_url'])
             with open(Path(provider_folder, f"{localized_date_str}.zip"), 'wb') as f:
@@ -27,6 +29,18 @@ if __name__ == "__main__":
         except:
             print(f"ERROR downloading {row['provider']} static data")
             continue
+        # # Extract all static zip feeds
+        # try:
+        #     static_zips = Path(provider_folder).glob("*.zip")
+        #     for sz in static_zips:
+        #         localized_date_str = sz.stem
+        #         with zipfile.ZipFile(Path(provider_folder, f"{localized_date_str}.zip"), 'r') as zip_ref:
+        #             destination_folder = Path(provider_folder, f"{localized_date_str}")
+        #             destination_folder.mkdir(exist_ok=True, parents=True)
+        #             zip_ref.extractall(destination_folder)
+        # except Exception as e:
+        #     print(f"ERROR unzipping {row['provider']} static data {e}")
+        #     continue
 
     # Repeat for KCM
     provider_folder = Path('data', 'kcm_static')

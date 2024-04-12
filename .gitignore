@@ -6,10 +6,12 @@
 /figures/*
 /plots/*
 /results/*
+/results_urban_mgmt/*
 /.vscode/*
 /.venv/*
 /dist/*
 /logs/*
+/logs_urban_mgmt/*
 /lightning_logs/*
 /cache/*
 /profiler/*
