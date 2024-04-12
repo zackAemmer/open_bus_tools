@@ -124,7 +124,7 @@ def calculate_osm_embeddings(spatial_folder):
     logger.debug(f"Embedding OSM for {spatial_folder}")
     embeddings_dir = Path(spatial_folder, "spatial_embeddings")
     embeddings_dir.mkdir(parents=True, exist_ok=True)
-    loader = OSMPbfLoader(download_source='geofabrik', download_directory=embeddings_dir)
+    loader = OSMPbfLoader(download_source='geofabrik', download_directory=Path('data','osm_dl'))
     joiner = IntersectionJoiner()
     embedder_osm = Hex2VecEmbedder.load(Path("data", "pretrained_embeddings"))
     # Load precalculated regions
