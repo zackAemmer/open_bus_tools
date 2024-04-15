@@ -13,6 +13,7 @@
 /logs/*
 /logs_urban_mgmt/*
 /lightning_logs/*
+/logs_gtfs_embedder/*
 /cache/*
 /profiler/*
 secret.py

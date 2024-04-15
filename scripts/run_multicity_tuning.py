@@ -85,7 +85,7 @@ def multicity_tuning(**kwargs):
 
     # Tune, then re-test the base model on increasing number of data samples
     n_batches = [1, 10, 100, 500, 1000]
-    n_batches = [100]
+    # n_batches = [100]
     batch_size = 10
 
     for j, batch_limit in enumerate(n_batches):
@@ -187,7 +187,7 @@ if __name__=="__main__":
 
     cleaned_sources = pd.read_csv(Path("data", "cleaned_sources.csv"))
 
-    for i, row in cleaned_sources.iloc[:].iterrows():
+    for i, row in cleaned_sources.iloc[:33].iterrows():
         try:
             multicity_tuning(
                 base_model_network="mix",

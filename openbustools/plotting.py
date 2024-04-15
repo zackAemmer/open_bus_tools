@@ -248,12 +248,14 @@ def formatted_residuals_plot(plot_df, title_text="throwaway"):
     return None
 
 
-def formatted_grid_animation(data, title_text="throwaway"):
+def formatted_grid_animation(data, title_text="throwaway", location_str=""):
     fig, axes = plt.subplots(1, 1)
-    fig.tight_layout()
+    # fig.tight_layout()
     # Define the update function that will be called for each frame of the animation
     def update(frame):
-        fig.suptitle(f"Frame {frame}")
+        hour = frame // 60
+        minute = frame % 60
+        fig.suptitle(f"{location_str} - Time: {hour:02d}:{minute:02d}")
         for i in range(1):
             d = data[:,:,:]
             vmin=np.min(d[~np.isnan(d)])
@@ -264,7 +266,7 @@ def formatted_grid_animation(data, title_text="throwaway"):
     ani = animation.FuncAnimation(fig, update, frames=data.shape[0])
     writergif = animation.PillowWriter(fps=30)
     # Save the animation object
-    ani.save(f"../plots/{title_text}.gif", writer=writergif)
+    ani.save(f"../plots/grid_animations/{title_text}.gif", writer=writergif)
 
 
 # def formatted_barplot(plot_df):

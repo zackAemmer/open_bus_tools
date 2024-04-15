@@ -103,7 +103,7 @@ if __name__=="__main__":
     network_energy_analysis(
         network_name="kcm",
         static_dir=Path("data","kcm_static"),
-        model_dir=Path("logs","kcm","GRU-4"),
+        model_dir=Path("logs","kcm","GRU-0"),
         dem_file = Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
         veh_file = Path("data","FASTSim_py_veh_db.csv"),
         epsg=32148,
