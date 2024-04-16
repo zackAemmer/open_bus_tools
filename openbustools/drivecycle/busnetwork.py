@@ -123,7 +123,7 @@ def update_travel_times(trajectories, model):
 def get_trajectory_energy(traj, veh_file):
     cycle_pred = {
         "cycGrade": np.clip(spatial.divide_fwd_back_fill(np.diff(traj.gdf['calc_elev_m'], prepend=traj.gdf['calc_elev_m'].iloc[0]), traj.gdf['calc_dist_m']), -0.15, 0.15),
-        "mps": spatial.apply_sg_filter(traj.gdf["pred_speed_m_s"].to_numpy(), polyorder=8, clip_min=0, clip_max=30),
+        "mps": spatial.apply_sg_filter(traj.gdf["pred_speed_m_s"].to_numpy(), polyorder=5, clip_min=0, clip_max=35),
         "time_s": traj.gdf['cumul_time_s'].to_numpy(),
         "road_type": np.zeros(len(traj.gdf))
     }

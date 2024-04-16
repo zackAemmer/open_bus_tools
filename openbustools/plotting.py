@@ -242,26 +242,31 @@ def formatted_residuals_plot(plot_df, title_text="throwaway"):
     sns.residplot(plot_df, ax=axes[0], x='labels', y='preds', lowess=True, scatter_kws={'marker': '.'}, line_kws={'color': 'red'})
     sm.qqplot(plot_df['residuals'], ax=axes[1], dist=stats.t, distargs=(len(plot_df)-1,), line='45', fit=True)
     sns.histplot(plot_df['residuals'], ax=axes[2], bins=100)
-    fig.suptitle(title_text, fontsize=16)
+    fig.suptitle(title_text, fontsize=24)
     fig.tight_layout()
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return None
 
 
-def formatted_grid_animation(data, title_text="throwaway", location_str=""):
+def formatted_grid_animation(data, start_frame=None, end_frame=None, title_text="throwaway", location_str=""):
     fig, axes = plt.subplots(1, 1)
     # fig.tight_layout()
+    start_hour = start_frame // 60
+    start_minute = start_frame % 60
+    data = data[start_frame:end_frame,:,:]
     # Define the update function that will be called for each frame of the animation
     def update(frame):
-        hour = frame // 60
-        minute = frame % 60
-        fig.suptitle(f"{location_str} - Time: {hour:02d}:{minute:02d}")
+        hour = frame // 60 + start_hour
+        minute = frame % 60 + start_minute
+        fig.suptitle(f"{location_str}\nTime: {hour:02d}:{minute:02d}", fontsize=16)
         for i in range(1):
             d = data[:,:,:]
             vmin=np.min(d[~np.isnan(d)])
             vmax=np.max(d[~np.isnan(d)])
             axes.clear()
             im = axes.imshow(data[frame,:,:], cmap='plasma', vmin=vmin, vmax=vmax, origin="lower")
+            axes.set_xticks([])
+            axes.set_yticks([])
     # Create the animation object
     ani = animation.FuncAnimation(fig, update, frames=data.shape[0])
     writergif = animation.PillowWriter(fps=30)

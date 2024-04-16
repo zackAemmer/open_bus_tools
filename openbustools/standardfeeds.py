@@ -486,3 +486,13 @@ def get_phone_trajectory(phone_trajectory_folder, timezone, epsg, coord_ref_cent
         resample=resample
     )
     return phone_traj
+
+
+def clean_parametrix(data_path):
+    df = pd.read_csv(data_path)
+    df = df.melt(id_vars=['DateTime'], var_name='vehicle_id_metric', value_name='value')
+    df['DateTime'] = pd.to_datetime(df['DateTime'])
+    df['vehicle_id'] = df['vehicle_id_metric'].str.split(' - ').str[0]
+    df['metric'] = df['vehicle_id_metric'].str.split(' - ').str[1]
+    df = df.drop(columns=['vehicle_id_metric'])
+    return df
