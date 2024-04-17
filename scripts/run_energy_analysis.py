@@ -79,7 +79,7 @@ def network_energy_analysis(**kwargs):
             file.close()
         if not kwargs['load_cycles']:
             logger.debug(f"CALCULATING DRIVE CYCLE ENERGY: {kwargs['network_name']}")
-            cycles = [busnetwork.get_trajectory_energy(traj, kwargs['veh_file']) for traj in trajectories]
+            cycles = [busnetwork.get_trajectory_energy(traj, kwargs['veh_file'], kwargs['veh_num']) for traj in trajectories]
             file = open(save_dir / "cycles.pkl", "wb")
             pickle.dump(cycles, file)
             file.close()
@@ -108,11 +108,12 @@ if __name__=="__main__":
         model_dir=Path("logs","mix","GRU-0"),
         dem_file = Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
         veh_file = Path("data","FASTSim_py_veh_db.csv"),
+        veh_num = 64,
         epsg=32148,
         coord_ref_center=[386910,69022],
         target_day="2023_12_01",
         load_trajs=True,
-        load_times=False,
+        load_times=True,
         load_cycles=False
     )
 

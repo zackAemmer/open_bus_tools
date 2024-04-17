@@ -180,9 +180,9 @@ if __name__=="__main__":
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    train_days = standardfeeds.get_date_list('2024_01_05', 5)
+    train_days = standardfeeds.get_date_list('2024_04_03', 4)
     train_days = [x.split(".")[0] for x in train_days]
-    test_days = standardfeeds.get_date_list('2024_02_06', 7)
+    test_days = standardfeeds.get_date_list('2024_04_08', 4)
     test_days = [x.split(".")[0] for x in test_days]
 
     cleaned_sources = pd.read_csv(Path("data", "cleaned_sources.csv"))
@@ -190,7 +190,7 @@ if __name__=="__main__":
     for i, row in cleaned_sources.iloc[:33].iterrows():
         try:
             multicity_tuning(
-                base_model_network="mix",
+                base_model_network="kcm",
                 model_type="GRU",
                 network_name=row['uuid'],
                 train_days=train_days,

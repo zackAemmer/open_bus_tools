@@ -120,7 +120,7 @@ def update_travel_times(trajectories, model):
         traj.gdf['cumul_time_s'] = traj.gdf['calc_time_s'].cumsum() - traj.gdf['calc_time_s'].iloc[0]
 
 
-def get_trajectory_energy(traj, veh_file):
+def get_trajectory_energy(traj, veh_file, veh_num):
     cycle_pred = {
         "cycGrade": np.clip(spatial.divide_fwd_back_fill(np.diff(traj.gdf['calc_elev_m'], prepend=traj.gdf['calc_elev_m'].iloc[0]), traj.gdf['calc_dist_m']), -0.15, 0.15),
         "mps": spatial.apply_sg_filter(traj.gdf["pred_speed_m_s"].to_numpy(), polyorder=5, clip_min=0, clip_max=35),
@@ -128,7 +128,7 @@ def get_trajectory_energy(traj, veh_file):
         "road_type": np.zeros(len(traj.gdf))
     }
     cycle_pred = fsim.cycle.Cycle.from_dict(fsim.cycle.resample(cycle_pred, new_dt=1)).to_rust()
-    veh = fsim.vehicle.Vehicle.from_vehdb(63, veh_file=veh_file).to_rust()
+    veh = fsim.vehicle.Vehicle.from_vehdb(veh_num, veh_file=veh_file).to_rust()
     sim_drive_pred = fsim.simdrive.RustSimDrive(cycle_pred, veh)
     sim_drive_pred.sim_drive()
     sim_drive_pred = fsim.simdrive.copy_sim_drive(sim_drive_pred, 'python')
@@ -158,7 +158,7 @@ class CycleInputResult():
         self.grade = np.array(fastsim_res.cyc.grade)
 
 
-def get_energy_results(network_trajs, network_cycles, n_depots=1, default_economy=1.98, default_aux=10.2):
+def get_energy_results(network_trajs, network_cycles, n_depots=1, deadhead_economy_kwh_mi=1.98, deadhead_aux_kw=10.2):
     """
     Post processing for energy results.
     """
@@ -172,12 +172,16 @@ def get_energy_results(network_trajs, network_cycles, n_depots=1, default_econom
     num_trips = len(trip_ids)
     num_blocks = len(set(block_ids))
     trip_economy = [float(cycle.electric_kwh_per_mi) for cycle in network_cycles]
+    trip_distance = [int(np.sum(t.gdf['calc_dist_m'])) for t in network_trajs]
     start_loc = [t.gdf.iloc[0].geometry for t in network_trajs]
     end_loc = [t.gdf.iloc[-1].geometry for t in network_trajs]
     t_min_of_day = [t.traj_attr['t_min_of_day'] for t in network_trajs]
     t_min_of_day_end = [t.traj_attr['t_min_of_day_end'] for t in network_trajs]
-    distance = [int(np.sum(t.gdf['calc_dist_m'])) for t in network_trajs]
-    total_kwh = [cycle.electric_kwh_per_mi * (distance[i] / 1000 / 1.609) for i, cycle in enumerate(network_cycles)]
+    # Energy use and regeneration for drive cycle and estimate of net energy for block
+    total_cyc_regen_kwh = [np.sum(cycle.ess_kw_out_ach[cycle.ess_kw_out_ach<0]) / 3600 for cycle in network_cycles]
+    total_cyc_driven_kwh = [np.sum(cycle.ess_kw_out_ach[cycle.ess_kw_out_ach>0]) / 3600 for cycle in network_cycles]
+    total_cyc_kwh = [np.sum(cycle.ess_kw_out_ach) / 3600 for cycle in network_cycles]
+    trip_estimated_kwh = [cycle.electric_kwh_per_mi * (trip_distance[i] / 1000 / 1.609) for i, cycle in enumerate(network_cycles)]
 
     # Create a dataframe with rows for each trip in the network on the target day
     df = pd.DataFrame({
@@ -186,13 +190,16 @@ def get_energy_results(network_trajs, network_cycles, n_depots=1, default_econom
         'trip_id': trip_ids,
         't_min_of_day': t_min_of_day,
         't_min_of_day_end': t_min_of_day_end,
-        'economy': trip_economy,
+        'economy_kwh_mi': trip_economy,
+        'trip_distance_m': trip_distance,
         'start_loc': start_loc,
         'end_loc': end_loc,
-        'distance': distance,
         'num_trips': num_trips,
         'num_blocks': num_blocks,
-        'total_kwh': total_kwh,
+        'cyc_regen_kwh': total_cyc_regen_kwh,
+        'cyc_driven_kwh': total_cyc_driven_kwh,
+        'cyc_kwh': total_cyc_kwh,
+        'trip_estimated_kwh': trip_estimated_kwh
     })
     # Allow times to cross midnight; were changed for travel time prediction
     df.loc[df['t_min_of_day_end'] <= df['t_min_of_day'], 't_min_of_day_end'] += 1440
@@ -203,8 +210,8 @@ def get_energy_results(network_trajs, network_cycles, n_depots=1, default_econom
     # Get manhattan distance between trips
     df['start_loc_next'] = df.groupby('block_id').apply(func=lambda x: x['start_loc'].shift(-1, fill_value=x['end_loc'].iloc[-1])).to_numpy()
     df['trip_deadhead_dist_m'] = spatial.manhattan_distance(np.array([loc.x for loc in df['start_loc_next']]), np.array([loc.y for loc in df['start_loc_next']]), np.array([loc.x for loc in df['end_loc']]), np.array([loc.y for loc in df['end_loc']]))
-    df['trip_deadhead_drive_kwh'] = df['trip_deadhead_dist_m'] / 1000 / 1.609 * default_economy
-    df['trip_deadhead_aux_kwh'] = np.clip(df['t_min_down'], a_min=0, a_max=60) * 60 * default_aux / 3600
+    df['trip_deadhead_drive_kwh'] = df['trip_deadhead_dist_m'] / 1000 / 1.609 * deadhead_economy_kwh_mi
+    df['trip_deadhead_aux_kwh'] = np.clip(df['t_min_down'], a_min=0, a_max=120) * 60 * deadhead_aux_kw / 3600
     df['trip_deadhead_kwh'] = df['trip_deadhead_drive_kwh'] + df['trip_deadhead_aux_kwh']
     # Get theoretical depot locations with kmeans on block starting locations
     kmeans = KMeans(n_clusters=n_depots, random_state=0, n_init="auto").fit(np.array([(loc.x, loc.y) for loc in df.groupby('block_id').first()['start_loc']]))
@@ -227,13 +234,31 @@ def get_energy_results(network_trajs, network_cycles, n_depots=1, default_econom
     depot_assignments = pd.merge(depot_assignments, depot_locations, on="depot_id")
     depot_assignments['block_deadhead_start_dist_m'] = depot_assignments.apply(lambda x: spatial.manhattan_distance(x['block_start_x'], x['block_start_y'], x['depot_x'], x['depot_y']), axis=1)
     depot_assignments['block_deadhead_end_dist_m'] = depot_assignments.apply(lambda x: spatial.manhattan_distance(x['block_end_x'], x['block_end_y'], x['depot_x'], x['depot_y']), axis=1)
-    depot_assignments['block_deadhead_start_kwh'] = depot_assignments['block_deadhead_start_dist_m'] / 1000 * default_economy / 1.609
-    depot_assignments['block_deadhead_end_kwh'] = depot_assignments['block_deadhead_end_dist_m'] / 1000 * default_economy / 1.609
+    depot_assignments['block_deadhead_start_kwh'] = depot_assignments['block_deadhead_start_dist_m'] / 1000 * deadhead_economy_kwh_mi / 1.609
+    depot_assignments['block_deadhead_end_kwh'] = depot_assignments['block_deadhead_end_dist_m'] / 1000 * deadhead_economy_kwh_mi / 1.609
     depot_assignments = depot_assignments[['block_id','depot_id','block_deadhead_start_kwh','block_deadhead_end_kwh']].copy()
     df = pd.merge(df, depot_assignments, on="block_id")
 
-    block_total_kwh = df.groupby('block_id', as_index=False).agg({'total_kwh': 'sum', 'trip_deadhead_kwh': 'sum', 'block_deadhead_start_kwh': 'first', 'block_deadhead_end_kwh': 'first'})
-    block_total_kwh['block_total_kwh'] = block_total_kwh['total_kwh'] + block_total_kwh['trip_deadhead_kwh'] + block_total_kwh['block_deadhead_start_kwh'] + block_total_kwh['block_deadhead_end_kwh']
-    df = pd.merge(df, block_total_kwh[['block_id','block_total_kwh']], on='block_id')
-
+    block_total_kwh = df.groupby('block_id', as_index=False).agg({
+        'trip_estimated_kwh': 'sum', # Uses actual trip distance and estimated avg economy
+        'trip_deadhead_drive_kwh': 'sum', # Distance between trips
+        'trip_deadhead_aux_kwh': 'sum', # Time between trips
+        'block_deadhead_start_kwh': 'first', # Both aux and drive
+        'block_deadhead_end_kwh': 'first', # Both aux and drive
+        'cyc_regen_kwh': 'sum', # Does not include deadhead drive
+        'cyc_driven_kwh': 'sum', # Does not include deadhead drive
+        'cyc_kwh': 'sum', # Does not include deadhead drive
+    })
+    # Assign metrics aligned to ChargePoint Report
+    block_total_kwh['Energy charged'] = -1
+    block_total_kwh['Energy consumed driving'] = block_total_kwh['cyc_driven_kwh'] + block_total_kwh['trip_deadhead_drive_kwh'] + block_total_kwh['block_deadhead_start_kwh'] + block_total_kwh['block_deadhead_end_kwh']
+    block_total_kwh['Energy regenerated driving'] = block_total_kwh['cyc_regen_kwh'] * -1
+    block_total_kwh['Energy driven'] = block_total_kwh['Energy consumed driving'] - block_total_kwh['Energy regenerated driving']
+    block_total_kwh['Energy idled in service'] = 0
+    block_total_kwh['Energy idled not in service'] = block_total_kwh['trip_deadhead_aux_kwh']
+    block_total_kwh['Energy used in service'] = block_total_kwh['Energy driven'] + block_total_kwh['Energy idled in service']
+    block_total_kwh['Energy used not in service'] = block_total_kwh['Energy idled not in service']
+    block_total_kwh['Energy used'] = block_total_kwh['Energy used in service'] + block_total_kwh['Energy used not in service']
+    block_total_kwh['Energy used estimate'] = block_total_kwh['trip_estimated_kwh'] + block_total_kwh['trip_deadhead_drive_kwh'] + block_total_kwh['trip_deadhead_aux_kwh'] + block_total_kwh['block_deadhead_start_kwh'] + block_total_kwh['block_deadhead_end_kwh']
+    df = pd.merge(df, block_total_kwh, on='block_id')
     return df, depot_locations
