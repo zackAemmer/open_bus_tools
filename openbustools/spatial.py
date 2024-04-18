@@ -261,14 +261,61 @@ def load_regions(embeddings_folder):
     return (area, regions, neighbourhood)
 
 
-def apply_sg_filter(sequence, polyorder=3, clip_min=None, clip_max=None):
+def apply_sg_filter(sequence, window_len_factor=.03, polyorder=5, clip_min=None, clip_max=None):
     # window len <= sequence len
     # polyorder < window len
-    window_len = min([len(sequence) // 3, len(sequence)])
-    polyorder = min([polyorder, window_len-1])
+    window_len = int(len(sequence) * window_len_factor)
+    window_len = max([window_len, 3]) # Based on factor* len, but no less than 3 samples
+    polyorder = min([polyorder, window_len-1]) # Based on input, but no greater than window length - 1
     filtered_sequence = scipy.signal.savgol_filter(sequence, window_length=window_len, polyorder=polyorder)
     if clip_min is not None:
         filtered_sequence = np.clip(filtered_sequence, a_min=clip_min, a_max=None)
     if clip_max is not None:
         filtered_sequence = np.clip(filtered_sequence, a_min=None, a_max=clip_max)
     return filtered_sequence
+
+
+def apply_peak_filter(arr, scalar=2.0, window_len=3, clip_min=None, clip_max=None):
+    assert window_len % 2 == 1, "Window length must be odd"
+    # Create rolling windows
+    rolling_windows = np.lib.stride_tricks.sliding_window_view(arr, window_len)
+    # Pad the start and end to match input length
+    num_padding = window_len // 2
+    rolling_windows = np.pad(rolling_windows, pad_width=((num_padding,num_padding), (0,0)), mode='edge')
+    # Apply peak filter to each window
+    means = np.mean(rolling_windows, axis=1)
+    peaked_windows = rolling_windows + (rolling_windows - means[:, np.newaxis]) * scalar
+    # Get the middle value from each window
+    peaked_windows = peaked_windows[:,num_padding]
+    peaked_windows = np.clip(peaked_windows, clip_min, clip_max)
+    return 
+
+
+def haversine(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance in kilometers between two points 
+    on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians 
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula 
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(a)) 
+    r = 6371 # Radius of earth in kilometers. Use 3956 for miles. Determines return value units.
+    return c * r
+
+
+def bbox_area(lon1, lat1, lon2, lat2):
+    """
+    Calculate the area of a bounding box given by four coordinates
+    """
+    # Calculate the side lengths
+    side_a = haversine(lon1, lat1, lon2, lat1)
+    side_b = haversine(lon1, lat1, lon1, lat2)
+
+    # Calculate the area
+    area = side_a * side_b
+    return area
