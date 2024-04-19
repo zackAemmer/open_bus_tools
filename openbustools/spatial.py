@@ -288,7 +288,7 @@ def apply_peak_filter(arr, scalar=2.0, window_len=3, clip_min=None, clip_max=Non
     # Get the middle value from each window
     peaked_windows = peaked_windows[:,num_padding]
     peaked_windows = np.clip(peaked_windows, clip_min, clip_max)
-    return 
+    return peaked_windows
 
 
 def haversine(lon1, lat1, lon2, lat2):

@@ -47,7 +47,7 @@ class CycleInputResult():
         self.grade = np.array(fastsim_res.cyc.grade)
 
 
-def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, point_sep_m=300, min_traj_n=4):
+def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, point_sep_m=300, min_traj_n=3):
     # Load static feed restricted to target day
     static_feed = gk.read_feed(static_dir, dist_units="km").restrict_to_dates([str.replace(target_day,'_','')])
     # Filter trips to active day of week
@@ -334,29 +334,5 @@ def get_charging_results(energy_res, temperature_f, preconditioning, plug_power_
         block_coverage['preconditioning_kwh'] = TOTAL_CABIN_WARMUP_KWH * temp_differential_f
         block_coverage['preconditioning_time_min'] = block_coverage['preconditioning_kwh'] / plug_power_kw * 60
         block_coverage['t_charge_start_min'] = block_coverage['t_charge_start_min'] - block_coverage['preconditioning_time_min']
-    # Calculate charging requirements for network
-    active_veh = []
-    charging_veh = []
-    charging_managed_veh = []
-    charging_managed_rate = []
-    # Check each minute from midnight for the count of active, charging vehicles under managed or unmanaged scenarios
-    for min_of_day in np.arange(0, max(block_coverage['t_charge_end_managed_min']), 1):
-        x = len(block_coverage[(block_coverage['t_min_of_day'] <= min_of_day) & (block_coverage['t_min_of_day_end'] >= min_of_day)])
-        active_veh.append(x)
-        x = len(block_coverage[(block_coverage['t_charge_start_min'] <= min_of_day) & (block_coverage['t_charge_end_min'] >= min_of_day)])
-        charging_veh.append(x)
-        x = len(block_coverage[(block_coverage['t_charge_start_min'] <= min_of_day) & (block_coverage['t_charge_end_managed_min'] >= min_of_day)])
-        charging_managed_veh.append(x)
-        x = sum(block_coverage[(block_coverage['t_charge_start_min'] <= min_of_day) & (block_coverage['t_charge_end_managed_min'] >= min_of_day)]['min_charge_rate'])
-        charging_managed_rate.append(x)
-    veh_status = pd.DataFrame({
-        "min_of_day": np.arange(0, max(block_coverage['t_charge_end_managed_min']), 1),
-        "active_veh": active_veh,
-        "charging_veh": charging_veh,
-        "charging_managed_veh": charging_managed_veh,
-        "charging_managed_rate": charging_managed_rate
-    })
-    # Reset time to 0-1440
-    veh_status.loc[veh_status['min_of_day'] >= 1440, 'min_of_day'] -= 1440
-    veh_status['charging_rate'] = veh_status['charging_veh'] * plug_power_kw
-    return block_coverage, veh_status
+    block_coverage['plug_power_kw'] = plug_power_kw
+    return block_coverage
