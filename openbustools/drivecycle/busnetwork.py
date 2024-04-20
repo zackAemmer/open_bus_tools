@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 import geopandas as gpd
 import gtfs_kit as gk
@@ -173,8 +174,18 @@ def get_trajectory_energy(traj, veh_file, veh_num, passenger_load, aux_power_kw,
     sim_drive_pred = fsim.simdrive.RustSimDrive(cycle_pred, veh)
     sim_drive_pred.sim_drive()
     sim_drive_pred = fsim.simdrive.copy_sim_drive(sim_drive_pred, 'python')
-    sim_drive_pred = CycleResult(sim_drive_pred)
-    return sim_drive_pred
+    # Minimize space taken by cycles as much as possible
+    res = {
+        "electric_kwh_per_mi": np.array(copy.deepcopy(sim_drive_pred.electric_kwh_per_mi)),
+        "ess_kw_out_ach": np.array(copy.deepcopy(sim_drive_pred.ess_kw_out_ach)),
+        # "accel_kw": sim_drive_pred.accel_kw,
+        # "rr_kw": sim_drive_pred.rr_kw,
+        # "ess_loss_kw": sim_drive_pred.ess_loss_kw,
+        # "ascent_kw": sim_drive_pred.ascent_kw,
+        # "drag_kw": sim_drive_pred.drag_kw,
+        # "aux_in_kw": sim_drive_pred.aux_in_kw
+    }
+    return res
 
 
 def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy_kwh_mi, deadhead_aux_kw, temperature_f, door_open_time_s, diesel_heater, preconditioning):
@@ -191,7 +202,7 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
         block_ids = np.arange(len(trip_ids))
     num_trips = len(trip_ids)
     num_blocks = len(set(block_ids))
-    trip_economy = [float(cycle.electric_kwh_per_mi) for cycle in network_cycles]
+    trip_economy = [float(cycle['electric_kwh_per_mi']) for cycle in network_cycles]
     trip_distance = [int(np.sum(t.gdf['calc_dist_m'])) for t in network_trajs]
     start_loc = [t.gdf.iloc[0].geometry for t in network_trajs]
     end_loc = [t.gdf.iloc[-1].geometry for t in network_trajs]
@@ -199,10 +210,10 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
     t_min_of_day_end = [t.traj_attr['t_min_of_day_end'] for t in network_trajs]
 
     # Energy use and regeneration for drive cycle and estimate of net energy for block
-    total_cyc_regen_kwh = [np.sum(cycle.ess_kw_out_ach[cycle.ess_kw_out_ach<0]) / 3600 for cycle in network_cycles]
-    total_cyc_driven_kwh = [np.sum(cycle.ess_kw_out_ach[cycle.ess_kw_out_ach>0]) / 3600 for cycle in network_cycles]
-    total_cyc_kwh = [np.sum(cycle.ess_kw_out_ach) / 3600 for cycle in network_cycles]
-    trip_estimated_kwh = [cycle.electric_kwh_per_mi * (trip_distance[i] / 1000 / 1.609) for i, cycle in enumerate(network_cycles)]
+    total_cyc_regen_kwh = [np.sum(cycle['ess_kw_out_ach'][cycle['ess_kw_out_ach']<0]) / 3600 for cycle in network_cycles]
+    total_cyc_driven_kwh = [np.sum(cycle['ess_kw_out_ach'][cycle['ess_kw_out_ach']>0]) / 3600 for cycle in network_cycles]
+    total_cyc_kwh = [np.sum(cycle['ess_kw_out_ach']) / 3600 for cycle in network_cycles]
+    trip_estimated_kwh = [cycle['electric_kwh_per_mi'] * (trip_distance[i] / 1000 / 1.609) for i, cycle in enumerate(network_cycles)]
 
     # Create a dataframe with rows for each trip in the network on the target day
     df = pd.DataFrame({

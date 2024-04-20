@@ -205,7 +205,7 @@ if __name__=="__main__":
         "door_open_time_s": np.linspace(10, 60, n_sensitivity),
         "diesel_heater": [True, False],
         # Modify both total energy and charging postprocessing
-        "temperature_f": np.linspace(10, 90, 5),
+        "temperature_f": np.linspace(10, 90, n_sensitivity),
         "preconditioning": [True, False],
         # Modify charging postprocessing
         "depot_plug_power_kw": np.linspace(50, 500, n_sensitivity),
@@ -255,38 +255,38 @@ if __name__=="__main__":
     #     except Exception as e:
     #         logger.error(f"Error for {row['uuid']}: {e}")
 
-    build_trajectories(
-        load_dir=Path("results","energy","kcm"),
-        save_dir=Path("results","energy","kcm"),
-        static_dir=Path("data","kcm_static"),
-        dem_file=Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
-        epsg=32148,
-        coord_ref_center=[386910,69022],
-        target_day="2023_12_01",
-    )
-    predict_times(
-        load_dir=Path("results","energy","kcm"),
-        save_dir=Path("results","energy","kcm"),
-        model_dir=Path("logs","kcm","GRU-0"),
-    )
-    calculate_cycle_energy(
-        load_dir=Path("results","energy","kcm"),
-        save_dir=Path("results","energy","kcm"),
-        veh_file=Path("data","FASTSim_py_veh_db.csv"),
-        veh_num=63,
-        sensitivity_params=sensitivity_baseline_params,
-    )
-    postprocess_network_energy(
-        load_dir=Path("results","energy","kcm"),
-        save_dir=Path("results","energy","kcm"),
-        network_area_sqkm=5530,
-        sensitivity_params=sensitivity_baseline_params,
-    )
-    postprocess_network_charging(
-        load_dir=Path("results","energy","kcm"),
-        save_dir=Path("results","energy","kcm"),
-        sensitivity_params=sensitivity_baseline_params,
-    )
+    # build_trajectories(
+    #     load_dir=Path("results","energy","kcm"),
+    #     save_dir=Path("results","energy","kcm"),
+    #     static_dir=Path("data","kcm_static"),
+    #     dem_file=Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
+    #     epsg=32148,
+    #     coord_ref_center=[386910,69022],
+    #     target_day="2023_12_01",
+    # )
+    # predict_times(
+    #     load_dir=Path("results","energy","kcm"),
+    #     save_dir=Path("results","energy","kcm"),
+    #     model_dir=Path("logs","kcm","GRU-0"),
+    # )
+    # calculate_cycle_energy(
+    #     load_dir=Path("results","energy","kcm"),
+    #     save_dir=Path("results","energy","kcm"),
+    #     veh_file=Path("data","FASTSim_py_veh_db.csv"),
+    #     veh_num=63,
+    #     sensitivity_params=sensitivity_baseline_params,
+    # )
+    # postprocess_network_energy(
+    #     load_dir=Path("results","energy","kcm"),
+    #     save_dir=Path("results","energy","kcm"),
+    #     network_area_sqkm=5530,
+    #     sensitivity_params=sensitivity_baseline_params,
+    # )
+    # postprocess_network_charging(
+    #     load_dir=Path("results","energy","kcm"),
+    #     save_dir=Path("results","energy","kcm"),
+    #     sensitivity_params=sensitivity_baseline_params,
+    # )
     sensitivity_analysis(
         load_dir=Path("results","energy","kcm"),
         save_dir=Path("results","energy","kcm","sensitivity"),
