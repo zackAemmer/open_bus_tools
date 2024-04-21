@@ -155,7 +155,7 @@ def update_travel_times(trajectories, model):
         traj.gdf['cumul_time_s'] = traj.gdf['calc_time_s'].cumsum() - traj.gdf['calc_time_s'].iloc[0]
 
 
-def get_trajectory_energy(traj, veh_file, veh_num, passenger_load, aux_power_kw, acc_dec_factor):
+def get_trajectory_energy(traj, veh, passenger_load, aux_power_kw, acc_dec_factor):
     # Incorporate acceleration/deceleration parameter
     filtered_mps = spatial.apply_peak_filter(traj.gdf['pred_speed_m_s'].to_numpy(), window_len=3, scalar=acc_dec_factor, clip_min=0, clip_max=35)
     filtered_mps = spatial.apply_sg_filter(filtered_mps, clip_min=0, clip_max=35)
@@ -166,12 +166,13 @@ def get_trajectory_energy(traj, veh_file, veh_num, passenger_load, aux_power_kw,
         "road_type": np.zeros(len(traj.gdf))
     }
     cycle_pred = fsim.cycle.Cycle.from_dict(fsim.cycle.resample(cycle_pred, new_dt=1)).to_rust()
-    veh = fsim.vehicle.Vehicle.from_vehdb(veh_num, veh_file=veh_file).to_rust()
     # Incorporate static aux power parameter
-    veh.aux_kw = aux_power_kw
+    veh_mod = copy.deepcopy(veh)
+    veh_mod.aux_kw = aux_power_kw
     # Incorporate passenger load parameter
-    veh.veh_kg = veh.veh_kg + (150 * passenger_load * 0.453592)
-    sim_drive_pred = fsim.simdrive.RustSimDrive(cycle_pred, veh)
+    veh_mod.veh_kg = veh_mod.veh_kg + (150 * passenger_load * 0.453592)
+    veh_mod = veh_mod.to_rust()
+    sim_drive_pred = fsim.simdrive.RustSimDrive(cycle_pred, veh_mod)
     sim_drive_pred.sim_drive()
     sim_drive_pred = fsim.simdrive.copy_sim_drive(sim_drive_pred, 'python')
     # Minimize space taken by cycles as much as possible
@@ -185,6 +186,8 @@ def get_trajectory_energy(traj, veh_file, veh_num, passenger_load, aux_power_kw,
         # "drag_kw": sim_drive_pred.drag_kw,
         # "aux_in_kw": sim_drive_pred.aux_in_kw
     }
+    del(cycle_pred)
+    del(veh_mod)
     return res
 
 

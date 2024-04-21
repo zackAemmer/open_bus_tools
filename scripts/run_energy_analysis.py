@@ -82,7 +82,8 @@ def calculate_cycle_energy(**kwargs):
     trajectories = pickle.load(file)
     file.close()
     # Turn each trajectory to drive cycle, calculate energy consumption
-    cycles = [busnetwork.get_trajectory_energy(traj, kwargs['veh_file'], kwargs['veh_num'], kwargs['sensitivity_params']['passenger_load'], kwargs['sensitivity_params']['aux_power_kw'], kwargs['sensitivity_params']['acc_dec_factor']) for traj in trajectories]
+    veh = fsim.vehicle.Vehicle.from_vehdb(kwargs['veh_num'], veh_file=kwargs['veh_file'])
+    cycles = [busnetwork.get_trajectory_energy(traj, veh, kwargs['sensitivity_params']['passenger_load'], kwargs['sensitivity_params']['aux_power_kw'], kwargs['sensitivity_params']['acc_dec_factor']) for traj in trajectories]
     # Create results folder if it doesn't exist
     save_dir = kwargs['save_dir']
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -255,38 +256,38 @@ if __name__=="__main__":
     #     except Exception as e:
     #         logger.error(f"Error for {row['uuid']}: {e}")
 
-    # build_trajectories(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     static_dir=Path("data","kcm_static"),
-    #     dem_file=Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
-    #     epsg=32148,
-    #     coord_ref_center=[386910,69022],
-    #     target_day="2023_12_01",
-    # )
-    # predict_times(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     model_dir=Path("logs","kcm","GRU-0"),
-    # )
-    # calculate_cycle_energy(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     veh_file=Path("data","FASTSim_py_veh_db.csv"),
-    #     veh_num=63,
-    #     sensitivity_params=sensitivity_baseline_params,
-    # )
-    # postprocess_network_energy(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     network_area_sqkm=5530,
-    #     sensitivity_params=sensitivity_baseline_params,
-    # )
-    # postprocess_network_charging(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     sensitivity_params=sensitivity_baseline_params,
-    # )
+    build_trajectories(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        static_dir=Path("data","kcm_static"),
+        dem_file=Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
+        epsg=32148,
+        coord_ref_center=[386910,69022],
+        target_day="2023_12_01",
+    )
+    predict_times(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        model_dir=Path("logs","kcm","GRU-0"),
+    )
+    calculate_cycle_energy(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        veh_file=Path("data","FASTSim_py_veh_db.csv"),
+        veh_num=63,
+        sensitivity_params=sensitivity_baseline_params,
+    )
+    postprocess_network_energy(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        network_area_sqkm=5530,
+        sensitivity_params=sensitivity_baseline_params,
+    )
+    postprocess_network_charging(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        sensitivity_params=sensitivity_baseline_params,
+    )
     sensitivity_analysis(
         load_dir=Path("results","energy","kcm"),
         save_dir=Path("results","energy","kcm","sensitivity"),
