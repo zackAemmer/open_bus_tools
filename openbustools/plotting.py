@@ -41,7 +41,7 @@ def drive_cycle_energy_plot(plot_simdrives, title_text="throwaway"):
     }
     ax_lims = {
         "Speed (mph)": [0, 70],
-        "Grade (%/100)": [-10, 10],
+        "Grade (%/100)": [-.15, .15],
         "Total (kWh)": [0, 100],
         "Acceleration (kWh)": [0, 5],
         "Rolling (kWh)": [0, 50],
@@ -61,6 +61,7 @@ def drive_cycle_energy_plot(plot_simdrives, title_text="throwaway"):
             for i, (title, var) in enumerate(plot_in_vars.items()):
                 ax = axes[i,traj_n]
                 ax.set_ylabel(title)
+                ax.set_ylim(ax_lims[title])
                 ax.plot(res[1].cyc.time_s, getattr(res[1].cyc, var), label=source)
             for i, (title, var) in enumerate(plot_out_vars.items()):
                 i += len(plot_in_vars)
@@ -91,6 +92,7 @@ def drive_cycle_comparison(plot_energy_res, title_text="throwaway"):
     axes[1].set_ylim(0, 20)
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return None
+
 
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
     fig, axes = plt.subplots(1,1)
@@ -210,6 +212,7 @@ def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
     fig.tight_layout()
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig
+
 
 def formatted_forces_lineplot(traj_df, title_text="throwaway"):
     if 'Source' not in traj_df.columns:

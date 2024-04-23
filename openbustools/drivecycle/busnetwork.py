@@ -170,7 +170,7 @@ def get_trajectory_energy(traj, veh, passenger_load, aux_power_kw, acc_dec_facto
     veh_mod = copy.deepcopy(veh)
     veh_mod.aux_kw = aux_power_kw
     # Incorporate passenger load parameter
-    veh_mod.veh_kg = veh_mod.veh_kg + (150 * passenger_load * 0.453592)
+    veh_mod.veh_override_kg = veh_mod.veh_override_kg + (150 * passenger_load * 0.453592)
     veh_mod = veh_mod.to_rust()
     sim_drive_pred = fsim.simdrive.RustSimDrive(cycle_pred, veh_mod)
     sim_drive_pred.sim_drive()
@@ -179,12 +179,12 @@ def get_trajectory_energy(traj, veh, passenger_load, aux_power_kw, acc_dec_facto
     res = {
         "electric_kwh_per_mi": np.array(copy.deepcopy(sim_drive_pred.electric_kwh_per_mi)),
         "ess_kw_out_ach": np.array(copy.deepcopy(sim_drive_pred.ess_kw_out_ach)),
-        # "accel_kw": sim_drive_pred.accel_kw,
-        # "rr_kw": sim_drive_pred.rr_kw,
-        # "ess_loss_kw": sim_drive_pred.ess_loss_kw,
-        # "ascent_kw": sim_drive_pred.ascent_kw,
-        # "drag_kw": sim_drive_pred.drag_kw,
-        # "aux_in_kw": sim_drive_pred.aux_in_kw
+        # "accel_kw": np.array(copy.deepcopy(sim_drive_pred.accel_kw)),
+        # "rr_kw": np.array(copy.deepcopy(sim_drive_pred.rr_kw)),
+        # "ess_loss_kw": np.array(copy.deepcopy(sim_drive_pred.ess_loss_kw)),
+        # "ascent_kw": np.array(copy.deepcopy(sim_drive_pred.ascent_kw)),
+        # "drag_kw": np.array(copy.deepcopy(sim_drive_pred.drag_kw)),
+        # "aux_in_kw": np.array(copy.deepcopy(sim_drive_pred.aux_in_kw)),
     }
     del(cycle_pred)
     del(veh_mod)
