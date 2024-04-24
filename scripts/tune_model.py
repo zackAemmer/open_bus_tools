@@ -83,7 +83,7 @@ if __name__=="__main__":
             max_epochs=50,
             accelerator=accelerator,
             logger=TensorBoardLogger(save_dir=f"{args.model_folder}{args.run_label}", name=model.model_name),
-            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=5)],
+            callbacks=[EarlyStopping(monitor=f"train_loss", min_delta=.0001, patience=10)],
         )
         trainer.fit(model=model, train_dataloaders=train_loader)
     logger.info(f"{model.model_name} TUNING COMPLETE")

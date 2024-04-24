@@ -125,7 +125,7 @@ def multicity_tuning(**kwargs):
             check_val_every_n_epoch=1,
             max_epochs=100,
             accelerator=accelerator,
-            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=3)],
+            callbacks=[EarlyStopping(monitor=f"valid_loss", min_delta=.0001, patience=10)],
             limit_train_batches=batch_limit,
         )
         trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
@@ -191,7 +191,7 @@ if __name__=="__main__":
         try:
             multicity_tuning(
                 base_model_network="kcm",
-                model_type="GRU",
+                model_type="GRU_OSM",
                 network_name=row['uuid'],
                 train_days=train_days,
                 test_days=test_days,

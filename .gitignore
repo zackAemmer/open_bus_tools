@@ -11,6 +11,7 @@
 /.venv/*
 /dist/*
 /logs/*
+/logs_no_resample/*
 /logs_urban_mgmt/*
 /lightning_logs/*
 /logs_gtfs_embedder/*

@@ -218,7 +218,7 @@ if __name__=="__main__":
         "acc_dec_factor": np.linspace(-5.0, 5.0, n_sensitivity),
         # Modify vehicle parameters for FastSIM
         "passenger_load": np.linspace(0, 82, n_sensitivity),
-        "aux_power_kw": np.linspace(0, 20, n_sensitivity),
+        "aux_power_kw": np.linspace(0, 40, n_sensitivity),
         # Modify total energy postprocessing
         "deadhead_economy_kwh_mi": np.linspace(2.0, 5.0, n_sensitivity),
         "depot_density_per_sqkm": np.linspace(0.0002, 0.002, n_sensitivity),
@@ -231,12 +231,12 @@ if __name__=="__main__":
         "depot_plug_power_kw": np.linspace(10, 350, n_sensitivity),
     }
     sensitivity_baseline_params = {
-        "acc_dec_factor": 0.0,
-        "passenger_load": 41,
-        "aux_power_kw": 10,
-        "deadhead_economy_kwh_mi": 3.5,
+        "acc_dec_factor": 2.0,
+        "passenger_load": 50,
+        "aux_power_kw": 20,
+        "deadhead_economy_kwh_mi": 2.77,
         "depot_density_per_sqkm": 0.0012,
-        "door_open_time_s": 60,
+        "door_open_time_s": 90,
         "diesel_heater": False,
         "temperature_f": 46,
         "preconditioning": False,
