@@ -60,6 +60,7 @@ def load_standard_realtime(filepath):
     data = data.astype(GTFSRT_LOOKUP)
     data['realtime_filename'] = filepath.name
     data['realtime_foldername'] = str(filepath.parent)
+    data = data.reset_index(drop=True)
     return data
 
 

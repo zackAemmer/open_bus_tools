@@ -27,6 +27,12 @@ def process_data(**kwargs):
         else:
             initial_data_length = len(data)
 
+        # Resample data to regular distance intervals
+        data = trackcleaning.resample_on_distance(data)
+        logger.debug(f"Resampled trips: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
         # Sensors seem to hold old positions right at start/end of trip
         data = trackcleaning.drop_track_ends(data, 'trip_id', 3)
         logger.debug(f"Removed trip start/end points: {len(data):_} points")
@@ -52,7 +58,7 @@ def process_data(**kwargs):
             continue
 
         # Filter on attributes of individual points (may be invalid after recalculation)
-        data = trackcleaning.filter_on_points(data, {'calc_dist_m': (0, 10_000), 'calc_time_s': (0, 5*60), 'elev_m': (-400, 20_000)}, random_dropout=0.4)
+        data = trackcleaning.filter_on_points(data, {'calc_dist_m': (0, 10_000), 'calc_time_s': (0, 5*60), 'elev_m': (-400, 20_000)}, random_dropout=0.1)
         logger.debug(f"Filtered points: {len(data):_} points")
         if len(data) == 0:
             continue
@@ -153,7 +159,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_02_13", 180),
+        dates=standardfeeds.get_date_list("2024_01_01", 31),
         static_folder=Path("data/kcm_static"),
         realtime_folder=Path("data/kcm_realtime"),
         dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
@@ -166,7 +172,7 @@ if __name__=="__main__":
 
     process_data(
         network_name="atb",
-        dates=standardfeeds.get_date_list("2023_02_13", 180),
+        dates=standardfeeds.get_date_list("2024_01_01", 31),
         static_folder=Path("data/atb_static"),
         realtime_folder=Path("data/atb_realtime"),
         dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),
@@ -177,19 +183,19 @@ if __name__=="__main__":
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
 
-    cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    for i, row in cleaned_sources.iterrows():
-        if standardfeeds.validate_realtime_data(row):
-            logger.debug(f"{row['provider']}")
-            process_data(
-                network_name=row['uuid'],
-                dates=standardfeeds.get_date_list("2024_01_01", 60),
-                static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-                realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
-                dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-                timezone=row['tz_str'],
-                epsg=row['epsg_code'],
-                grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
-                coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
-                given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-            )
+    # cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
+    # for i, row in cleaned_sources.iterrows():
+    #     if standardfeeds.validate_realtime_data(row):
+    #         logger.debug(f"{row['provider']}")
+    #         process_data(
+    #             network_name=row['uuid'],
+    #             dates=standardfeeds.get_date_list("2024_01_01", 60),
+    #             static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+    #             realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
+    #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+    #             timezone=row['tz_str'],
+    #             epsg=row['epsg_code'],
+    #             grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
+    #             coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
+    #             given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    #         )
