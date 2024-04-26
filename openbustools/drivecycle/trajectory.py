@@ -29,13 +29,13 @@ class Trajectory():
         self.traj_attr = traj_attr
         # Create GeoDataFrame with modified values
         df = pd.DataFrame(self.point_attr.copy())
-        if resample:
-            # Assumes there are timestamps in point_attr
-            df.index = pd.to_datetime(df['locationtime'], unit='s')
-            df.index.name = 'time'
-            df = df.drop(columns=['locationtime'])
-            df = df.resample('s').mean().interpolate('linear')
-            df['locationtime'] = df.index.astype(int) // 10**9
+        # if resample:
+        #     # Assumes there are timestamps in point_attr
+        #     df.index = pd.to_datetime(df['locationtime'], unit='s')
+        #     df.index.name = 'time'
+        #     df = df.drop(columns=['locationtime'])
+        #     df = df.resample('s').mean().interpolate('linear')
+        #     df['locationtime'] = df.index.astype(int) // 10**9
         if 'locationtime' in self.point_attr.keys():
             df['calc_dist_m'],  df['calc_bear_d'],  df['calc_time_s'] = spatial.calculate_gps_metrics(df, 'lon', 'lat', time_col='locationtime')
             df['calc_speed_m_s'] = df['calc_dist_m'] / df['calc_time_s']

@@ -275,7 +275,7 @@ def apply_sg_filter(sequence, window_len_factor=.03, polyorder=5, clip_min=None,
     return filtered_sequence
 
 
-def apply_peak_filter(arr, scalar=2.0, window_len=3, clip_min=None, clip_max=None):
+def apply_peak_filter(arr, acc_scalar=1.0, dec_scalar=1.0, window_len=3, clip_min=None, clip_max=None):
     assert window_len % 2 == 1, "Window length must be odd"
     # Create rolling windows
     rolling_windows = np.lib.stride_tricks.sliding_window_view(arr, window_len)
@@ -284,9 +284,13 @@ def apply_peak_filter(arr, scalar=2.0, window_len=3, clip_min=None, clip_max=Non
     rolling_windows = np.pad(rolling_windows, pad_width=((num_padding,num_padding), (0,0)), mode='edge')
     # Apply peak filter to each window
     means = np.mean(rolling_windows, axis=1)
-    peaked_windows = rolling_windows + (rolling_windows - means[:, np.newaxis]) * scalar
+    # Use different scalars for positive and negative deviations
+    deviation_windows = rolling_windows - means[:, np.newaxis]
+    deviation_windows = deviation_windows[:,num_padding]
+    deviation_windows[deviation_windows > 0] *= acc_scalar
+    deviation_windows[deviation_windows <= 0] *= dec_scalar
+    peaked_windows = rolling_windows[:,num_padding] + deviation_windows
     # Get the middle value from each window
-    peaked_windows = peaked_windows[:,num_padding]
     peaked_windows = np.clip(peaked_windows, clip_min, clip_max)
     return peaked_windows
 
