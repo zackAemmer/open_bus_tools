@@ -184,7 +184,7 @@ if __name__=="__main__":
     # )
 
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    for i, row in cleaned_sources.iterrows():
+    for i, row in cleaned_sources.iloc[26:].iterrows():
         if standardfeeds.validate_realtime_data(row):
             logger.debug(f"{row['provider']}")
             process_data(

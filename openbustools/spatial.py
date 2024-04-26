@@ -319,3 +319,13 @@ def bbox_area(lon1, lat1, lon2, lat2):
     # Calculate the area
     area = side_a * side_b
     return area
+
+
+def eval_signal_error(sig1, x1, sig2, x2):
+    """
+    Evaluate the RMSE between two signals by interpolating one signal to the other.
+    """
+    # Interpolate signal 2 to signal 1
+    sig2_interp = np.interp(x1, x2, sig2)
+    # Calculate RMSE
+    return np.sqrt(np.mean((sig1 - sig2_interp)**2))

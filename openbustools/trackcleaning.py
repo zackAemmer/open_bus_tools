@@ -47,6 +47,11 @@ def resample_on_distance(data):
         DataFrame: The resampled data.
     """
     data = data.sort_values(['trip_id','locationtime']).copy()
+    # Throw trips with impossible distances to avoid resampling to huge trajectory sizes
+    data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
+    drop_ids = data[data['calc_dist_m']>100000]['trip_id']
+    data = data[~data['trip_id'].isin(drop_ids)].copy()
+    # Set values for first points of each trip to 0
     data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
     data.loc[data.groupby('trip_id').nth(0).index, 'calc_dist_m'] = 0
     data.loc[data.groupby('trip_id').nth(0).index, 'calc_time_s'] = 0
