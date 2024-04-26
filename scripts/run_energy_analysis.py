@@ -231,7 +231,7 @@ if __name__=="__main__":
         "depot_plug_power_kw": np.linspace(10, 350, n_sensitivity),
     }
     sensitivity_baseline_params = {
-        "acc_dec_factor": 2.0,
+        "acc_dec_factor": 0.0,
         "passenger_load": 50,
         "aux_power_kw": 20,
         "deadhead_economy_kwh_mi": 2.77,
@@ -256,7 +256,7 @@ if __name__=="__main__":
     predict_times(
         load_dir=Path("results","energy","kcm"),
         save_dir=Path("results","energy","kcm"),
-        model_dir=Path("logs","kcm","GRU_OSM-0"),
+        model_dir=Path("logs","kcm","GRU-4"),
     )
     calculate_cycle_energy(
         load_dir=Path("results","energy","kcm"),
@@ -291,55 +291,55 @@ if __name__=="__main__":
         provider='kcm'
     )
 
-    # Other feeds
-    cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    for i, row in cleaned_sources.iterrows():
-        try:
-            build_trajectories(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-                dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-                epsg=row['epsg_code'],
-                coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
-                target_day="2024_04_03"
-            )
-            predict_times(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
-            )
-            calculate_cycle_energy(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                veh_file=Path("data","FASTSim_py_veh_db.csv"),
-                veh_num=63,
-                sensitivity_params=sensitivity_baseline_params
-            )
-            postprocess_network_energy(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
-                sensitivity_params=sensitivity_baseline_params
-            )
-            postprocess_network_charging(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                sensitivity_params=sensitivity_baseline_params
-            )
-            sensitivity_analysis(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
-                veh_file=Path("data","FASTSim_py_veh_db.csv"),
-                veh_num=63,
-                network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
-                sensitivity_params=sensitivity_baseline_params,
-                sensitivity_ranges=sensitivity_ranges,
-            )
-            postprocess_network_sensitivity(
-                load_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                provider=row['provider']
-            )
-        except Exception as e:
-            logger.error(f"Error for {row['uuid']}: {e}")
+    # # Other feeds
+    # cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
+    # for i, row in cleaned_sources.iterrows():
+    #     try:
+    #         build_trajectories(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+    #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+    #             epsg=row['epsg_code'],
+    #             coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
+    #             target_day="2024_04_03"
+    #         )
+    #         predict_times(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
+    #         )
+    #         calculate_cycle_energy(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             veh_file=Path("data","FASTSim_py_veh_db.csv"),
+    #             veh_num=63,
+    #             sensitivity_params=sensitivity_baseline_params
+    #         )
+    #         postprocess_network_energy(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
+    #             sensitivity_params=sensitivity_baseline_params
+    #         )
+    #         postprocess_network_charging(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             sensitivity_params=sensitivity_baseline_params
+    #         )
+    #         sensitivity_analysis(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
+    #             veh_file=Path("data","FASTSim_py_veh_db.csv"),
+    #             veh_num=63,
+    #             network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
+    #             sensitivity_params=sensitivity_baseline_params,
+    #             sensitivity_ranges=sensitivity_ranges,
+    #         )
+    #         postprocess_network_sensitivity(
+    #             load_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
+    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    #             provider=row['provider']
+    #         )
+    #     except Exception as e:
+    #         logger.error(f"Error for {row['uuid']}: {e}")

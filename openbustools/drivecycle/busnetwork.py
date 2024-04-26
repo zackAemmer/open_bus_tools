@@ -157,7 +157,7 @@ def update_travel_times(trajectories, model):
 
 def get_trajectory_energy(traj, veh, passenger_load, aux_power_kw, acc_dec_factor):
     # Incorporate acceleration/deceleration parameter
-    filtered_mps = spatial.apply_peak_filter(traj.gdf['pred_speed_m_s'].to_numpy(), window_len=3, scalar=acc_dec_factor, clip_min=0, clip_max=35)
+    filtered_mps = spatial.apply_peak_filter(traj.gdf['pred_speed_m_s'].to_numpy(), window_len=3, acc_scalar=acc_dec_factor, dec_scalar=acc_dec_factor, clip_min=0, clip_max=35)
     filtered_mps = spatial.apply_sg_filter(filtered_mps, clip_min=0, clip_max=35)
     cycle_pred = {
         "cycGrade": np.clip(spatial.divide_fwd_back_fill(np.diff(traj.gdf['calc_elev_m'], prepend=traj.gdf['calc_elev_m'].iloc[0]), traj.gdf['calc_dist_m']), -0.15, 0.15),
