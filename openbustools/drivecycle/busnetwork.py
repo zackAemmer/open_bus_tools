@@ -255,7 +255,7 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
         tot_door_kwh = np.array([0.0 for t in network_trajs])
     else:
         # Constants
-        door_area_ft2 = 8*4*.5
+        door_area_ft2 = 8*4*.5*2
         wind_speed_ft_s = 1.5
         air_density_lb_ft3 = 0.075
         air_specific_heat_btu_lbdeg = 0.24
