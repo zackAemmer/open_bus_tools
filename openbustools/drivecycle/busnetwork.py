@@ -1,3 +1,4 @@
+import os
 import copy
 from datetime import datetime
 import geopandas as gpd
@@ -20,8 +21,6 @@ from openbustools.traveltime import data_loader
 CABIN_TEMP_F = 65
 AIR_DENSITY_LB_FT3 = 0.075
 AIR_SPECIFIC_HEAT_BTU_LBDEG = 0.24
-HEAT_EFF = 0.95
-COOL_EFF = 0.90
 CABIN_VOLUME_FT3 = 10*40*8
 # Multiply by temperature differential in F to get kWh:
 TOTAL_CABIN_WARMUP_KWH = CABIN_VOLUME_FT3*AIR_DENSITY_LB_FT3*AIR_SPECIFIC_HEAT_BTU_LBDEG/HEAT_EFF/3412
@@ -191,7 +190,7 @@ def get_trajectory_energy(traj, veh, passenger_load, aux_power_kw, acc_dec_facto
     return res
 
 
-def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy_kwh_mi, deadhead_aux_kw, temperature_f, door_open_time_s, diesel_heater, preconditioning):
+def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_consumption_kwh_mi, deadhead_aux_kw, temperature_f, door_open_time_s, diesel_heater, preconditioning):
     """
     Post processing for energy results.
     """
@@ -205,7 +204,7 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
         block_ids = np.arange(len(trip_ids))
     num_trips = len(trip_ids)
     num_blocks = len(set(block_ids))
-    trip_economy = [float(cycle['electric_kwh_per_mi']) for cycle in network_cycles]
+    trip_consumption = [float(cycle['electric_kwh_per_mi']) for cycle in network_cycles]
     trip_distance = [int(np.sum(t.gdf['calc_dist_m'])) for t in network_trajs]
     start_loc = [t.gdf.iloc[0].geometry for t in network_trajs]
     end_loc = [t.gdf.iloc[-1].geometry for t in network_trajs]
@@ -214,9 +213,7 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
 
     # Energy use and regeneration for drive cycle and estimate of net energy for block
     total_cyc_regen_kwh = [np.sum(cycle['ess_kw_out_ach'][cycle['ess_kw_out_ach']<0]) / 3600 for cycle in network_cycles]
-    total_cyc_driven_kwh = [np.sum(cycle['ess_kw_out_ach'][cycle['ess_kw_out_ach']>0]) / 3600 for cycle in network_cycles]
-    total_cyc_kwh = [np.sum(cycle['ess_kw_out_ach']) / 3600 for cycle in network_cycles]
-    trip_estimated_kwh = [cycle['electric_kwh_per_mi'] * (trip_distance[i] / 1000 / 1.609) for i, cycle in enumerate(network_cycles)]
+    total_cyc_energy_kwh = [cycle['electric_kwh_per_mi'] * (trip_distance[i] / 1000 / 1.609) for i, cycle in enumerate(network_cycles)]
 
     # Create a dataframe with rows for each trip in the network on the target day
     df = pd.DataFrame({
@@ -225,16 +222,14 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
         'trip_id': trip_ids,
         't_min_of_day': t_min_of_day,
         't_min_of_day_end': t_min_of_day_end,
-        'economy_kwh_mi': trip_economy,
-        'trip_distance_m': trip_distance,
+        'consumption_kwh_mi': trip_consumption,
+        'trip_dist_m': trip_distance,
         'start_loc': start_loc,
         'end_loc': end_loc,
         'num_trips': num_trips,
         'num_blocks': num_blocks,
         'cyc_regen_kwh': total_cyc_regen_kwh,
-        'cyc_driven_kwh': total_cyc_driven_kwh,
-        'cyc_kwh': total_cyc_kwh,
-        'trip_estimated_kwh': trip_estimated_kwh
+        'cyc_energy_kwh': total_cyc_energy_kwh
     })
     # Allow times to cross midnight; were changed for travel time prediction
     df.loc[df['t_min_of_day_end'] <= df['t_min_of_day'], 't_min_of_day_end'] += 1440
@@ -245,39 +240,41 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
     # Get manhattan distance between trips
     df['start_loc_next'] = df.groupby('block_id').apply(func=lambda x: x['start_loc'].shift(-1, fill_value=x['end_loc'].iloc[-1])).to_numpy()
     df['trip_deadhead_dist_m'] = spatial.manhattan_distance(np.array([loc.x for loc in df['start_loc_next']]), np.array([loc.y for loc in df['start_loc_next']]), np.array([loc.x for loc in df['end_loc']]), np.array([loc.y for loc in df['end_loc']]))
-    df['trip_deadhead_drive_kwh'] = df['trip_deadhead_dist_m'] / 1000 / 1.609 * deadhead_economy_kwh_mi
-    df['trip_deadhead_aux_kwh'] = np.clip(df['t_min_down'], a_min=0, a_max=120) * 60 * deadhead_aux_kw / 3600
+    df['trip_deadhead_drive_kwh'] = df['trip_deadhead_dist_m'] / 1000 / 1.609 * deadhead_consumption_kwh_mi
+    # Assume if downtime is greater than 1 hour, the bus is turned off
+    df['trip_deadhead_aux_kwh'] = np.clip(df['t_min_down'], a_min=0, a_max=60) * 60 * deadhead_aux_kw / 3600
     df['trip_deadhead_kwh'] = df['trip_deadhead_drive_kwh'] + df['trip_deadhead_aux_kwh']
 
     # Calculate energy use for HVAC related to door opening
     temp_differential_f = CABIN_TEMP_F - temperature_f
-    if diesel_heater or temp_differential_f == 0:
+    if temp_differential_f == 0:
         tot_door_kwh = np.array([0.0 for t in network_trajs])
     else:
         # Constants
-        door_area_ft2 = 8*4*.5*2
-        wind_speed_ft_s = 1.5
+        # ~140s for all bus air to cycle
+        door_area_ft2 = 8*4*2*0.5
+        wind_speed_ft_s = 0.5
         air_density_lb_ft3 = 0.075
         air_specific_heat_btu_lbdeg = 0.24
-        heat_eff = 0.95
-        cool_eff = 0.90
+        heat_eff = 1.0
+        cool_eff = 1.0
         # Energy from air loss
         Q_air_ft3_s = door_area_ft2 * wind_speed_ft_s
         Q_air_lb_s = Q_air_ft3_s * air_density_lb_ft3
         Q_air_btu_s = Q_air_lb_s * temp_differential_f * air_specific_heat_btu_lbdeg
+        # Outdoor temperature is less than cabin
         if temp_differential_f > 0:
-            hvac_btu_s = Q_air_btu_s / heat_eff
+            if diesel_heater:
+                hvac_btu_s = 0.0
+            else:
+                hvac_btu_s = Q_air_btu_s / heat_eff
+        # Outdoor temperature is greater than cabin
         else:
             hvac_btu_s = Q_air_btu_s / cool_eff
         tot_door_times_s = np.array([t.traj_attr['stop_count'] * door_open_time_s for t in network_trajs])
         tot_door_btu = tot_door_times_s * hvac_btu_s
         tot_door_kwh = tot_door_btu / 3412
     df['trip_door_kwh'] = tot_door_kwh
-    # Calculate energy use for HVAC related to initial block warmup
-    if not preconditioning and temp_differential_f > 0:
-        tot_cabin_warmup_kwh = TOTAL_CABIN_WARMUP_KWH * temp_differential_f
-    else:
-        tot_cabin_warmup_kwh = 0
 
     # Get theoretical depot locations with kmeans on block starting locations
     kmeans = KMeans(n_clusters=n_depots, random_state=0, n_init="auto").fit(np.array([(loc.x, loc.y) for loc in df.groupby('block_id').first()['start_loc']]))
@@ -300,53 +297,140 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_economy
     depot_assignments = pd.merge(depot_assignments, depot_locations, on="depot_id")
     depot_assignments['block_deadhead_start_dist_m'] = depot_assignments.apply(lambda x: spatial.manhattan_distance(x['block_start_x'], x['block_start_y'], x['depot_x'], x['depot_y']), axis=1)
     depot_assignments['block_deadhead_end_dist_m'] = depot_assignments.apply(lambda x: spatial.manhattan_distance(x['block_end_x'], x['block_end_y'], x['depot_x'], x['depot_y']), axis=1)
-    depot_assignments['block_deadhead_start_kwh'] = depot_assignments['block_deadhead_start_dist_m'] / 1000 * deadhead_economy_kwh_mi / 1.609
-    depot_assignments['block_deadhead_end_kwh'] = depot_assignments['block_deadhead_end_dist_m'] / 1000 * deadhead_economy_kwh_mi / 1.609
-    depot_assignments['block_warmup_kwh'] = tot_cabin_warmup_kwh
-    depot_assignments = depot_assignments[['block_id','depot_id','block_deadhead_start_kwh','block_deadhead_end_kwh','block_warmup_kwh']].copy()
+    depot_assignments['block_deadhead_dist_m'] = depot_assignments['block_deadhead_start_dist_m'] + depot_assignments['block_deadhead_end_dist_m']
+    depot_assignments['block_deadhead_start_kwh'] = depot_assignments['block_deadhead_start_dist_m'] / 1000 / 1.609 * deadhead_consumption_kwh_mi
+    depot_assignments['block_deadhead_end_kwh'] = depot_assignments['block_deadhead_end_dist_m'] / 1000 / 1.609 * deadhead_consumption_kwh_mi
+    depot_assignments['block_deadhead_kwh'] = depot_assignments['block_deadhead_start_kwh'] + depot_assignments['block_deadhead_end_kwh']
+    depot_assignments = depot_assignments[['block_id','depot_id','block_deadhead_kwh','block_deadhead_dist_m']].copy()
     df = pd.merge(df, depot_assignments, on="block_id")
 
-    block_total_kwh = df.groupby('block_id', as_index=False).agg({
-        'trip_estimated_kwh': 'sum', # Uses actual trip distance and estimated avg economy
-        'trip_deadhead_drive_kwh': 'sum', # Distance between trips
-        'trip_deadhead_aux_kwh': 'sum', # Time between trips
-        'trip_door_kwh': 'sum', # Additional aux from door open/close during trips
-        'block_deadhead_start_kwh': 'first', # Both aux and drive
-        'block_deadhead_end_kwh': 'first', # Both aux and drive
-        'block_warmup_kwh': 'first', # Aux for initial block warmup
-        'cyc_regen_kwh': 'sum', # Does not include deadhead drive
-        'cyc_driven_kwh': 'sum', # Does not include deadhead drive
-        'cyc_kwh': 'sum', # Does not include deadhead drive
-    })
-    # Assign metrics aligned to ChargePoint Report
-    block_total_kwh['Energy charged'] = -1
-    block_total_kwh['Energy consumed driving'] = block_total_kwh['cyc_driven_kwh'] + block_total_kwh['trip_deadhead_drive_kwh'] + block_total_kwh['block_deadhead_start_kwh'] + block_total_kwh['block_deadhead_end_kwh'] + block_total_kwh['trip_door_kwh'] + block_total_kwh['block_warmup_kwh']
-    block_total_kwh['Energy regenerated driving'] = block_total_kwh['cyc_regen_kwh'] * -1
-    block_total_kwh['Energy driven'] = block_total_kwh['Energy consumed driving'] - block_total_kwh['Energy regenerated driving']
-    block_total_kwh['Energy idled in service'] = 0
-    block_total_kwh['Energy idled not in service'] = block_total_kwh['trip_deadhead_aux_kwh']
-    block_total_kwh['Energy used in service'] = block_total_kwh['Energy driven'] + block_total_kwh['Energy idled in service']
-    block_total_kwh['Energy used not in service'] = block_total_kwh['Energy idled not in service']
-    block_total_kwh['Energy used'] = block_total_kwh['Energy used in service'] + block_total_kwh['Energy used not in service']
-    block_total_kwh['Energy used estimate'] = block_total_kwh['trip_estimated_kwh'] + block_total_kwh['trip_deadhead_drive_kwh'] + block_total_kwh['trip_deadhead_aux_kwh'] + block_total_kwh['block_deadhead_start_kwh'] + block_total_kwh['block_deadhead_end_kwh'] + block_total_kwh['trip_door_kwh'] + block_total_kwh['block_warmup_kwh']
-    df = pd.merge(df, block_total_kwh, on='block_id')
+    # Block-level summary metrics
+    block_summary = df.groupby('block_id').agg({
+        # Total block energy
+        'cyc_energy_kwh': 'sum',
+        'trip_door_kwh': 'sum',
+        'trip_deadhead_kwh': 'sum',
+        'block_deadhead_kwh': 'first',
+        # Total block regen (no deadhead)
+        'cyc_regen_kwh': 'sum',
+        # Total block distance
+        'trip_dist_m': 'sum',
+        'trip_deadhead_dist_m': 'sum',
+        'block_deadhead_dist_m': 'first',
+    }).reset_index()
+    block_summary['block_net_energy_kwh'] = block_summary['cyc_energy_kwh'] + block_summary['trip_door_kwh'] + block_summary['trip_deadhead_kwh'] + block_summary['block_deadhead_kwh']
+    block_summary['block_cyc_regen_kwh'] = block_summary['cyc_regen_kwh']
+    block_summary['block_dist_mi'] = (block_summary['trip_dist_m'] + block_summary['trip_deadhead_dist_m'] + block_summary['block_deadhead_dist_m']) / 1000 / 1.609
+    block_summary['block_consumption_kwh_mi'] = block_summary['block_net_energy_kwh'] / block_summary['block_dist_mi']
+    block_summary = block_summary[['block_id','block_net_energy_kwh','block_cyc_regen_kwh','block_dist_mi','block_consumption_kwh_mi']].copy()
+    df = pd.merge(df, block_summary, on="block_id")
     return df, depot_locations
 
 
-def get_charging_results(energy_res, temperature_f, preconditioning, plug_power_kw):
+def get_charging_results(energy_res, plug_power_kw):
     # Calculate charging requirements for each block
-    block_coverage = energy_res.groupby('block_id').agg({'t_min_of_day': 'first', 't_min_of_day_end': 'last', 'Energy used estimate': 'first', 'block_warmup_kwh_x': 'first'}).sort_values(['block_id', 't_min_of_day'])
-    block_coverage['charge_time_min'] = block_coverage['Energy used estimate'] / plug_power_kw * 60
+    block_coverage = energy_res.groupby('block_id').agg({'t_min_of_day': 'first', 't_min_of_day_end': 'last', 'block_net_energy_kwh': 'first'}).sort_values(['block_id', 't_min_of_day'])
+    block_coverage['charge_time_min'] = block_coverage['block_net_energy_kwh'] / plug_power_kw * 60
     block_coverage['t_charge_start_min'] = block_coverage['t_min_of_day_end']
     block_coverage['t_charge_end_min'] = block_coverage['t_min_of_day_end'] + block_coverage['charge_time_min']
     block_coverage['t_block_min'] = block_coverage['t_min_of_day_end'] - block_coverage['t_min_of_day']
-    block_coverage['t_until_pullout_hr'] = (1441 - block_coverage['t_block_min']) / 60
-    block_coverage['min_charge_rate'] = block_coverage['Energy used estimate'] / block_coverage['t_until_pullout_hr']
-    block_coverage['t_charge_end_managed_min'] = block_coverage['t_min_of_day_end'] + (block_coverage['t_until_pullout_hr'] * 60)
-    temp_differential_f = CABIN_TEMP_F - temperature_f
-    if preconditioning and temp_differential_f > 0:
-        block_coverage['preconditioning_kwh'] = TOTAL_CABIN_WARMUP_KWH * temp_differential_f
-        block_coverage['preconditioning_time_min'] = block_coverage['preconditioning_kwh'] / plug_power_kw * 60
-        block_coverage['t_charge_start_min'] = block_coverage['t_charge_start_min'] - block_coverage['preconditioning_time_min']
+    block_coverage['t_until_pullout_min'] = (1440 - block_coverage['t_block_min'])
+    block_coverage['min_charge_rate'] = block_coverage['block_net_energy_kwh'] / (block_coverage['t_until_pullout_min'] / 60)
     block_coverage['plug_power_kw'] = plug_power_kw
-    return block_coverage
+    block_coverage = block_coverage.sort_values('t_min_of_day')
+
+    # Calculate charging status by time of day
+    t_mins = np.arange(0, 1440+1440*2)
+    veh_status_df = pd.DataFrame({
+        't_min_of_day': t_mins,
+        'tot_veh_active': [len(block_coverage[(block_coverage['t_min_of_day']<=t) & (block_coverage['t_min_of_day_end']>=t)]) for t in t_mins],
+        'tot_veh_inactive': [len(block_coverage[(block_coverage['t_min_of_day']>t) | (block_coverage['t_min_of_day_end']<t)]) for t in t_mins],
+        'tot_veh_charging': [len(block_coverage[(block_coverage['t_charge_start_min']<=t) & (block_coverage['t_charge_end_min']>=t)]) for t in t_mins],
+        'tot_veh_arriving': [len(block_coverage[block_coverage['t_min_of_day_end']==t]) for t in t_mins],
+        'tot_veh_departing': [len(block_coverage[block_coverage['t_min_of_day']==t]) for t in t_mins],
+        'tot_energy_arriving': [block_coverage[block_coverage['t_min_of_day_end']==t]['block_net_energy_kwh'].sum() for t in t_mins],
+        'tot_energy_departing': [block_coverage[block_coverage['t_min_of_day']==t]['block_net_energy_kwh'].sum() for t in t_mins],
+        'tot_power': [block_coverage[(block_coverage['t_charge_start_min']<=t) & (block_coverage['t_charge_end_min']>=t)]['plug_power_kw'].sum() for t in t_mins],
+    })
+    # Reset time to 0-1440
+    veh_status_df.loc[veh_status_df['t_min_of_day'] >= 2*1440, 't_min_of_day'] -= 2*1440
+    veh_status_df.loc[veh_status_df['t_min_of_day'] >= 1440, 't_min_of_day'] -= 1440
+    veh_status_df = veh_status_df.groupby('t_min_of_day', as_index=False).agg({
+        'tot_veh_active': 'sum',
+        'tot_veh_inactive': 'min',
+        'tot_veh_charging': 'sum',
+        'tot_veh_arriving': 'sum',
+        'tot_veh_departing': 'sum',
+        'tot_energy_arriving': 'sum',
+        'tot_energy_departing': 'sum',
+        'tot_power': 'sum'
+    }).sort_values('t_min_of_day')
+
+    # Calculate kW needed to meet energy demand, based on veh-hrs available at base
+    total_daily_energy = block_coverage.groupby('block_id').first()['block_net_energy_kwh'].sum()
+    total_daily_charge_veh_hr = veh_status_df['tot_veh_inactive'].sum() / 60
+    block_coverage['min_charge_rate_managed'] = total_daily_energy / total_daily_charge_veh_hr
+
+    return block_coverage, veh_status_df
+
+
+def get_sensitivity_results(sensitivity_dir, bus_battery_capacity_kwh=466):
+    all_res = []
+    sensitivity_files = os.listdir(sensitivity_dir)
+    # Calculate comparison metrics for each sensitivity run
+    for file in sensitivity_files:
+        network_energy = pd.read_pickle(Path(sensitivity_dir, file, "network_energy.pkl"))
+        network_charging = pd.read_pickle(Path(sensitivity_dir, file, "network_charging.pkl"))
+        # Mean block efficiency
+        avg_block_energy_kwh = np.mean(network_energy.groupby('block_id').first()[['Energy used estimate']].to_numpy())
+        avg_trip_consumption_kwh_mi = np.mean(network_energy['economy_kwh_mi'])
+        # Proportion of blocks feasible given battery capacity
+        proportion_blocks_met = len(network_energy[network_energy['Energy used estimate'] <= bus_battery_capacity_kwh]) / len(network_energy)
+        # Proportion of blocks feasible to meet pullout time
+        network_charging['t_until_pullout_min'] = network_charging['t_until_pullout_hr'] * 60
+        proportion_blocks_meeting_pullout = len(network_charging[network_charging['t_until_pullout_min'] > network_charging['charge_time_min']]) / len(network_charging)
+        network_charging = pd.read_pickle(Path(sensitivity_dir, file, "network_charging.pkl"))
+        # Mean minimum charge rate
+        avg_min_charge_rate_kw = np.mean(network_charging['min_charge_rate'])
+        # Mean charge time
+        avg_charge_time_min = np.mean(network_charging['charge_time_min'])
+        # Peak/mean power
+        t_mins = np.arange(0, 1440+6*60, 15)
+        veh_status_df = pd.DataFrame({
+            't_min_of_day': t_mins,
+            'tot_veh_active': [len(network_charging[(network_charging['t_min_of_day']<=t) & (network_charging['t_min_of_day_end']>=t)]) for t in t_mins],
+            'tot_veh_charging_unmanaged': [len(network_charging[(network_charging['t_charge_start_min']<=t) & (network_charging['t_charge_end_min']>=t)]) for t in t_mins],
+            'tot_power_unmanaged': [network_charging[(network_charging['t_charge_start_min']<=t) & (network_charging['t_charge_end_min']>=t)]['plug_power_kw'].sum() for t in t_mins],
+        })
+        veh_status_df.loc[veh_status_df['t_min_of_day'] >= 1440, 't_min_of_day'] -= 1440
+        veh_status_df = veh_status_df.groupby('t_min_of_day', as_index=False).sum()
+        peak_power_kw = veh_status_df['tot_power_unmanaged'].max()
+        avg_power_kw = veh_status_df['tot_power_unmanaged'].mean()
+        res = pd.DataFrame({
+            'file': file,
+            'Avg. Block Energy (kWh)': avg_block_energy_kwh,
+            'Avg. Trip Consumption (kWh/mi)': avg_trip_consumption_kwh_mi,
+            'Proportion Blocks Met': proportion_blocks_met,
+            'Proportion Blocks Meeting Pullout': proportion_blocks_meeting_pullout,
+            'Avg. Min Charge Rate (kW)': avg_min_charge_rate_kw,
+            'Avg. Charge Time (min)': avg_charge_time_min,
+            'Peak 15min Power (kW)': peak_power_kw,
+            'Avg. 15min Power (kW)': avg_power_kw,
+        }, index=[0])
+        all_res.append(res)
+    all_res = pd.concat(all_res)
+    all_res = all_res.melt(id_vars='file', var_name='metric', value_name='value')
+    all_res['sensitivity_parameter'] = all_res['file'].str.split('-').str[0]
+    all_res['sensitivity_parameter'] = all_res['sensitivity_parameter'].replace({
+        'acc_dec_factor': 'Acc/Dec Factor',
+        'passenger_load': 'Passenger Load',
+        'door_open_time_s': 'Door Open Time',
+        'depot_density_per_sqkm': 'Depot Density',
+        'diesel_heater': 'Diesel Heater',
+        'deadhead_economy_kwh_mi': 'Deadhead Economy',
+        'temperature_f': 'Temperature',
+        'aux_power_kw': 'Aux Power',
+        'preconditioning': 'Preconditioning',
+        'depot_plug_power_kw': 'Plug Power',
+    })
+    return all_res
