@@ -23,7 +23,7 @@ AIR_DENSITY_LB_FT3 = 0.075
 AIR_SPECIFIC_HEAT_BTU_LBDEG = 0.24
 CABIN_VOLUME_FT3 = 10*40*8
 # Multiply by temperature differential in F to get kWh:
-TOTAL_CABIN_WARMUP_KWH = CABIN_VOLUME_FT3*AIR_DENSITY_LB_FT3*AIR_SPECIFIC_HEAT_BTU_LBDEG/HEAT_EFF/3412
+TOTAL_CABIN_WARMUP_KWH = CABIN_VOLUME_FT3*AIR_DENSITY_LB_FT3*AIR_SPECIFIC_HEAT_BTU_LBDEG/3412
 
 class CycleResult():
     def __init__(self, fastsim_res) -> None:
@@ -381,39 +381,28 @@ def get_sensitivity_results(sensitivity_dir, bus_battery_capacity_kwh=466):
     for file in sensitivity_files:
         network_energy = pd.read_pickle(Path(sensitivity_dir, file, "network_energy.pkl"))
         network_charging = pd.read_pickle(Path(sensitivity_dir, file, "network_charging.pkl"))
+        veh_status = pd.read_pickle(Path(sensitivity_dir, file, "veh_status.pkl"))
         # Mean block efficiency
-        avg_block_energy_kwh = np.mean(network_energy.groupby('block_id').first()[['Energy used estimate']].to_numpy())
-        avg_trip_consumption_kwh_mi = np.mean(network_energy['economy_kwh_mi'])
+        avg_block_energy_kwh = np.mean(network_energy.groupby('block_id').first()['block_net_energy_kwh'])
+        avg_block_consumption_kwh_mi = np.mean(network_energy.groupby('block_id').first()['block_consumption_kwh_mi'])
         # Proportion of blocks feasible given battery capacity
-        proportion_blocks_met = len(network_energy[network_energy['Energy used estimate'] <= bus_battery_capacity_kwh]) / len(network_energy)
+        proportion_blocks_met = len(network_energy[network_energy['block_net_energy_kwh'] <= bus_battery_capacity_kwh]) / len(network_energy)
         # Proportion of blocks feasible to meet pullout time
-        network_charging['t_until_pullout_min'] = network_charging['t_until_pullout_hr'] * 60
         proportion_blocks_meeting_pullout = len(network_charging[network_charging['t_until_pullout_min'] > network_charging['charge_time_min']]) / len(network_charging)
-        network_charging = pd.read_pickle(Path(sensitivity_dir, file, "network_charging.pkl"))
-        # Mean minimum charge rate
-        avg_min_charge_rate_kw = np.mean(network_charging['min_charge_rate'])
-        # Mean charge time
-        avg_charge_time_min = np.mean(network_charging['charge_time_min'])
+        avg_charge_time_min = network_charging['charge_time_min'].mean()
+        # Min charge rate to meet veh-kwh
+        min_charge_rate_kw = network_charging['min_charge_rate_managed'].min()
         # Peak/mean power
-        t_mins = np.arange(0, 1440+6*60, 15)
-        veh_status_df = pd.DataFrame({
-            't_min_of_day': t_mins,
-            'tot_veh_active': [len(network_charging[(network_charging['t_min_of_day']<=t) & (network_charging['t_min_of_day_end']>=t)]) for t in t_mins],
-            'tot_veh_charging_unmanaged': [len(network_charging[(network_charging['t_charge_start_min']<=t) & (network_charging['t_charge_end_min']>=t)]) for t in t_mins],
-            'tot_power_unmanaged': [network_charging[(network_charging['t_charge_start_min']<=t) & (network_charging['t_charge_end_min']>=t)]['plug_power_kw'].sum() for t in t_mins],
-        })
-        veh_status_df.loc[veh_status_df['t_min_of_day'] >= 1440, 't_min_of_day'] -= 1440
-        veh_status_df = veh_status_df.groupby('t_min_of_day', as_index=False).sum()
-        peak_power_kw = veh_status_df['tot_power_unmanaged'].max()
-        avg_power_kw = veh_status_df['tot_power_unmanaged'].mean()
+        peak_power_kw = veh_status['tot_power'].max()
+        avg_power_kw = veh_status['tot_power'].mean()
         res = pd.DataFrame({
             'file': file,
             'Avg. Block Energy (kWh)': avg_block_energy_kwh,
-            'Avg. Trip Consumption (kWh/mi)': avg_trip_consumption_kwh_mi,
-            'Proportion Blocks Met': proportion_blocks_met,
-            'Proportion Blocks Meeting Pullout': proportion_blocks_meeting_pullout,
-            'Avg. Min Charge Rate (kW)': avg_min_charge_rate_kw,
+            'Avg. Block Consumption (kWh/mi)': avg_block_consumption_kwh_mi,
+            'Proportion Blocks Meeting Energy': proportion_blocks_met,
+            'Proportion Blocks Meeting Charging': proportion_blocks_meeting_pullout,
             'Avg. Charge Time (min)': avg_charge_time_min,
+            'Min Charge Rate (kW)': min_charge_rate_kw,
             'Peak 15min Power (kW)': peak_power_kw,
             'Avg. 15min Power (kW)': avg_power_kw,
         }, index=[0])
@@ -430,7 +419,6 @@ def get_sensitivity_results(sensitivity_dir, bus_battery_capacity_kwh=466):
         'deadhead_economy_kwh_mi': 'Deadhead Economy',
         'temperature_f': 'Temperature',
         'aux_power_kw': 'Aux Power',
-        'preconditioning': 'Preconditioning',
         'depot_plug_power_kw': 'Plug Power',
     })
     return all_res

@@ -280,30 +280,30 @@ if __name__=="__main__":
     #     sensitivity_params=sensitivity_baseline_params,
     #     sensitivity_ranges=sensitivity_ranges,
     # )
-    postprocess_network_sensitivity(
-        load_dir=Path('results', 'energy', 'kcm', "sensitivity"),
-        save_dir=Path('results', 'energy', 'kcm'),
-        provider='kcm'
-    )
+    # postprocess_network_sensitivity(
+    #     load_dir=Path('results', 'energy', 'kcm', "sensitivity"),
+    #     save_dir=Path('results', 'energy', 'kcm'),
+    #     provider='kcm'
+    # )
 
     # Other feeds
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
         try:
-    #         build_trajectories(
-    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
-    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
-    #             static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-    #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-    #             epsg=row['epsg_code'],
-    #             coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
-    #             target_day="2024_04_03"
-    #         )
-    #         predict_times(
-    #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
-    #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
-    #             model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
-    #         )
+    # #         build_trajectories(
+    # #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    # #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    # #             static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+    # #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+    # #             epsg=row['epsg_code'],
+    # #             coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
+    # #             target_day="2024_04_03"
+    # #         )
+    # #         predict_times(
+    # #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
+    # #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
+    # #             model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
+    # #         )
             calculate_cycle_energy(
                 load_dir=Path('results', 'energy', f"{row['uuid']}"),
                 save_dir=Path('results', 'energy', f"{row['uuid']}"),
