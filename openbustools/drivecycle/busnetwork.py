@@ -1,4 +1,4 @@
-import os
+import pickle
 import copy
 from datetime import datetime
 import geopandas as gpd
@@ -190,7 +190,7 @@ def get_trajectory_energy(traj, veh, passenger_load, aux_power_kw, acc_dec_facto
     return res
 
 
-def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_consumption_kwh_mi, deadhead_aux_kw, temperature_f, door_open_time_s, diesel_heater, preconditioning):
+def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_consumption_kwh_mi, deadhead_aux_kw, temperature_f, door_open_time_s):
     """
     Post processing for energy results.
     """
@@ -264,10 +264,7 @@ def get_energy_results(network_trajs, network_cycles, n_depots, deadhead_consump
         Q_air_btu_s = Q_air_lb_s * temp_differential_f * air_specific_heat_btu_lbdeg
         # Outdoor temperature is less than cabin
         if temp_differential_f > 0:
-            if diesel_heater:
-                hvac_btu_s = 0.0
-            else:
-                hvac_btu_s = Q_air_btu_s / heat_eff
+            hvac_btu_s = Q_air_btu_s / heat_eff
         # Outdoor temperature is greater than cabin
         else:
             hvac_btu_s = Q_air_btu_s / cool_eff
@@ -334,7 +331,7 @@ def get_charging_results(energy_res, plug_power_kw):
     block_coverage['t_charge_start_min'] = block_coverage['t_min_of_day_end']
     block_coverage['t_charge_end_min'] = block_coverage['t_min_of_day_end'] + block_coverage['charge_time_min']
     block_coverage['t_block_min'] = block_coverage['t_min_of_day_end'] - block_coverage['t_min_of_day']
-    block_coverage['t_until_pullout_min'] = (1440 - block_coverage['t_block_min'])
+    block_coverage['t_until_pullout_min'] = (1441 - block_coverage['t_block_min'])
     block_coverage['min_charge_rate'] = block_coverage['block_net_energy_kwh'] / (block_coverage['t_until_pullout_min'] / 60)
     block_coverage['plug_power_kw'] = plug_power_kw
     block_coverage = block_coverage.sort_values('t_min_of_day')
@@ -376,47 +373,46 @@ def get_charging_results(energy_res, plug_power_kw):
 
 def get_sensitivity_results(sensitivity_dir, bus_battery_capacity_kwh=466):
     all_res = []
-    sensitivity_files = os.listdir(sensitivity_dir)
+    # Sensitivity directories
+    sensitivity_files = sensitivity_dir.glob("*")
+    sensitivity_files = [f for f in sensitivity_files if f.is_dir()]
     # Calculate comparison metrics for each sensitivity run
     for file in sensitivity_files:
-        network_energy = pd.read_pickle(Path(sensitivity_dir, file, "network_energy.pkl"))
-        network_charging = pd.read_pickle(Path(sensitivity_dir, file, "network_charging.pkl"))
-        veh_status = pd.read_pickle(Path(sensitivity_dir, file, "veh_status.pkl"))
-        # Mean block efficiency
-        avg_block_energy_kwh = np.mean(network_energy.groupby('block_id').first()['block_net_energy_kwh'])
-        avg_block_consumption_kwh_mi = np.mean(network_energy.groupby('block_id').first()['block_consumption_kwh_mi'])
-        # Proportion of blocks feasible given battery capacity
-        proportion_blocks_met = len(network_energy[network_energy['block_net_energy_kwh'] <= bus_battery_capacity_kwh]) / len(network_energy)
-        # Proportion of blocks feasible to meet pullout time
-        proportion_blocks_meeting_pullout = len(network_charging[network_charging['t_until_pullout_min'] > network_charging['charge_time_min']]) / len(network_charging)
-        avg_charge_time_min = network_charging['charge_time_min'].mean()
-        # Min charge rate to meet veh-kwh
-        min_charge_rate_kw = network_charging['min_charge_rate_managed'].min()
-        # Peak/mean power
-        peak_power_kw = veh_status['tot_power'].max()
-        avg_power_kw = veh_status['tot_power'].mean()
+        network_energy = pd.read_pickle(Path(file, "network_energy.pkl"))
+        network_charging = pd.read_pickle(Path(file, "network_charging.pkl"))
+        veh_status = pd.read_pickle(Path(file, "veh_status.pkl"))
+        with open(Path(file, "sensitivity_params.pkl"), "rb") as pkl_file:
+            params = pickle.load(pkl_file)
         res = pd.DataFrame({
-            'file': file,
-            'Avg. Block Energy (kWh)': avg_block_energy_kwh,
-            'Avg. Block Consumption (kWh/mi)': avg_block_consumption_kwh_mi,
-            'Proportion Blocks Meeting Energy': proportion_blocks_met,
-            'Proportion Blocks Meeting Charging': proportion_blocks_meeting_pullout,
-            'Avg. Charge Time (min)': avg_charge_time_min,
-            'Min Charge Rate (kW)': min_charge_rate_kw,
-            'Peak 15min Power (kW)': peak_power_kw,
-            'Avg. 15min Power (kW)': avg_power_kw,
+            'file': file.name,
+            'Number of Trips': len(network_energy),
+            'Number of Blocks': len(network_charging),
+            'Avg. Block Distance (mi)': network_energy.groupby('block_id').first()['block_dist_mi'].mean(),
+            'Avg. Block Duration (min)': network_charging['t_block_min'].mean(),
+            'Avg. Block Energy (kWh)': network_energy.groupby('block_id').first()['block_net_energy_kwh'].mean(),
+            'Avg. Block Consumption (kWh/mi)': network_energy.groupby('block_id').first()['block_consumption_kwh_mi'].mean(),
+            'Avg. Trip Consumption (kWh/mi)': network_energy['consumption_kwh_mi'].mean(),
+            'Proportion Blocks Meeting Energy': len(network_charging[network_charging['block_net_energy_kwh'] < bus_battery_capacity_kwh]) / len(network_charging),
+            'Proportion Blocks Meeting Charging': len(network_charging[network_charging['t_until_pullout_min'] > network_charging['charge_time_min']]) / len(network_charging),
+            'Avg. Charge Time (min)': network_charging['charge_time_min'].mean(),
+            'Min Charge Rate (kW)': network_charging['min_charge_rate_managed'].min(),
+            'Peak 15min Power (kW)': veh_status['tot_power'].max(),
+            'Avg. 15min Power (kW)': veh_status['tot_power'].mean(),
+            'Battery Capacity 10% (kWh)': np.percentile(network_energy.groupby('block_id').first()['block_net_energy_kwh'], 10),
+            'Battery Capacity 95% (kWh)': np.percentile(network_energy.groupby('block_id').first()['block_net_energy_kwh'], 95),
+            'Charger Power 10% (kW)': np.percentile(network_charging['min_charge_rate'], 10),
+            'Charger Power 95% (kW)': np.percentile(network_charging['min_charge_rate'], 95),
         }, index=[0])
         all_res.append(res)
     all_res = pd.concat(all_res)
     all_res = all_res.melt(id_vars='file', var_name='metric', value_name='value')
     all_res['sensitivity_parameter'] = all_res['file'].str.split('-').str[0]
     all_res['sensitivity_parameter'] = all_res['sensitivity_parameter'].replace({
-        'acc_dec_factor': 'Acc/Dec Factor',
+        'acc_dec_factor': 'Acc./Dec. Factor',
         'passenger_load': 'Passenger Load',
         'door_open_time_s': 'Door Open Time',
         'depot_density_per_sqkm': 'Depot Density',
-        'diesel_heater': 'Diesel Heater',
-        'deadhead_economy_kwh_mi': 'Deadhead Economy',
+        'deadhead_consumption_kwh_mi': 'Deadhead Consumption',
         'temperature_f': 'Temperature',
         'aux_power_kw': 'Aux Power',
         'depot_plug_power_kw': 'Plug Power',

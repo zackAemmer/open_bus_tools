@@ -115,9 +115,7 @@ def postprocess_network_energy(**kwargs):
         deadhead_consumption_kwh_mi=kwargs['sensitivity_params']['deadhead_consumption_kwh_mi'],
         deadhead_aux_kw=kwargs['sensitivity_params']['aux_power_kw'],
         temperature_f=kwargs['sensitivity_params']['temperature_f'],
-        door_open_time_s=kwargs['sensitivity_params']['door_open_time_s'],
-        diesel_heater=kwargs['sensitivity_params']['diesel_heater'],
-        preconditioning=kwargs['sensitivity_params']['preconditioning'],
+        door_open_time_s=kwargs['sensitivity_params']['door_open_time_s']
     )
     # Create results folder if it doesn't exist
     save_dir = kwargs['save_dir']
@@ -154,38 +152,6 @@ def postprocess_network_charging(**kwargs):
     file.close()
 
 
-def sensitivity_analysis(**kwargs):
-    logger.debug(f"SENSITIVITY ANALYSIS: {kwargs['save_dir']}")
-    for param, values in kwargs['sensitivity_ranges'].items():
-        for i, v in enumerate(values):
-            logger.debug(f"Running sensitivity for {param}={v}")
-            # Set the sensitivity parameter to be tested; keep baseline for others
-            run_sensitivity_params = copy.deepcopy(kwargs['sensitivity_params'])
-            run_sensitivity_params[param] = v
-            calculate_cycle_energy(
-                load_dir=kwargs['load_dir'],
-                save_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
-                veh_file=kwargs['veh_file'],
-                veh_num=kwargs['veh_num'],
-                sensitivity_params=run_sensitivity_params,
-            )
-            postprocess_network_energy(
-                load_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
-                save_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
-                network_area_sqkm=kwargs['network_area_sqkm'],
-                sensitivity_params=run_sensitivity_params,
-            )
-            postprocess_network_charging(
-                load_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
-                save_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
-                sensitivity_params=run_sensitivity_params,
-            )
-            # Save the sensitivity parameters
-            file = open(Path(kwargs['save_dir'], f"{param}-{i}", "sensitivity_params.pkl"), "wb")
-            pickle.dump(run_sensitivity_params, file)
-            file.close()
-
-
 def postprocess_network_sensitivity(**kwargs):
     logger.debug(f"POSTPROCESSING NETWORK SENSITIVITY: {kwargs['save_dir']}")
     network_sensitivity = busnetwork.get_sensitivity_results(kwargs['load_dir'])
@@ -197,6 +163,65 @@ def postprocess_network_sensitivity(**kwargs):
     file = open(save_dir / "network_sensitivity.pkl", "wb")
     pickle.dump(network_sensitivity, file)
     file.close()
+
+
+def sensitivity_analysis(baseline_only=False, **kwargs):
+    logger.debug(f"SENSITIVITY ANALYSIS: {kwargs['save_dir']}")
+    logger.debug(f"Running sensitivity for baseline")
+    # Set the sensitivity parameter to be tested; keep baseline for others
+    run_sensitivity_params = copy.deepcopy(kwargs['sensitivity_params'])
+    calculate_cycle_energy(
+        load_dir=kwargs['load_dir'],
+        save_dir=Path(kwargs['save_dir'], f"baseline"),
+        veh_file=kwargs['veh_file'],
+        veh_num=kwargs['veh_num'],
+        sensitivity_params=run_sensitivity_params,
+    )
+    postprocess_network_energy(
+        load_dir=Path(kwargs['save_dir'], f"baseline"),
+        save_dir=Path(kwargs['save_dir'], f"baseline"),
+        network_area_sqkm=kwargs['network_area_sqkm'],
+        sensitivity_params=run_sensitivity_params,
+    )
+    postprocess_network_charging(
+        load_dir=Path(kwargs['save_dir'], f"baseline"),
+        save_dir=Path(kwargs['save_dir'], f"baseline"),
+        sensitivity_params=run_sensitivity_params,
+    )
+    # Save the sensitivity parameters
+    file = open(Path(kwargs['save_dir'], f"baseline", "sensitivity_params.pkl"), "wb")
+    pickle.dump(run_sensitivity_params, file)
+    file.close()
+    if not baseline_only:
+        # Run other param values
+        for param, values in kwargs['sensitivity_ranges'].items():
+            for i, v in enumerate(values):
+                logger.debug(f"Running sensitivity for {param}={v}")
+                # Set the sensitivity parameter to be tested; keep baseline for others
+                run_sensitivity_params = copy.deepcopy(kwargs['sensitivity_params'])
+                run_sensitivity_params[param] = v
+                calculate_cycle_energy(
+                    load_dir=kwargs['load_dir'],
+                    save_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
+                    veh_file=kwargs['veh_file'],
+                    veh_num=kwargs['veh_num'],
+                    sensitivity_params=run_sensitivity_params,
+                )
+                postprocess_network_energy(
+                    load_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
+                    save_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
+                    network_area_sqkm=kwargs['network_area_sqkm'],
+                    sensitivity_params=run_sensitivity_params,
+                )
+                postprocess_network_charging(
+                    load_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
+                    save_dir=Path(kwargs['save_dir'], f"{param}-{i}"),
+                    sensitivity_params=run_sensitivity_params,
+                )
+                # Save the sensitivity parameters
+                file = open(Path(kwargs['save_dir'], f"{param}-{i}", "sensitivity_params.pkl"), "wb")
+                pickle.dump(run_sensitivity_params, file)
+                file.close()
 
 
 if __name__=="__main__":
@@ -211,30 +236,27 @@ if __name__=="__main__":
     n_sensitivity = 5
     sensitivity_ranges = {
         # Modify cycle parameters for FastSIM
-        "acc_dec_factor": np.linspace(-5.0, 5.0, n_sensitivity),
+        "acc_dec_factor": np.linspace(0.1, 5.0, n_sensitivity),
         # Modify vehicle parameters for FastSIM
-        "passenger_load": np.linspace(0, 82, n_sensitivity),
-        "aux_power_kw": np.linspace(0, 40, n_sensitivity),
+        "passenger_load": np.linspace(1, 82, n_sensitivity),
+        "aux_power_kw": np.linspace(1, 40, n_sensitivity),
         # Modify total energy postprocessing
         "deadhead_consumption_kwh_mi": np.linspace(2.0, 5.0, n_sensitivity),
         "depot_density_per_sqkm": np.linspace(0.0002, 0.002, n_sensitivity),
         "door_open_time_s": np.linspace(10, 120, n_sensitivity),
-        "diesel_heater": [True, False],
         # Modify both total energy and charging postprocessing
         "temperature_f": np.linspace(20, 90, n_sensitivity),
         # Modify charging postprocessing
-        "depot_plug_power_kw": np.linspace(10, 350, n_sensitivity),
+        "depot_plug_power_kw": np.linspace(50, 350, n_sensitivity),
     }
     sensitivity_baseline_params = {
-        "acc_dec_factor": 0.0,
+        "acc_dec_factor": 1.0,
         "passenger_load": 41,
         "aux_power_kw": 20,
         "deadhead_consumption_kwh_mi": 2.77,
         "depot_density_per_sqkm": 0.0012,
         "door_open_time_s": 30,
-        "diesel_heater": False,
         "temperature_f": 46,
-        "preconditioning": False,
         "depot_plug_power_kw": 50,
     }
 
@@ -253,25 +275,8 @@ if __name__=="__main__":
     #     save_dir=Path("results","energy","kcm"),
     #     model_dir=Path("logs","kcm","GRU-4"),
     # )
-    # calculate_cycle_energy(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     veh_file=Path("data","FASTSim_py_veh_db.csv"),
-    #     veh_num=63,
-    #     sensitivity_params=sensitivity_baseline_params,
-    # )
-    # postprocess_network_energy(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     network_area_sqkm=5530,
-    #     sensitivity_params=sensitivity_baseline_params,
-    # )
-    # postprocess_network_charging(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     sensitivity_params=sensitivity_baseline_params,
-    # )
     # sensitivity_analysis(
+    #     # baseline_only=True,
     #     load_dir=Path("results","energy","kcm"),
     #     save_dir=Path("results","energy","kcm","sensitivity"),
     #     veh_file=Path("data","FASTSim_py_veh_db.csv"),
@@ -290,38 +295,20 @@ if __name__=="__main__":
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
         try:
-    # #         build_trajectories(
-    # #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
-    # #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
-    # #             static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-    # #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-    # #             epsg=row['epsg_code'],
-    # #             coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
-    # #             target_day="2024_04_03"
-    # #         )
-    # #         predict_times(
-    # #             load_dir=Path('results', 'energy', f"{row['uuid']}"),
-    # #             save_dir=Path('results', 'energy', f"{row['uuid']}"),
-    # #             model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
-    # #         )
-            calculate_cycle_energy(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                veh_file=Path("data","FASTSim_py_veh_db.csv"),
-                veh_num=63,
-                sensitivity_params=sensitivity_baseline_params
-            )
-            postprocess_network_energy(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
-                sensitivity_params=sensitivity_baseline_params
-            )
-            postprocess_network_charging(
-                load_dir=Path('results', 'energy', f"{row['uuid']}"),
-                save_dir=Path('results', 'energy', f"{row['uuid']}"),
-                sensitivity_params=sensitivity_baseline_params
-            )
+            # build_trajectories(
+            #     load_dir=Path('results', 'energy', f"{row['uuid']}"),
+            #     save_dir=Path('results', 'energy', f"{row['uuid']}"),
+            #     static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+            #     dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+            #     epsg=row['epsg_code'],
+            #     coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
+            #     target_day="2024_04_03"
+            # )
+            # predict_times(
+            #     load_dir=Path('results', 'energy', f"{row['uuid']}"),
+            #     save_dir=Path('results', 'energy', f"{row['uuid']}"),
+            #     model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
+            # )
             sensitivity_analysis(
                 load_dir=Path('results', 'energy', f"{row['uuid']}"),
                 save_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
@@ -337,4 +324,5 @@ if __name__=="__main__":
                 provider=row['provider']
             )
         except Exception as e:
-            logger.error(f"Error for {row['uuid']}: {e}")
+            logger.error(f"Error in {row['uuid']}: {e}")
+            continue
