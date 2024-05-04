@@ -46,14 +46,14 @@ def multicity_tuning(**kwargs):
     res_base = {}
     res_avg = {}
     res_tuned = {}
-    res_tuned[row['uuid']] = {}
+    res_tuned[kwargs['network_name']] = {}
 
-    model = model_utils.load_model("logs/", kwargs['base_model_network'], kwargs['model_type'], 0)
+    model = model_utils.load_model("logs/", kwargs['base_model_network'], kwargs['model_type'], 4)
     model.eval()
 
     # Test inference for city
     test_dataset = data_loader.NumpyDataset(
-        [Path("data","other_feeds",f"{row['uuid']}_realtime","processed")],
+        [Path("data","other_feeds",f"{kwargs['network_name']}_realtime","processed")],
         kwargs['test_days'],
         holdout_routes=model.holdout_routes,
         load_in_memory=True,
@@ -76,12 +76,12 @@ def multicity_tuning(**kwargs):
     preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
     preds = np.concatenate([x['preds'] for x in preds_and_labels])
     labels = np.concatenate([x['labels'] for x in preds_and_labels])
-    res_base[row['uuid']] = {'preds':preds, 'labels':labels}
+    res_base[kwargs['network_name']] = {'preds':preds, 'labels':labels}
 
     # Load and test heuristic
     model = pickle.load(open(Path("logs", kwargs['base_model_network'], "AVG-0.pkl"), 'rb'))
     preds_and_labels = model.predict(test_dataset)
-    res_avg[row['uuid']] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
+    res_avg[kwargs['network_name']] = {'preds':preds_and_labels['preds'], 'labels':preds_and_labels['labels']}
 
     # Tune, then re-test the base model on increasing number of data samples
     # n_batches = [1, 10, 500, 1000]
@@ -93,7 +93,7 @@ def multicity_tuning(**kwargs):
         model = model_utils.load_model("logs/", kwargs['base_model_network'], kwargs['model_type'], 4)
         model.train()
         train_dataset = data_loader.NumpyDataset(
-            [Path("data","other_feeds",f"{row['uuid']}_realtime","processed")],
+            [Path("data","other_feeds",f"{kwargs['network_name']}_realtime","processed")],
             kwargs['train_days'],
             load_in_memory=True,
             config=model.config
@@ -121,7 +121,7 @@ def multicity_tuning(**kwargs):
             pin_memory=pin_memory,
         )
         trainer = pl.Trainer(
-            default_root_dir=Path("logs", "other_feeds", f"{row['uuid']}"),
+            default_root_dir=Path("logs", "other_feeds", f"{kwargs['network_name']}"),
             check_val_every_n_epoch=1,
             max_epochs=100,
             accelerator=accelerator,
@@ -133,7 +133,7 @@ def multicity_tuning(**kwargs):
         # Test after fine-tuning
         model.eval()
         test_dataset = data_loader.NumpyDataset(
-            [Path("data","other_feeds",f"{row['uuid']}_realtime","processed")],
+            [Path("data","other_feeds",f"{kwargs['network_name']}_realtime","processed")],
             kwargs['test_days'],
             load_in_memory=True,
             config=model.config
@@ -155,7 +155,7 @@ def multicity_tuning(**kwargs):
         preds_and_labels = trainer.predict(model=model, dataloaders=test_loader)
         preds = np.concatenate([x['preds'] for x in preds_and_labels])
         labels = np.concatenate([x['labels'] for x in preds_and_labels])
-        res_tuned[row['uuid']][f"{batch_limit}_batches"] = {'preds':preds, 'labels':labels}
+        res_tuned[kwargs['network_name']][f"{batch_limit}_batches"] = {'preds':preds, 'labels':labels}
 
     # Save results
     logger.debug(f"SAVING RESULTS: {kwargs['network_name']}")

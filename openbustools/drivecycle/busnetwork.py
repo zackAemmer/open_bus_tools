@@ -50,9 +50,20 @@ class CycleInputResult():
 def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, point_sep_m=300, min_traj_n=3):
     # Load static feed restricted to target day
     static_feed = gk.read_feed(static_dir, dist_units="km").restrict_to_dates([str.replace(target_day,'_','')])
+    # Some feeds have not updated the calendar in a while
+    if len(static_feed.trips)==0:
+        static_feed = gk.read_feed(static_dir, dist_units="km")
     # Filter trips to active day of week
     t_day_of_week = datetime.strptime(target_day, "%Y_%m_%d").weekday()
-    active_service_ids = static_feed.calendar[static_feed.calendar.iloc[:,t_day_of_week+1]==1]['service_id'].to_numpy()
+    # Calendar conditional on being multiple service IDs
+    if len(static_feed.trips['service_id'].unique()) > 1:
+        if static_feed.calendar is None:
+            active_service_ids = [static_feed.trips.groupby('service_id', as_index=False).count().sort_values('trip_id')['service_id'].iloc[-1]]
+        # Regardless some are still broken
+        else:
+            active_service_ids = static_feed.calendar[static_feed.calendar.iloc[:,t_day_of_week+1]==1]['service_id'].to_numpy()
+    else:
+        active_service_ids = static_feed.trips['service_id'].unique()
     trips = static_feed.get_trips()
     trips = trips[trips['service_id'].isin(active_service_ids)]
     # Get starting minute for trips
@@ -73,7 +84,15 @@ def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, p
     # Assemble trajectory for each trip from trip information and shape geometry
     trajectories = []
     for trip_id, df in trips.groupby('trip_id'):
-        shape_df = route_shape_points[df['shape_id'].iloc[0]]
+        shapeid = df['shape_id'].iloc[0]
+        if shapeid not in route_shape_points.keys():
+            print(f"Skipping trip {trip_id} with no shape points")
+            continue
+        else:
+            shape_df = route_shape_points[shapeid]
+        if len(shape_df) <= 1:
+            print(f"Skipping trip {trip_id} with only {len(shape_df)} points")
+            continue
         traj = trajectory.Trajectory(
             point_attr={
                 'lon': shape_df.to_crs(4326).geometry.x.to_numpy(),
