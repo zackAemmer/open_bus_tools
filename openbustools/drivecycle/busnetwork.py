@@ -68,6 +68,7 @@ def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, p
     trips = trips[trips['service_id'].isin(active_service_ids)]
     # Get starting minute for trips
     stop_times = static_feed.get_stop_times()
+    stop_times = stop_times[~stop_times['departure_time'].isna()]
     stop_times['t_hour'] = stop_times['departure_time'].str.split(':').str[0].astype(int)
     stop_times.loc[stop_times['t_hour'] > 23, 't_hour'] = stop_times.loc[stop_times['t_hour'] > 23, 't_hour'] - 24
     stop_times['t_min'] = stop_times['departure_time'].str.split(':').str[1].astype(int)
@@ -103,7 +104,7 @@ def get_trajectories(static_dir, target_day, epsg, coord_ref_center, dem_file, p
                 'trip_id': trip_id,
                 'shape_id': df['shape_id'].iloc[0],
                 'route_id': df['route_id'].iloc[0],
-                'direction_id': df['direction_id'].iloc[0],
+                # 'direction_id': df['direction_id'].iloc[0],
                 'block_id': df['block_id'].iloc[0],
                 'service_id': df['service_id'].iloc[0],
                 'coord_ref_center': coord_ref_center,

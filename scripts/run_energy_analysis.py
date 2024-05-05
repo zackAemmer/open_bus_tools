@@ -293,38 +293,47 @@ if __name__=="__main__":
 
     # Other feeds
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    skip_uuids = ["b555d2ea-4c39-4e5f-b32d-2606984bd8ac"]
-    successful = [x.name for x in Path('results', 'energy').glob("*")]
+    skip_uuids = [
+        "b555d2ea-4c39-4e5f-b32d-2606984bd8ac",
+        "b6215bd6-c5c1-4a41-b134-0170c097e83f",
+        "b1086c64-bb1a-4639-a283-9a8375f2ad4a",
+        "b2754f7b-6ece-4f4f-a62e-44ae3b1b08ef",
+        "afe2a7f1-1b7b-4cc9-9704-c67afc90f018",
+        "e718826c-e736-4c0b-a51c-5a33d110fe76",
+        "499799a8-9474-4525-83d1-a160bf7b1fe7",
+        "16d0eac0-d3ab-4072-96f0-b508a3eea582",
+        "6e31ba64-3fe4-4ea9-8889-7a069c1cc7f2"]
     for i, row in cleaned_sources.iterrows():
-        if row['uuid'] in successful and "trajectories_updated.pkl" in [x.name for x in Path('results', 'energy', f"{row['uuid']}").glob("*")]:
-            continue
         if row['uuid'] in skip_uuids:
             continue
-        build_trajectories(
-            load_dir=Path('results', 'energy', f"{row['uuid']}"),
-            save_dir=Path('results', 'energy', f"{row['uuid']}"),
-            static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-            dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-            epsg=row['epsg_code'],
-            coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
-            target_day="2024_04_03"
-        )
-        predict_times(
-            load_dir=Path('results', 'energy', f"{row['uuid']}"),
-            save_dir=Path('results', 'energy', f"{row['uuid']}"),
-            model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
-        )
-        # sensitivity_analysis(
+        if "sensitivity" in [x.name for x in Path('results','energy',row['uuid']).glob("*")]:
+            if "depot_plug_power_kw-4" in [x.name for x in Path('results','energy',row['uuid'],"sensitivity").glob("*")]:
+                continue
+        # build_trajectories(
         #     load_dir=Path('results', 'energy', f"{row['uuid']}"),
-        #     save_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
-        #     veh_file=Path("data","FASTSim_py_veh_db.csv"),
-        #     veh_num=63,
-        #     network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
-        #     sensitivity_params=sensitivity_baseline_params,
-        #     sensitivity_ranges=sensitivity_ranges,
-        # )
-        # postprocess_network_sensitivity(
-        #     load_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
         #     save_dir=Path('results', 'energy', f"{row['uuid']}"),
-        #     provider=row['provider']
+        #     static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+        #     dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+        #     epsg=row['epsg_code'],
+        #     coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
+        #     target_day="2024_04_03"
         # )
+        # predict_times(
+        #     load_dir=Path('results', 'energy', f"{row['uuid']}"),
+        #     save_dir=Path('results', 'energy', f"{row['uuid']}"),
+        #     model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
+        # )
+        sensitivity_analysis(
+            load_dir=Path('results', 'energy', f"{row['uuid']}"),
+            save_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
+            veh_file=Path("data","FASTSim_py_veh_db.csv"),
+            veh_num=63,
+            network_area_sqkm=int(spatial.bbox_area(row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat'])),
+            sensitivity_params=sensitivity_baseline_params,
+            sensitivity_ranges=sensitivity_ranges,
+        )
+        postprocess_network_sensitivity(
+            load_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
+            save_dir=Path('results', 'energy', f"{row['uuid']}"),
+            provider=row['provider']
+        )
