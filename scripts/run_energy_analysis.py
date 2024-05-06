@@ -260,36 +260,36 @@ if __name__=="__main__":
         "depot_plug_power_kw": 50,
     }
 
-    # # KCM
-    # build_trajectories(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     static_dir=Path("data","kcm_static"),
-    #     dem_file=Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
-    #     epsg=32148,
-    #     coord_ref_center=[386910,69022],
-    #     target_day="2023_12_01",
-    # )
-    # predict_times(
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm"),
-    #     model_dir=Path("logs","kcm","GRU-4"),
-    # )
-    # sensitivity_analysis(
-    #     # baseline_only=True,
-    #     load_dir=Path("results","energy","kcm"),
-    #     save_dir=Path("results","energy","kcm","sensitivity"),
-    #     veh_file=Path("data","FASTSim_py_veh_db.csv"),
-    #     veh_num=63,
-    #     network_area_sqkm=5530,
-    #     sensitivity_params=sensitivity_baseline_params,
-    #     sensitivity_ranges=sensitivity_ranges,
-    # )
-    # postprocess_network_sensitivity(
-    #     load_dir=Path('results', 'energy', 'kcm', "sensitivity"),
-    #     save_dir=Path('results', 'energy', 'kcm'),
-    #     provider='kcm'
-    # )
+    # KCM
+    build_trajectories(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        static_dir=Path("data","kcm_static"),
+        dem_file=Path("data","kcm_spatial","usgs10m_dem_32148.tif"),
+        epsg=32148,
+        coord_ref_center=[386910,69022],
+        target_day="2023_12_01",
+    )
+    predict_times(
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm"),
+        model_dir=Path("logs","kcm","GRU-4"),
+    )
+    sensitivity_analysis(
+        # baseline_only=True,
+        load_dir=Path("results","energy","kcm"),
+        save_dir=Path("results","energy","kcm","sensitivity"),
+        veh_file=Path("data","FASTSim_py_veh_db.csv"),
+        veh_num=63,
+        network_area_sqkm=5530,
+        sensitivity_params=sensitivity_baseline_params,
+        sensitivity_ranges=sensitivity_ranges,
+    )
+    postprocess_network_sensitivity(
+        load_dir=Path('results', 'energy', 'kcm', "sensitivity"),
+        save_dir=Path('results', 'energy', 'kcm'),
+        provider='kcm'
+    )
 
     # Other feeds
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
@@ -303,26 +303,28 @@ if __name__=="__main__":
         "499799a8-9474-4525-83d1-a160bf7b1fe7",
         "16d0eac0-d3ab-4072-96f0-b508a3eea582",
         "6e31ba64-3fe4-4ea9-8889-7a069c1cc7f2"]
+    # Skip networks that failed to train models
     for i, row in cleaned_sources.iterrows():
         if row['uuid'] in skip_uuids:
             continue
+        # Skip networks with sensitivity analysis already run
         if "sensitivity" in [x.name for x in Path('results','energy',row['uuid']).glob("*")]:
             if "depot_plug_power_kw-4" in [x.name for x in Path('results','energy',row['uuid'],"sensitivity").glob("*")]:
                 continue
-        # build_trajectories(
-        #     load_dir=Path('results', 'energy', f"{row['uuid']}"),
-        #     save_dir=Path('results', 'energy', f"{row['uuid']}"),
-        #     static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-        #     dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-        #     epsg=row['epsg_code'],
-        #     coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
-        #     target_day="2024_04_03"
-        # )
-        # predict_times(
-        #     load_dir=Path('results', 'energy', f"{row['uuid']}"),
-        #     save_dir=Path('results', 'energy', f"{row['uuid']}"),
-        #     model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
-        # )
+        build_trajectories(
+            load_dir=Path('results', 'energy', f"{row['uuid']}"),
+            save_dir=Path('results', 'energy', f"{row['uuid']}"),
+            static_dir=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+            dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+            epsg=row['epsg_code'],
+            coord_ref_center=[row['coord_ref_x'], row['coord_ref_y']],
+            target_day="2024_04_03"
+        )
+        predict_times(
+            load_dir=Path('results', 'energy', f"{row['uuid']}"),
+            save_dir=Path('results', 'energy', f"{row['uuid']}"),
+            model_dir=Path('logs','other_feeds', f"{row['uuid']}", "lightning_logs")
+        )
         sensitivity_analysis(
             load_dir=Path('results', 'energy', f"{row['uuid']}"),
             save_dir=Path('results', 'energy', f"{row['uuid']}", "sensitivity"),
