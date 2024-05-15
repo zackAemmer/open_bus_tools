@@ -108,3 +108,15 @@ def convert_to_frames(g):
         row = all[i,:]
         res[row[0].astype(int),row[1].astype(int),row[2].astype(int)] = row[3]
     return res
+
+
+def ffill_array(grid_arr):
+    out = grid_arr.copy()
+    for i in range(grid_arr.shape[1]):
+        for j in range(grid_arr.shape[2]):
+            arr = grid_arr[:,i,j].copy()
+            mask = np.isnan(arr)
+            idx = np.where(~mask,np.arange(mask.size),0)
+            np.maximum.accumulate(idx, out=idx)
+            out[:,i,j] = arr[idx]
+    return out

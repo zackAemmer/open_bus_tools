@@ -7,7 +7,7 @@ from openbustools.traveltime.models import embedding, realtime
 
 
 class TRSF(pl.LightningModule):
-    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate, alpha, beta1, beta2):
         super(TRSF, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
@@ -19,6 +19,9 @@ class TRSF(pl.LightningModule):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
         self.is_nn = True
         self.include_grid = False
         self.loss_fn = torch.nn.MSELoss()
@@ -27,7 +30,7 @@ class TRSF(pl.LightningModule):
         self.day_em = embedding.DayEmbedding()
         self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
         # Positional encoding
-        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.hidden_size)
+        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.input_size)
         # Reshape for multihead attention
         self.attn_reshape = nn.Linear(in_features=self.input_size, out_features=self.hidden_size)
         # Encoder
@@ -75,12 +78,12 @@ class TRSF(pl.LightningModule):
         res = model_utils.seq_pred_step(self, batch)
         return res
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.alpha, betas=(self.beta1, self.beta2))
         return optimizer
 
 
 class TRSFRealtime(pl.LightningModule):
-    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate, grid_input_size, grid_compression_size):
+    def __init__(self, model_name, config, holdout_routes, input_size, collate_fn, batch_size, hidden_size, num_layers, dropout_rate, alpha, beta1, beta2, grid_input_size, grid_compression_size):
         super(TRSFRealtime, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
@@ -92,6 +95,9 @@ class TRSFRealtime(pl.LightningModule):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.dropout_rate = dropout_rate
+        self.alpha = alpha
+        self.beta1 = beta1
+        self.beta2 = beta2
         self.is_nn = True
         self.include_grid = True
         self.loss_fn = torch.nn.MSELoss()
@@ -102,7 +108,7 @@ class TRSFRealtime(pl.LightningModule):
         self.day_em = embedding.DayEmbedding()
         self.embed_total_dims = self.min_em.embed_dim + self.day_em.embed_dim
         # Positional encoding
-        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.hidden_size+self.grid_compression_size)
+        self.pos_encoder = pos_encodings.PositionalEncoding1D(self.input_size+self.grid_compression_size)
         # Reshape for multihead attention
         self.attn_reshape = nn.Linear(in_features=self.input_size+self.grid_compression_size, out_features=self.hidden_size)
         # Encoder
@@ -155,5 +161,5 @@ class TRSFRealtime(pl.LightningModule):
         res = model_utils.seq_pred_step(self, batch)
         return res
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.alpha, betas=(self.beta1, self.beta2))
         return optimizer

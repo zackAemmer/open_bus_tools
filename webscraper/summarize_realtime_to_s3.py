@@ -10,6 +10,9 @@ import gtfs_realtime_pb2
 
 
 if __name__ == "__main__":
+    # When feeds are removed from the cleaned_sources.csv, the realtime data will stop being collected
+    # When this script runs it will empty those folders to avoid saving data and filling up the disk, but cease to refill them
+    # Then those files should be removed from the S3 bucket (manually for now, could be worth script later)
     load_dotenv()
     utc_date = datetime.datetime.utcnow()
     summary_date = utc_date - datetime.timedelta(days=1)

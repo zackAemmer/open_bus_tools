@@ -2,6 +2,7 @@ import argparse
 import logging
 from pathlib import Path
 import pickle
+import shutil
 
 import lightning.pytorch as pl
 import numpy as np
@@ -42,6 +43,9 @@ if __name__=="__main__":
     parser.add_argument('-tedf', '--test_data_folders', nargs='+', required=True)
     parser.add_argument('-td', '--test_date', required=True)
     parser.add_argument('-tn', '--test_n', required=True)
+    parser.add_argument('-rs', '--random_seed', required=False)
+    parser.add_argument('-hs', '--hyperparameter_search', required=False)
+    parser.add_argument('-hsr', '--hyperparameter_search_rmdir', required=False)
     args = parser.parse_args()
 
     logger.info(f"RUN: {args.run_label}")
@@ -53,13 +57,28 @@ if __name__=="__main__":
     logger.info(f"num_workers: {num_workers}")
     logger.info(f"pin_memory: {pin_memory}")
 
+    if args.hyperparameter_search_rmdir is not None:
+        assert(f"{args.model_folder}{args.run_label}" != "./logs/kcm/")
+        assert(f"{args.model_folder}{args.run_label}" != "./logs/atb/")
+        save_dir = Path("results") / args.run_label
+        # If exists, delete the results folder
+        if save_dir.exists():
+            # Wipe the results folder if doing a hyperparameter search
+            shutil.rmtree(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=False)
+
+    if args.hyperparameter_search is not None:
+        version = f"version_{int(args.random_seed) - 1}"
+    else:
+        version = None
+
     res = {}
-    n_folds = 2
+    n_folds = 5
     test_days = standardfeeds.get_date_list(args.test_date, int(args.test_n))
     test_days = [x.split(".")[0] for x in test_days]
     for fold_num in range(n_folds):
         logger.info(f"MODEL {args.model_type}, FOLD: {fold_num}")
-        model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num)
+        model = model_utils.load_model(args.model_folder, args.run_label, args.model_type, fold_num, version=version)
         res[fold_num] = {}
 
         logger.info(f"EXPERIMENT: SAME CITY")
@@ -149,5 +168,8 @@ if __name__=="__main__":
 
     p = Path("results") / args.run_label
     p.mkdir(parents=True, exist_ok=True)
-    pickle.dump(res, open(p / f"{args.model_type}.pkl", 'wb'))
+    if args.hyperparameter_search is None:
+        pickle.dump(res, open(p / f"{args.model_type}.pkl", 'wb'))
+    else:
+        pickle.dump(res, open(p / f"{args.model_type}_VERSION_{version}.pkl", 'wb'))
     logger.info(f"{model.model_name} EXPERIMENTS COMPLETE")

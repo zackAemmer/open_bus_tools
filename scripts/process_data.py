@@ -27,6 +27,12 @@ def process_data(**kwargs):
         else:
             initial_data_length = len(data)
 
+        # Resample data to regular distance intervals
+        data = trackcleaning.resample_on_distance(data)
+        logger.debug(f"Resampled trips: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
         # Sensors seem to hold old positions right at start/end of trip
         data = trackcleaning.drop_track_ends(data, 'trip_id', 3)
         logger.debug(f"Removed trip start/end points: {len(data):_} points")
@@ -52,7 +58,7 @@ def process_data(**kwargs):
             continue
 
         # Filter on attributes of individual points (may be invalid after recalculation)
-        data = trackcleaning.filter_on_points(data, {'calc_dist_m': (0, 10_000), 'calc_time_s': (0, 5*60), 'elev_m': (-400, 20_000)})
+        data = trackcleaning.filter_on_points(data, {'calc_dist_m': (0, 10_000), 'calc_time_s': (0, 5*60), 'elev_m': (-400, 20_000)}, random_dropout=0.1)
         logger.debug(f"Filtered points: {len(data):_} points")
         if len(data) == 0:
             continue
@@ -79,6 +85,24 @@ def process_data(**kwargs):
         # Add cumulative features
         data = trackcleaning.add_cumulative_features(data)
         logger.debug(f"Added cumulative features: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
+        # Add hex regions
+        data = trackcleaning.add_hex_regions(data, kwargs['dem_file'].parent / "spatial_embeddings", kwargs['epsg'])
+        logger.debug(f"Added hex regions: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
+        # Add OSM embeddings
+        data = trackcleaning.add_osm_embeddings(data, kwargs['dem_file'].parent / "spatial_embeddings")
+        logger.debug(f"Added osm embeddings: {len(data):_} points")
+        if len(data) == 0:
+            continue
+
+        # Add GTFS embeddings
+        data = trackcleaning.add_gtfs_embeddings(data, kwargs['dem_file'].parent / "spatial_embeddings", best_static)
+        logger.debug(f"Added gtfs embeddings: {len(data):_} points")
         if len(data) == 0:
             continue
 
@@ -135,8 +159,8 @@ if __name__=="__main__":
 
     process_data(
         network_name="kcm",
-        dates=standardfeeds.get_date_list("2023_03_15", 100),
-        static_folder=Path("data/kcm_gtfs"),
+        dates=standardfeeds.get_date_list("2024_02_01", 90),
+        static_folder=Path("data/kcm_static"),
         realtime_folder=Path("data/kcm_realtime"),
         dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
         timezone="America/Los_Angeles",
@@ -146,45 +170,32 @@ if __name__=="__main__":
         given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     )
 
-    process_data(
-        network_name="atb",
-        dates=standardfeeds.get_date_list("2023_03_15", 100),
-        static_folder=Path("data/atb_gtfs"),
-        realtime_folder=Path("data/atb_realtime"),
-        dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
-        coord_ref_center=[10.392178466426625,63.430852975179626],
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
+    # process_data(
+    #     network_name="atb",
+    #     dates=standardfeeds.get_date_list("2024_02_01", 90),
+    #     static_folder=Path("data/atb_static"),
+    #     realtime_folder=Path("data/atb_realtime"),
+    #     dem_file=Path("data/atb_spatial/eudtm30m_dem_32632.tif"),
+    #     timezone="Europe/Oslo",
+    #     epsg=32632,
+    #     grid_bounds=[10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395],
+    #     coord_ref_center=[10.392178466426625,63.430852975179626],
+    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    # )
 
-    process_data(
-        network_name="rut",
-        dates=standardfeeds.get_date_list("2023_03_15", 100),
-        static_folder=Path("data/rut_gtfs"),
-        realtime_folder=Path("data/rut_realtime"),
-        dem_file=Path("data/rut_spatial/eudtm30m_dem_32632.tif"),
-        timezone="Europe/Oslo",
-        epsg=32632,
-        grid_bounds=[10.588056382271377,59.809956950105395,10.875078411359919,59.95982169587328],
-        coord_ref_center=[10.742169939719487,59.911212837674746],
-        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    )
-
-    cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    for i, row in cleaned_sources.iterrows():
-        if standardfeeds.validate_realtime_data(row):
-            logger.debug(f"{row['provider']}")
-            process_data(
-                network_name=row['uuid'],
-                dates=standardfeeds.get_date_list("2024_01_03", 5),
-                static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-                realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
-                dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-                timezone=row['tz_str'],
-                epsg=row['epsg_code'],
-                grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
-                coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
-                given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-            )
+    # cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
+    # for i, row in cleaned_sources.iterrows():
+    #     if standardfeeds.validate_realtime_data(row):
+    #         logger.debug(f"{row['provider']}")
+    #         process_data(
+    #             network_name=row['uuid'],
+    #             dates=standardfeeds.get_date_list("2024_01_01", 90),
+    #             static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+    #             realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
+    #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+    #             timezone=row['tz_str'],
+    #             epsg=row['epsg_code'],
+    #             grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
+    #             coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
+    #             given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    #         )

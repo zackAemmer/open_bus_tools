@@ -13,16 +13,85 @@ import scipy.stats as stats
 import seaborn as sns
 import statsmodels.api as sm
 
-from openbustools import standardfeeds
+from openbustools import standardfeeds, spatial
 
-HEIGHT=6
+HEIGHT=10
 WIDTH=8
 HEIGHT_WIDE=3
 ASPECT_WIDE=4
 HEIGHT_SQ=6
 WIDTH_SQ=6
 PLOT_FOLDER="../plots/"
-PALETTE="Set1"
+PALETTE="tab10"
+
+
+def drive_cycle_energy_plot(plot_simdrives, title_text="throwaway"):
+    plot_in_vars = {
+        "Speed (mph)": "mph",
+        "Grade (%/100)": "grade"
+    }
+    plot_out_vars = {
+        "Total (kWh)": "ess_kw_out_ach",
+        "Acceleration (kWh)": "accel_kw",
+        "Rolling (kWh)": "rr_kw",
+        "Loss (kWh)": "ess_loss_kw",
+        "Ascent (kWh)": "ascent_kw",
+        "Drag (kWh)": "drag_kw",
+        "Aux (kWh)": "aux_in_kw"
+    }
+    ax_lims = {
+        "Speed (mph)": [0, 70],
+        "Grade (%/100)": [-.15, .15],
+        "Total (kWh)": [0, 100],
+        "Acceleration (kWh)": [0, 5],
+        "Rolling (kWh)": [0, 50],
+        "Loss (kWh)": [0, 5],
+        "Ascent (kWh)": [0, 15],
+        "Drag (kWh)": [0, 50],
+        "Aux (kWh)": [0, 20]
+    }
+    fig, axes = plt.subplots(len(plot_in_vars)+len(plot_out_vars), len(plot_simdrives), figsize=(20,20))
+    if axes.ndim == 1:
+        axes = axes.reshape(1,-1)
+    fig.tight_layout()
+    for traj_n in range(len(plot_simdrives)):
+        axes[0,traj_n].set_title(f"Trajectory {traj_n}")
+        sim_drive = plot_simdrives[traj_n]
+        for source, res in sim_drive.items():
+            for i, (title, var) in enumerate(plot_in_vars.items()):
+                ax = axes[i,traj_n]
+                ax.set_ylabel(title)
+                ax.set_ylim(ax_lims[title])
+                ax.plot(res[1].cyc.time_s, getattr(res[1].cyc, var), label=source)
+            for i, (title, var) in enumerate(plot_out_vars.items()):
+                i += len(plot_in_vars)
+                ax = axes[i,traj_n]
+                ax.set_ylabel(title)
+                ax.set_ylim(ax_lims[title])
+                ax.plot(res[1].cyc.time_s, np.cumsum(getattr(res[1], var)) / 60 /60, label=source)
+    axes[0,0].legend()
+    return None
+
+
+def drive_cycle_comparison(plot_energy_res, title_text="throwaway"):
+    fig, axes = plt.subplots(2,1,figsize=(15,6))
+    fig.tight_layout()
+    axes = axes.flatten()
+    sns.lineplot(x=plot_energy_res['agg'][0].time_s, y=plot_energy_res['agg'][0].mps, ax=axes[0], label="Aggregated")
+    sns.lineplot(x=plot_energy_res['pred'][0].time_s, y=plot_energy_res['pred'][0].mps, ax=axes[0], label="Predicted")
+    agg_smooth = spatial.apply_sg_filter(plot_energy_res['agg'][0].mps, 8, 0, 30)
+    pred_smooth = spatial.apply_sg_filter(plot_energy_res['pred'][0].mps, 8, 0, 30)
+    sns.lineplot(x=plot_energy_res['agg'][0].time_s, y=agg_smooth, ax=axes[1], label="Aggregated")
+    sns.lineplot(x=plot_energy_res['pred'][0].time_s, y=pred_smooth, ax=axes[1], label="Predicted")
+    axes[0].set_title("Example Drive Cycle Constructed with Aggregated vs. Predicted Speed Methods")
+    axes[0].set_ylabel("Speed (m/s)")
+    axes[1].set_ylabel("Smoothed Speed (m/s)")
+    axes[1].set_xlabel("Time (s)")
+    axes[1].legend("")
+    axes[0].set_ylim(0, 20)
+    axes[1].set_ylim(0, 20)
+    plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
+    return None
 
 
 def formatted_lineplot(plot_df, x_var, y_var, title_text="throwaway"):
@@ -77,7 +146,7 @@ def formatted_shingle_scatterplot(plot_gdf, title_text="throwaway"):
 def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
     """Plot distributions of labels and key features."""
     data_folder_list = list(pd.unique(plot_df['realtime_foldername']))
-    fig, axes = plt.subplots(3,2)
+    fig, axes = plt.subplots(4,2)
     axes = axes.flatten()
     [ax.yaxis.set_major_formatter(FormatStrFormatter('%.3f')) for ax in axes]
     fig.set_figheight(HEIGHT)
@@ -86,31 +155,39 @@ def formatted_feature_distributions_histplot(plot_df, title_text="throwaway"):
         plot_df_folder = plot_df[plot_df['realtime_foldername']==data_folder]
         sample_groups = plot_df_folder.groupby('shingle_id')
         metric = sample_groups.count()['locationtime']
-        sns.histplot(metric, ax=axes[0], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[0], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
         axes[0].set_xlabel("Points per Sample (n)")
         axes[0].set_xlim(0,70)
         axes[0].legend(["Seattle (KCM)", "Trondheim (AtB)"])
         metric = sample_groups.last()['cumul_dist_km']
-        sns.histplot(metric, ax=axes[1], stat='density', binwidth=.5, color=sns.color_palette("Set2")[i])
-        axes[1].set_xlabel("Sample Travel Dist (km)")
+        sns.histplot(metric, ax=axes[1], stat='density', binwidth=.5, color=sns.color_palette(PALETTE)[i])
+        axes[1].set_xlabel("Sample Travel Distance (km)")
         axes[1].set_xlim(0,20)
         metric = sample_groups.last()['cumul_time_s']
-        sns.histplot(metric, ax=axes[2], stat='density', binwidth=50, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[2], stat='density', binwidth=50, color=sns.color_palette(PALETTE)[i])
         axes[2].set_xlabel("Sample Travel Time (s)")
         axes[2].set_xlim(-300,3000)
         metric = sample_groups.last()['sch_time_s']
-        sns.histplot(metric, ax=axes[3], stat='density', binwidth=100, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[3], stat='density', binwidth=100, color=sns.color_palette(PALETTE)[i])
         axes[3].set_xlabel("Sample Scheduled Time (s)")
         axes[3].set_xlim(-300,3000)
         metric = plot_df_folder['x_cent']/1000
-        sns.histplot(metric, ax=axes[4], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[4], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
         axes[4].set_xlabel("Point CBD-X (km)")
         axes[4].set_xlim(-20,20)
         metric = plot_df_folder['y_cent']/1000
-        sns.histplot(metric, ax=axes[5], stat='density', binwidth=1, color=sns.color_palette("Set2")[i])
+        sns.histplot(metric, ax=axes[5], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
         axes[5].set_xlabel("Point CBD-Y (km)")
         axes[5].set_xlim(-20,20)
         # axes[5].xticks(np.arange(min(-30000), max(x)+1, 1.0))
+        metric = plot_df_folder['calc_time_s']
+        sns.histplot(metric, ax=axes[6], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
+        axes[6].set_xlabel("Point Measured Time (s)")
+        axes[6].set_xlim(0,1*60)
+        metric = plot_df_folder['calc_speed_m_s']
+        sns.histplot(metric, ax=axes[7], stat='density', binwidth=1, color=sns.color_palette(PALETTE)[i])
+        axes[7].set_xlabel("Avg Speed (m/s)")
+        axes[7].set_xlim(0,35)
     fig.tight_layout()
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig, axes
@@ -135,6 +212,7 @@ def formatted_trajectory_lineplot(traj_df, title_text="throwaway"):
     fig.tight_layout()
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return fig
+
 
 def formatted_forces_lineplot(traj_df, title_text="throwaway"):
     if 'Source' not in traj_df.columns:
@@ -167,29 +245,36 @@ def formatted_residuals_plot(plot_df, title_text="throwaway"):
     sns.residplot(plot_df, ax=axes[0], x='labels', y='preds', lowess=True, scatter_kws={'marker': '.'}, line_kws={'color': 'red'})
     sm.qqplot(plot_df['residuals'], ax=axes[1], dist=stats.t, distargs=(len(plot_df)-1,), line='45', fit=True)
     sns.histplot(plot_df['residuals'], ax=axes[2], bins=100)
-    fig.suptitle(title_text, fontsize=16)
+    fig.suptitle(title_text, fontsize=24)
     fig.tight_layout()
     plt.savefig(Path(PLOT_FOLDER, title_text).with_suffix(".png"), format='png', dpi=600, bbox_inches='tight')
     return None
 
 
-def formatted_grid_animation(data, title_text="throwaway"):
+def formatted_grid_animation(data, start_frame=None, end_frame=None, title_text="throwaway", location_str="", fps=30):
     fig, axes = plt.subplots(1, 1)
-    fig.tight_layout()
+    # fig.tight_layout()
+    start_hour = start_frame // 60
+    start_minute = start_frame % 60
+    data = data[start_frame:end_frame,:,:]
     # Define the update function that will be called for each frame of the animation
     def update(frame):
-        fig.suptitle(f"Frame {frame}")
+        hour = frame // 60 + start_hour
+        minute = frame % 60 + start_minute
+        fig.suptitle(f"{location_str}\nTime: {hour:02d}:{minute:02d}", fontsize=16)
         for i in range(1):
             d = data[:,:,:]
             vmin=np.min(d[~np.isnan(d)])
             vmax=np.max(d[~np.isnan(d)])
             axes.clear()
             im = axes.imshow(data[frame,:,:], cmap='plasma', vmin=vmin, vmax=vmax, origin="lower")
+            axes.set_xticks([])
+            axes.set_yticks([])
     # Create the animation object
     ani = animation.FuncAnimation(fig, update, frames=data.shape[0])
-    writergif = animation.PillowWriter(fps=30)
+    writergif = animation.PillowWriter(fps=fps)
     # Save the animation object
-    ani.save(f"../plots/{title_text}.gif", writer=writergif)
+    ani.save(f"../plots/grid_animations/{location_str}.gif", writer=writergif)
 
 
 # def formatted_barplot(plot_df):

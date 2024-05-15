@@ -1,4 +1,5 @@
 import datetime
+import pickle
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -6,6 +7,59 @@ import pandas as pd
 
 from openbustools import spatial, standardfeeds
 from openbustools.traveltime import data_loader
+
+
+def interpolate_group(group):
+    """
+    Interpolates the group to regular distance intervals.
+
+    Args:
+        group (DataFrame): The input DataFrame.
+    
+    Returns:
+        DataFrame: The interpolated data.
+    """
+    cat_cols = [col for col in group.columns if col not in ['locationtime', 'lat', 'lon', 'calc_dist_m', 'calc_time_s', 'calc_bear_d', 'cumul_dist_m']]
+    cat_vals = group[cat_cols].iloc[0].values
+    cat_lookup = {col: val for col, val in zip(cat_cols, cat_vals)}
+    new_cumul_dist_m = np.arange(group['cumul_dist_m'].min(), group['cumul_dist_m'].max(), np.random.randint(200, 400, 1))
+    new_lat = np.interp(new_cumul_dist_m, group['cumul_dist_m'], group['lat'])
+    new_lon = np.interp(new_cumul_dist_m, group['cumul_dist_m'], group['lon'])
+    new_time = np.interp(new_cumul_dist_m, group['cumul_dist_m'], group['locationtime'])
+    res = pd.DataFrame({
+        'locationtime': new_time,
+        'lat': new_lat,
+        'lon': new_lon,
+    })
+    for col in cat_cols:
+        res[col] = cat_lookup[col]
+    return res
+
+
+def resample_on_distance(data):
+    """
+    Resamples the data to regular distance intervals.
+
+    Args:
+        data (DataFrame): The input DataFrame.
+
+    Returns:
+        DataFrame: The resampled data.
+    """
+    data = data.sort_values(['trip_id','locationtime']).copy()
+    # Throw trips with impossible distances to avoid resampling to huge trajectory sizes
+    data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
+    drop_ids = data[data['calc_dist_m']>100000]['trip_id']
+    data = data[~data['trip_id'].isin(drop_ids)].copy()
+    # Set values for first points of each trip to 0
+    data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
+    data.loc[data.groupby('trip_id').nth(0).index, 'calc_dist_m'] = 0
+    data.loc[data.groupby('trip_id').nth(0).index, 'calc_time_s'] = 0
+    data.loc[data.groupby('trip_id').nth(0).index, 'calc_bear_d'] = 0
+    data['cumul_dist_m'] = data.groupby('trip_id')['calc_dist_m'].cumsum()
+    data.reset_index(drop=True, inplace=True)
+    data = data.groupby('trip_id').apply(interpolate_group, include_groups=False).reset_index().drop(columns='level_1')
+    return data
 
 
 def drop_track_ends(data, id_col, n_drop=1):
@@ -27,7 +81,7 @@ def drop_track_ends(data, id_col, n_drop=1):
     return data
 
 
-def shingle(data, min_break, max_break, resample_shingles=False, min_len=None, max_len=None):
+def shingle(data, min_break, max_break):
     """
     Split a dataframe into random even chunks, with random resampled len.
 
@@ -35,9 +89,6 @@ def shingle(data, min_break, max_break, resample_shingles=False, min_len=None, m
         data (DataFrame): The input DataFrame.
         min_break (int): The minimum number of breaks to be applied to each shingle.
         max_break (int): The maximum number of breaks to be applied to each shingle.
-        resample_shingles (bool): Whether to resample the shingles to a random length.
-        min_len (int): The minimum length of each shingle.
-        max_len (int): The maximum length of each shingle.
 
     Returns:
         DataFrame: Input data split into shingle IDs assigned to each row.
@@ -59,24 +110,10 @@ def shingle(data, min_break, max_break, resample_shingles=False, min_len=None, m
     shingle_ids = np.concatenate(all_shingles)
     shingled_data = data.copy()
     shingled_data['shingle_id'] = shingle_ids
-    if resample_shingles:
-        # Now resample each shingle to a random length between min and max
-        sids, sidxs = np.unique(shingled_data['shingle_id'], return_index=True)
-        shingles = np.split(shingled_data[['locationtime','lon','lat']].to_numpy(), sidxs[1:], axis=0)
-        resample_lens = np.random.randint(min_len, max_len, len(shingles))
-        resampled= []
-        for shingle_data, resample_len in zip(shingles, resample_lens):
-            resampled.append(spatial.resample_to_len(shingle_data, resample_len))
-        resampled_sids = np.repeat(sids, resample_lens).astype(int)
-        # Can't interpolate categoricals, so rejoin them after resampling
-        cat_lookup = shingled_data[['realtime_filename','trip_id','shingle_id']].drop_duplicates()
-        shingled_data = pd.DataFrame(np.concatenate(resampled), columns=['locationtime','lon','lat'])
-        shingled_data['shingle_id'] = resampled_sids
-        shingled_data = pd.merge(shingled_data, cat_lookup, on='shingle_id').sort_values(['shingle_id','locationtime'])
     return shingled_data
 
 
-def filter_on_points(data, min_filter_dict):
+def filter_on_points(data, min_filter_dict, random_dropout=None):
     """
     Filter the data based on specified minimum and maximum values for each column in min_filter_dict.
 
@@ -91,6 +128,10 @@ def filter_on_points(data, min_filter_dict):
     for col, (min_val, max_val) in min_filter_dict.items():
         data = data[data[col]>min_val].copy()
         data = data[data[col]<max_val].copy()
+    # Randomly drop points
+    if random_dropout is not None:
+        data = data.sample(frac=1.0-random_dropout).copy()
+        data = data.sort_values(['shingle_id', 'locationtime'])
     # Re-calculate geometry features w/o missing points
     data['calc_dist_m'], data['calc_bear_d'], data['calc_time_s'] = spatial.calculate_gps_metrics(data, 'lon', 'lat', time_col='locationtime')
     # First pt is dependent on prev trip metrics
@@ -178,7 +219,7 @@ def add_static_features(data, static_foldername, epsg):
         data = data.merge(trips, on='trip_id', how='left')
         data['calc_stop_dist_km'] = data['calc_stop_dist_m'] / 1000.0
         # Passed stops
-        data['passed_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff().fillna(0)
+        data['passed_stops_n'] = data.groupby('shingle_id')['stop_sequence'].diff().astype(float).fillna(0).astype(int)
         # Scheduled time
         # Handle case where trip in data started the day before collection, giving it scheduled times after midnight but sensed times of same day
         # If the trip started same day as collection and crossed over midnight, the times will line up
@@ -232,7 +273,32 @@ def extract_training_features(data):
             data_n (numpy.ndarray): The numerical feature columns of the data as an array of integers.
             data_c (numpy.ndarray): The categorical feature columns of the data as an array of strings.
     """
-    data_id = data['shingle_id'].to_numpy().astype('int32')
-    data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('int32')
+    data_id = data[data_loader.SAMPLE_ID].to_numpy().astype('int32')
+    data_n = data[data_loader.NUM_FEAT_COLS].to_numpy().astype('float32')
     data_c = data[data_loader.MISC_CAT_FEATS].to_numpy().astype('S30')
     return (data_id, data_n, data_c)
+
+
+def add_hex_regions(data, embeddings_dir, epsg):
+    area, regions, neighbourhood = spatial.load_regions(embeddings_dir)
+    # Spatial join the data to the regions
+    regions = regions.to_crs(f"epsg:{epsg}").reset_index()[['region_id', 'geometry']]
+    data = data.sjoin(regions, how="left", predicate='within').drop(columns=['index_right'])
+    assert(data['region_id'].isna().sum()==0) # Check that all points have a region
+    return data
+
+
+def add_osm_embeddings(data, embeddings_dir):
+    embeddings_osm = pd.read_pickle(embeddings_dir / "embeddings_osm.pkl")
+    embeddings_osm.columns = [f"{i}_osm_embed" for i in embeddings_osm.columns]
+    data = pd.merge(data, embeddings_osm, on='region_id', how='left')
+    assert(data['0_osm_embed'].isna().sum()==0) # Check that all regions have embeddings
+    return data
+
+
+def add_gtfs_embeddings(data, embeddings_dir, best_static):
+    embeddings_gtfs = pd.read_pickle(embeddings_dir / f"embeddings_gtfs_{best_static}.pkl")
+    embeddings_gtfs.columns = [f"{i}_gtfs_embed" for i in embeddings_gtfs.columns]
+    data = pd.merge(data, embeddings_gtfs, on='region_id', how='left')
+    assert(data['0_gtfs_embed'].isna().sum()==0) # Check that all regions have embeddings
+    return data

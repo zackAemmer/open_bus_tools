@@ -6,10 +6,16 @@
 /figures/*
 /plots/*
 /results/*
+/results_urban_mgmt/*
 /.vscode/*
 /.venv/*
 /dist/*
 /logs/*
+/logs_no_resample/*
+/logs_urban_mgmt/*
+/lightning_logs/*
+/logs_gtfs_embedder/*
+/cache/*
 /profiler/*
 secret.py
 .DS_Store
@@ -17,6 +23,10 @@ secret.py
 *.sh
 !/data/more_gtfs_sources.csv
 !/data/cleaned_sources.csv
+!/data/FASTSim_py_veh_db.csv
+!/data/hd_udds.csv
+!/data/manhattan.csv
+!/data/orange_county.csv
 /notebooks/cache/*
 /notebooks/checkpoints/*
 /notebooks/files/*

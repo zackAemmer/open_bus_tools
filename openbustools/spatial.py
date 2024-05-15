@@ -1,3 +1,5 @@
+import pickle
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -6,29 +8,47 @@ import rasterio
 from rasterio.sample import sample_gen
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from scipy.spatial import KDTree
+import scipy
+import shapely
+from srai.neighbourhoods.h3_neighbourhood import H3Neighbourhood
+from srai.regionalizers import H3Regionalizer
 
 
-def resample_to_len(ary, new_len, xp=None):
+def manhattan_distance(x1, y1, x2, y2):
     """
-    Resamples an array to a specified length using linear interpolation.
+    Calculate the Manhattan distance between two points in a 2D plane.
+    
+    Args:
+        x1 (float): The x-coordinate of the first point.
+        y1 (float): The y-coordinate of the first point.
+        x2 (float): The x-coordinate of the second point.
+        y2 (float): The y-coordinate of the second point.
+    
+    Returns:
+        float: The Manhattan distance between the two points.
+    """
+    return abs(x1 - x2) + abs(y1 - y2)
+
+
+def make_polygon(bbox):
+    """
+    Create a polygon from a bounding box.
 
     Args:
-        ary (ndarray): The input array to be resampled.
-        new_len (int): The desired length of the resampled array.
-        xp (ndarray, optional): The x-coordinates of the input array. If not provided, it is assumed to be a linearly spaced array.
+        bbox (tuple): A tuple containing the coordinates of the bounding box in the format (minx, miny, maxx, maxy).
 
     Returns:
-        ndarray: The resampled array.
+        shapely.geometry.Polygon: A polygon representing the bounding box.
     """
-    if xp is None:
-        xp = np.arange(0, ary.shape[0], 1)
-    eval_x = np.linspace(np.min(xp), np.max(xp), new_len)
-    # If 1D, interp directly, else apply along axis
-    if ary.ndim == 1:
-        res = np.interp(eval_x, xp, ary)
-    else:
-        res = np.apply_along_axis(lambda y: np.interp(eval_x, xp, y), 0, ary)
-    return res
+    polygon = shapely.geometry.Polygon([
+        (bbox[0], bbox[1]),
+        (bbox[0], bbox[3]),
+        (bbox[2], bbox[3]),
+        (bbox[2], bbox[1]),
+        (bbox[0], bbox[1])
+    ])
+    gdf = gpd.GeoDataFrame({'geometry': [polygon]}, crs='epsg:4326')
+    return gdf
 
 
 def calculate_gps_metrics(gdf, lon_col, lat_col, time_col=None):
@@ -127,7 +147,7 @@ def sample_raster(points, dem_file):
 def divide_fwd_back_fill(arr1, arr2):
     """
     Divide two arrays element-wise, while handling division by zero.
-    Forward fill the resulting array to replace NaN values.
+    Forward fill then back fill the resulting array to replace NaN values.
 
     Args:
         arr1 (numpy.ndarray): The numerator array.
@@ -140,8 +160,7 @@ def divide_fwd_back_fill(arr1, arr2):
         res = arr1 / arr2
     res[res==-np.inf] = np.nan
     res[res==np.inf] = np.nan
-    res = pd.Series(res).ffill()
-    res = res.bfill().to_numpy()
+    res = pd.Series(res).ffill().bfill().to_numpy()
     return res
 
 
@@ -195,77 +214,122 @@ def project_bounds(grid_bounds, coord_ref_center, epsg):
     return (grid_bounds_prj, coord_ref_center_prj)
 
 
-# def poly_locate_line_points(poly_geo, line_geo):
-#     if line_geo.intersects(poly_geo):
-#         intersection = line_geo.intersection(poly_geo)
-#         first_point = intersection.boundary.geoms[0]
-#         last_point = intersection.boundary.geoms[-1]
-#         res = (line_geo.project(first_point)*111111, line_geo.project(last_point)*111111)
-#         return res
-#     else:
-#         return None
-# intersected_trips['line_locs'] = intersected_trips.apply(lambda x: poly_locate_line_points(x['geometry_x'], x['geometry_y']), axis=1)
+def create_regions(grid_bounds, embeddings_folder):
+    """
+    Create regions based on the given grid bounds and save them to the spatial folder.
+
+    Args:
+        grid_bounds (list): A list of four coordinates representing the bounding box of the grid.
+        embeddings_folder (str): The path to the embeddings_folder folder where the regions will be saved.
+    """
+    geo = shapely.Polygon((
+        (grid_bounds[0], grid_bounds[1]),
+        (grid_bounds[0], grid_bounds[3]),
+        (grid_bounds[2], grid_bounds[3]),
+        (grid_bounds[2], grid_bounds[1]),
+        (grid_bounds[0], grid_bounds[1])
+    ))
+    # Define area for embeddings, get H3 regions
+    area = gpd.GeoDataFrame({'region_id': [str(embeddings_folder)], 'geometry': [geo]}, crs='epsg:4326')
+    area.set_index('region_id', inplace=True)
+    regionalizer = H3Regionalizer(resolution=8)
+    regions = regionalizer.transform(area)
+    neighbourhood = H3Neighbourhood(regions_gdf=regions)
+    # Save
+    embeddings_folder.mkdir(parents=True, exist_ok=True)
+    area.to_pickle(embeddings_folder / "area.pkl")
+    regions.to_pickle(embeddings_folder / "regions.pkl")
+    with open(embeddings_folder / 'neighbourhood.pkl', 'wb') as f:
+        pickle.dump(neighbourhood, f)
+    return (area, regions, neighbourhood)
 
 
-# def create_grid_of_shingles(point_resolution, grid_bounds, coord_ref_center):
-#     # Create grid of coordinates to use as inference inputs
-#     x_val = np.linspace(grid_bounds[0], grid_bounds[2], point_resolution)
-#     y_val = np.linspace(grid_bounds[1], grid_bounds[3], point_resolution)
-#     X,Y = np.meshgrid(x_val,y_val)
-#     x_spacing = (grid_bounds[2] - grid_bounds[0]) / point_resolution
-#     y_spacing = (grid_bounds[3] - grid_bounds[1]) / point_resolution
-#     # Create shingle samples with only geometric variables
-#     shingles = []
-#     # All horizontal shingles W-E and E-W
-#     for i in range(X.shape[0]):
-#         curr_shingle = {}
-#         curr_shingle["x"] = list(X[i,:])
-#         curr_shingle["y"] = list(Y[i,:])
-#         curr_shingle["dist_calc_km"] = [x_spacing/1000 for x in curr_shingle["x"]]
-#         curr_shingle["bearing"] = [0 for x in curr_shingle["x"]]
-#         shingles.append(curr_shingle)
-#         rev_shingle = {}
-#         rev_shingle["x"] = list(np.flip(X[i,:]))
-#         rev_shingle["y"] = list(np.flip(Y[i,:]))
-#         rev_shingle["dist_calc_km"] = [x_spacing/1000 for x in rev_shingle["x"]]
-#         rev_shingle["bearing"] = [180 for x in rev_shingle["x"]]
-#         shingles.append(rev_shingle)
-#     # All vertical shingles N-S and S-N
-#     for j in range(X.shape[1]):
-#         curr_shingle = {}
-#         curr_shingle["x"] = list(X[:,j])
-#         curr_shingle["y"] = list(Y[:,j])
-#         curr_shingle["dist_calc_km"] = [y_spacing/1000 for x in curr_shingle["x"]]
-#         curr_shingle["bearing"] = [-90 for x in curr_shingle["x"]]
-#         shingles.append(curr_shingle)
-#         rev_shingle = {}
-#         rev_shingle["x"] = list(np.flip(X[:,j]))
-#         rev_shingle["y"] = list(np.flip(Y[:,j]))
-#         rev_shingle["dist_calc_km"] = [y_spacing/1000 for x in rev_shingle["x"]]
-#         rev_shingle["bearing"] = [90 for x in rev_shingle["x"]]
-#         shingles.append(rev_shingle)
-#     # Add dummy and calculated variables
-#     shingle_id = 0
-#     for curr_shingle in shingles:
-#         curr_shingle['lat'] = curr_shingle['y']
-#         curr_shingle['lon'] = curr_shingle['x']
-#         curr_shingle['shingle_id'] = [shingle_id for x in curr_shingle['lon']]
-#         curr_shingle['timeID'] = [60*9 for x in curr_shingle['lon']]
-#         curr_shingle['weekID'] = [3 for x in curr_shingle['lon']]
-#         curr_shingle['x_cent'] = [x - coord_ref_center[0] for x in curr_shingle['x']]
-#         curr_shingle['y_cent'] = [y - coord_ref_center[1] for y in curr_shingle['y']]
-#         curr_shingle['locationtime'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['time_calc_s'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['dist_cumulative_km'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['time_cumulative_s'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['speed_m_s'] = [1 for x in curr_shingle['lon']]
-#         curr_shingle['timeID_s'] = [1 for x in curr_shingle['lon']]
-#         shingle_id += 1
-#     # Convert to tabular format, create shingle lookup
-#     res_dict = {}
-#     for cname in shingles[0].keys():
-#         res_dict[cname] = []
-#         vals = np.array([s[cname] for s in shingles]).flatten()
-#         res_dict[cname].extend(vals)
-#     res = pd.DataFrame(res_dict)
-#     return res
+def load_regions(embeddings_folder):
+    """
+    Load regions from the specified spatial folder.
+
+    Args:
+        spatial_folder (str): The path to the spatial folder where the regions are saved.
+
+    Returns:
+        tuple: A tuple containing the area, regions, and neighbourhood.
+    """
+    area = pd.read_pickle(embeddings_folder / "area.pkl")
+    regions = pd.read_pickle(embeddings_folder / "regions.pkl")
+    with open(embeddings_folder / 'neighbourhood.pkl', 'rb') as f:
+        neighbourhood = pickle.load(f)
+    return (area, regions, neighbourhood)
+
+
+def apply_sg_filter(sequence, window_len_factor=.03, polyorder=5, clip_min=None, clip_max=None):
+    # window len <= sequence len
+    # polyorder < window len
+    window_len = int(len(sequence) * window_len_factor)
+    window_len = max([window_len, 3]) # Based on factor* len, but no less than 3 samples
+    polyorder = min([polyorder, window_len-1]) # Based on input, but no greater than window length - 1
+    filtered_sequence = scipy.signal.savgol_filter(sequence, window_length=window_len, polyorder=polyorder)
+    if clip_min is not None:
+        filtered_sequence = np.clip(filtered_sequence, a_min=clip_min, a_max=None)
+    if clip_max is not None:
+        filtered_sequence = np.clip(filtered_sequence, a_min=None, a_max=clip_max)
+    return filtered_sequence
+
+
+def apply_peak_filter(arr, acc_scalar=1.0, dec_scalar=1.0, window_len=3, clip_min=None, clip_max=None):
+    assert window_len % 2 == 1, "Window length must be odd"
+    # Create rolling windows
+    rolling_windows = np.lib.stride_tricks.sliding_window_view(arr, window_len)
+    # Pad the start and end to match input length
+    num_padding = window_len // 2
+    rolling_windows = np.pad(rolling_windows, pad_width=((num_padding,num_padding), (0,0)), mode='edge')
+    # Apply peak filter to each window
+    means = np.mean(rolling_windows, axis=1)
+    # Use different scalars for positive and negative deviations
+    deviation_windows = rolling_windows - means[:, np.newaxis]
+    deviation_windows = deviation_windows[:,num_padding]
+    deviation_windows[deviation_windows > 0] *= acc_scalar
+    deviation_windows[deviation_windows <= 0] *= dec_scalar
+    peaked_windows = rolling_windows[:,num_padding] + deviation_windows
+    # Get the middle value from each window
+    peaked_windows = np.clip(peaked_windows, clip_min, clip_max)
+    return peaked_windows
+
+
+def haversine(lon1, lat1, lon2, lat2):
+    """
+    Calculate the great circle distance in kilometers between two points 
+    on the earth (specified in decimal degrees)
+    """
+    # convert decimal degrees to radians 
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+
+    # haversine formula 
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(a)) 
+    r = 6371 # Radius of earth in kilometers. Use 3956 for miles. Determines return value units.
+    return c * r
+
+
+def bbox_area(lon1, lat1, lon2, lat2):
+    """
+    Calculate the area of a bounding box given by four coordinates
+    """
+    # Calculate the side lengths
+    side_a = haversine(lon1, lat1, lon2, lat1)
+    side_b = haversine(lon1, lat1, lon1, lat2)
+
+    # Calculate the area
+    area = side_a * side_b
+    return area
+
+
+def eval_signal_error(sig1, x1, sig2, x2):
+    """
+    Evaluate the RMSE between two signals by interpolating one signal to the other.
+    """
+    # Interpolate signal 2 to signal 1
+    sig2_interp = np.interp(x1, x2, sig2)
+    # Calculate RMSE
+    return np.sqrt(np.mean((sig1 - sig2_interp)**2))

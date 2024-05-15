@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from openbustools import trackcleaning
 
 
-# Feature columns used at various points in training and testing
+SAMPLE_ID = ["shingle_id"]
 LABEL_FEATS = [
     "calc_time_s",
     "cumul_time_s",
@@ -43,12 +43,18 @@ MISC_CON_FEATS = [
 MISC_CAT_FEATS = [
     "route_id",
 ]
+GTFS2VEC_FEATS = [f"{i}_gtfs_embed" for i in range(0, 16)]
+OSM_FEATS = [f"{i}_osm_embed" for i in range(0, 64)]
+SRAI_FEATS = OSM_FEATS+GTFS2VEC_FEATS
+# Columns that should be normalized in the dataloader
+TRAIN_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS
+# All columns used for training and testing
+NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+GTFS2VEC_FEATS+OSM_FEATS+EMBED_FEATS+MISC_CON_FEATS
+# Routes to not train on
 HOLDOUT_ROUTES = [
     'ATB:Line:2_87','ATB:Line:2_72','ATB:Line:2_9','ATB:Line:2_5111',
     '102736','102628','102555','100129','102719','100229'
 ]
-TRAIN_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS
-NUM_FEAT_COLS = LABEL_FEATS+GPS_FEATS+STATIC_FEATS+DEEPTTE_FEATS+EMBED_FEATS+MISC_CON_FEATS
 
 
 def normalize(x, config_entry):
@@ -85,7 +91,7 @@ class trajectoryDataset(Dataset):
     A dataset class for handling trajectory inference.
 
     Args:
-        traj (Trajectory): The trajectory object containing the track to infer.
+        trajectories (list): Trajectories to use for inference.
         config (dict): Configuration settings for the dataset.
 
     Attributes:
@@ -97,19 +103,23 @@ class trajectoryDataset(Dataset):
         __getitem__(index): Returns the normalized sample data for the given index.
         __len__(): Returns the number of samples in the dataset.
     """
-    def __init__(self, traj, config):
-        gdf = traj.gdf.copy()
-        gdf['t_min_of_day'] = traj.traj_attr['t_min_of_day']
-        gdf['t_day_of_week'] = traj.traj_attr['t_day_of_week']
-        # Fill modeling features with -1 if not added to trajectory gdf
-        gdf['shingle_id'] = -1
-        gdf['route_id'] = -1
-        for col in NUM_FEAT_COLS:
-            if col not in gdf.columns:
-                gdf[col] = -1
-        _, data_n, _ = trackcleaning.extract_training_features(gdf)
-        self.sample_lookup = {0: data_n}
+    def __init__(self, trajectories, config):
+        self.trajectories = trajectories
         self.config = config
+        self.sample_lookup = {}
+        # Fill any missing features with -1
+        for i, traj in enumerate(self.trajectories):
+            traj_df = traj.gdf.copy()
+            traj_df[SAMPLE_ID] = i
+            traj_df['t_min_of_day'] = traj.traj_attr['t_min_of_day']
+            traj_df['t_day_of_week'] = traj.traj_attr['t_day_of_week']
+            for col in SAMPLE_ID+NUM_FEAT_COLS+MISC_CAT_FEATS:
+                if col not in traj_df.columns:
+                    traj_df[col] = -1
+            # data_id = traj_df[SAMPLE_ID].to_numpy().astype('int32')
+            data_n = traj_df[NUM_FEAT_COLS].to_numpy().astype('float32')
+            # data_c = traj_df[MISC_CAT_FEATS].to_numpy().astype('S30')
+            self.sample_lookup[i] = data_n
     def find_sample(self, index):
         """
         Returns the sample data for the given index.
@@ -131,13 +141,17 @@ class trajectoryDataset(Dataset):
         Returns:
             ndarray: The normalized sample data.
         """
-        # Load if not in memory, normalize non-embedding columns
+        # Load if not in memory
         sample_data = self.find_sample(index)[:].astype(np.float32)
         sample_data_raw = sample_data.copy()
-        for i, col in enumerate(TRAIN_COLS):
-            feat_idx = NUM_FEAT_COLS.index(col)
-            sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
-        # Assert no full-trip travel time labels are 0
+        # Create a mask for columns to be normalized, get config info
+        norm_col_indices = [NUM_FEAT_COLS.index(x) for x in TRAIN_COLS]
+        norm_mask = np.isin(np.arange(sample_data.shape[1]), norm_col_indices)
+        means = np.array([self.config[col][0] for col in TRAIN_COLS], dtype=np.float32)
+        stds = np.array([self.config[col][1] for col in TRAIN_COLS], dtype=np.float32)
+        # Normalize the columns with broadcasting
+        sample_data[:,norm_mask] = (sample_data[:,norm_mask] - means) / stds
+        # Ensure no full-trip travel time labels are 0
         assert np.min(sample_data_raw[1:,NUM_FEAT_COLS.index('cumul_time_s')]) > 0
         return (sample_data, sample_data_raw)
     def __len__(self):
@@ -198,7 +212,7 @@ class NumpyDataset(Dataset):
                 if day_folder.name in self.train_days:
                     data_file = day_folder / f"{day_folder.name}_sid.npy"
                     # Load shingle ids for the day to get start points and lengths
-                    shingle_ids = np.load(data_file)
+                    shingle_ids = np.load(data_file).flatten()
                     shingle_start_indices = np.where(np.diff(shingle_ids, prepend=np.nan))[0]
                     shingle_lens = np.diff(np.append(shingle_start_indices, len(shingle_ids)))
                     # Separate out the holdout routes
@@ -238,7 +252,7 @@ class NumpyDataset(Dataset):
             self.config = create_config(config_samples)
     def find_sample(self, index):
         """
-        Returns the sample data for the given index.
+        Returns the memmap pointer and grid data for the given index.
 
         Args:
             index (int): The index of the sample.
@@ -265,13 +279,17 @@ class NumpyDataset(Dataset):
         Returns:
             ndarray: The normalized sample data.
         """
-        # Load if not in memory, normalize non-embedding columns
+        # Load if not in memory
         sample_data = self.find_sample(index)[:].astype(np.float32)
         sample_data_raw = sample_data.copy()
-        for i, col in enumerate(TRAIN_COLS):
-            feat_idx = NUM_FEAT_COLS.index(col)
-            sample_data[:,feat_idx] = normalize(sample_data[:,feat_idx], self.config[col])
-        # Assert no full-trip travel time labels are 0
+        # Create a mask for columns to be normalized, get config info
+        norm_col_indices = [NUM_FEAT_COLS.index(x) for x in TRAIN_COLS]
+        norm_mask = np.isin(np.arange(sample_data.shape[1]), norm_col_indices)
+        means = np.array([self.config[col][0] for col in TRAIN_COLS], dtype=np.float32)
+        stds = np.array([self.config[col][1] for col in TRAIN_COLS], dtype=np.float32)
+        # Normalize the columns with broadcasting
+        sample_data[:,norm_mask] = (sample_data[:,norm_mask] - means) / stds
+        # Ensure no full-trip travel time labels are 0
         assert np.min(sample_data_raw[1:,NUM_FEAT_COLS.index('cumul_time_s')]) > 0
         return (sample_data, sample_data_raw)
     def __len__(self):
@@ -312,6 +330,46 @@ def collate_seq_static(batch):
     X_em = X_em[0,:,:].unsqueeze(0).repeat(X_em.shape[0],1,1).int()
     # Get all continuous training features
     X_ct = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in GPS_FEATS+STATIC_FEATS]]
+    # Get sequence lengths
+    X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
+    X_sl_idx = X_sl.unsqueeze(1).long() - 1
+    # Get normalized labels
+    Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg = torch.gather(torch.swapaxes(padded_batch[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
+    # Get plain labels
+    Y_raw = padded_batch_raw[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg_raw = torch.gather(torch.swapaxes(padded_batch_raw[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
+    return ((X_em, X_ct), (Y, Y_agg, Y_raw, Y_agg_raw), X_sl)
+
+
+def collate_seq_gtfs2vec(batch):
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[0], dtype=torch.float) for b in batch])
+    padded_batch_raw = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[1], dtype=torch.float) for b in batch])
+    # Get all embedding features; repeat first point through sequence
+    X_em = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in EMBED_FEATS]]
+    X_em = X_em[0,:,:].unsqueeze(0).repeat(X_em.shape[0],1,1).int()
+    # Get all continuous training features
+    X_ct = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in GPS_FEATS+GTFS2VEC_FEATS]]
+    # Get sequence lengths
+    X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
+    X_sl_idx = X_sl.unsqueeze(1).long() - 1
+    # Get normalized labels
+    Y = padded_batch[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg = torch.gather(torch.swapaxes(padded_batch[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
+    # Get plain labels
+    Y_raw = padded_batch_raw[:,:,NUM_FEAT_COLS.index('calc_time_s')]
+    Y_agg_raw = torch.gather(torch.swapaxes(padded_batch_raw[:,:,NUM_FEAT_COLS.index('cumul_time_s')], 0, 1), dim=1, index=X_sl_idx).squeeze(1)
+    return ((X_em, X_ct), (Y, Y_agg, Y_raw, Y_agg_raw), X_sl)
+
+
+def collate_seq_osm(batch):
+    padded_batch = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[0], dtype=torch.float) for b in batch])
+    padded_batch_raw = torch.nn.utils.rnn.pad_sequence([torch.tensor(b[1], dtype=torch.float) for b in batch])
+    # Get all embedding features; repeat first point through sequence
+    X_em = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in EMBED_FEATS]]
+    X_em = X_em[0,:,:].unsqueeze(0).repeat(X_em.shape[0],1,1).int()
+    # Get all continuous training features
+    X_ct = padded_batch[:,:,[NUM_FEAT_COLS.index(x) for x in GPS_FEATS+OSM_FEATS]]
     # Get sequence lengths
     X_sl = torch.tensor([len(b[0]) for b in batch], dtype=torch.int)
     X_sl_idx = X_sl.unsqueeze(1).long() - 1
