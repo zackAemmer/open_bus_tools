@@ -7,12 +7,13 @@ from openbustools import standardfeeds
 from openbustools.traveltime import data_loader
 from openbustools.traveltime.models.avg_speed import AvgSpeedModel
 
+
 class TestAvgSpeedModel(unittest.TestCase):
 
     def setUp(self):
-        self.days = [x.split(".")[0] for x in standardfeeds.get_date_list("2023_03_15", 3)]
+        self.days = [x.split(".")[0] for x in standardfeeds.get_date_list("2024_03_15", 3)]
         self.dataset = data_loader.NumpyDataset(
-            [Path("openbustools", "tests", "test_data")],
+            [Path("openbustools", "tests", "test_data", "kcm_realtime", "processed")],
             self.days,
             load_in_memory=False
         )

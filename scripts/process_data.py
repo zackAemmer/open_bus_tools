@@ -157,18 +157,18 @@ if __name__=="__main__":
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # process_data(
-    #     network_name="kcm",
-    #     dates=standardfeeds.get_date_list("2024_02_01", 90),
-    #     static_folder=Path("data/kcm_static"),
-    #     realtime_folder=Path("data/kcm_realtime"),
-    #     dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
-    #     timezone="America/Los_Angeles",
-    #     epsg=32148,
-    #     grid_bounds=[-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442],
-    #     coord_ref_center=[-122.33761744472739, 47.61086041739939],
-    #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-    # )
+    process_data(
+        network_name="kcm",
+        dates=standardfeeds.get_date_list("2024_02_01", 90),
+        static_folder=Path("data/kcm_static"),
+        realtime_folder=Path("data/kcm_realtime"),
+        dem_file=Path("data/kcm_spatial/usgs10m_dem_32148.tif"),
+        timezone="America/Los_Angeles",
+        epsg=32148,
+        grid_bounds=[-122.55451384931364,47.327892566537194,-122.0395248374609,47.78294919355442],
+        coord_ref_center=[-122.33761744472739, 47.61086041739939],
+        given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    )
 
     # process_data(
     #     network_name="atb",
@@ -183,19 +183,19 @@ if __name__=="__main__":
     #     given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
     # )
 
-    cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
-    for i, row in cleaned_sources.iloc[26:].iterrows():
-        if standardfeeds.validate_realtime_data(row):
-            logger.debug(f"{row['provider']}")
-            process_data(
-                network_name=row['uuid'],
-                dates=standardfeeds.get_date_list("2024_01_01", 90),
-                static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
-                realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
-                dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
-                timezone=row['tz_str'],
-                epsg=row['epsg_code'],
-                grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
-                coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
-                given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
-            )
+    # cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
+    # for i, row in cleaned_sources.iterrows():
+    #     if standardfeeds.validate_realtime_data(row):
+    #         logger.debug(f"{row['provider']}")
+    #         process_data(
+    #             network_name=row['uuid'],
+    #             dates=standardfeeds.get_date_list("2024_01_01", 90),
+    #             static_folder=Path('data', 'other_feeds', f"{row['uuid']}_static"),
+    #             realtime_folder=Path('data', 'other_feeds', f"{row['uuid']}_realtime"),
+    #             dem_file=[x for x in Path('data', 'other_feeds', f"{row['uuid']}_spatial").glob(f"*_{row['epsg_code']}.tif")][0],
+    #             timezone=row['tz_str'],
+    #             epsg=row['epsg_code'],
+    #             grid_bounds=[row['min_lon'], row['min_lat'], row['max_lon'], row['max_lat']],
+    #             coord_ref_center=[np.mean([row['min_lon'], row['max_lon']]), np.mean([row['min_lat'], row['max_lat']])],
+    #             given_names=['trip_id','file','locationtime','lat','lon','vehicle_id'],
+    #         )

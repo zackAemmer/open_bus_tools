@@ -19,7 +19,7 @@ def download_new_s3_files(data_folder, bucket_name):
         print(f"Successfully connected to S3")
         # Get list of files that are not already downloaded
         # new_files = [x for x in available_files if x not in downloaded_files]
-        new_files = standardfeeds.get_date_list('2024_01_01', 90)
+        new_files = standardfeeds.get_date_list('2024_03_15', 3)
         print(f"Found {len(new_files)} new files to download out of {len(available_files)} files in the specified bucket")
         # Download all new files to same data folder
         for i, file_name in enumerate(new_files):
@@ -37,8 +37,8 @@ def download_new_s3_files(data_folder, bucket_name):
 if __name__ == "__main__":
     print(f"Downloading new files...")
     download_new_s3_files("./data/kcm_realtime/", "gtfs-collection-kcm")
-    download_new_s3_files("./data/nwy_realtime/", "gtfs-collection-nwy")
-    print(f"Extracting operators from downloaded realtime and static files...")
+    # download_new_s3_files("./data/nwy_realtime/", "gtfs-collection-nwy")
+    # print(f"Extracting operators from downloaded realtime and static files...")
     # area = spatial.make_polygon((10.01266280018279,63.241039487344544,10.604534521465991,63.475046970112395))
     # standardfeeds.extract_operator_gtfs(Path("data", "nwy_static"), Path("data", "atb_static"), area)
-    standardfeeds.extract_operator("./data/nwy_realtime/", "./data/atb_realtime/", "operator_id", "ATB")
+    # standardfeeds.extract_operator("./data/nwy_realtime/", "./data/atb_realtime/", "operator_id", "ATB")
