@@ -33,4 +33,4 @@ if __name__ == "__main__":
     print(f"Downloading new files...")
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
-        download_new_s3_files(Path('data', 'other_feeds', f"{row['uuid']}_realtime"), 'gtfs-collection-others')
+        download_new_s3_files(Path('data', 'other_feeds', f"{row['uuid']}_realtime"), 'gtfsrt-collection-others')
