@@ -27,6 +27,7 @@ secret.py
 !/data/hd_udds.csv
 !/data/manhattan.csv
 !/data/orange_county.csv
+!/data/xe40.pdf
 /notebooks/cache/*
 /notebooks/checkpoints/*
 /notebooks/files/*
