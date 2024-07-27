@@ -2,7 +2,6 @@ import datetime
 from pathlib import Path
 
 import requests
-import numpy as np
 import pandas as pd
 import pytz
 
@@ -16,7 +15,7 @@ def collect_realtime_positions(data_folder, realtime_url, tz_str):
         with open(Path(data_folder, f"{current_target_time.strftime('%Y_%m_%d_%H')}_{current_epoch}.pb"), 'wb') as f:
             f.write(response.content)
     except:
-        print(f"ERROR downloading {row['provider']} realtime data")
+        print(f"ERROR downloading {data_folder} realtime data")
 
 
 if __name__ == "__main__":

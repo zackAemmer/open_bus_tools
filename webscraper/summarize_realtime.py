@@ -3,11 +3,11 @@ from pathlib import Path
 import pickle
 
 import boto3
+from dotenv import load_dotenv
+load_dotenv()
 import gtfs_realtime_pb2
 import pandas as pd
 import pytz
-from dotenv import load_dotenv
-load_dotenv()
 
 
 def summarize_realtime_positions(provider_folder, bucket_name):
