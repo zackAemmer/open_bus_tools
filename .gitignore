@@ -2,6 +2,7 @@
 /transitvis/*
 /webscraper/scraped_data/kcm/*
 /webscraper/scraped_data/nwy/*
+/open_bus_tools/*
 /data/*
 /figures/*
 /plots/*
