@@ -1,3 +1,4 @@
+import datetime as dt
 from pathlib import Path
 import pandas as pd
 
@@ -6,10 +7,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def download_new_s3_files(data_folder, bucket_name):
+def download_new_s3_files(data_folder, bucket_name, uuid=None, date_range=None):
     print(f"Getting new files for {data_folder} from S3 bucket {bucket_name}")
     data_folder.mkdir(parents=True, exist_ok=True)
-    downloaded_files = [x.name for x in Path(data_folder).glob("*.pkl")]
+    downloaded_files = [x.name.split('.')[0] for x in data_folder.glob("*.pkl")]
     print(f"Found {len(downloaded_files)} downloaded files")
     try:
         s3 = boto3.resource('s3')
@@ -18,8 +19,12 @@ def download_new_s3_files(data_folder, bucket_name):
         available_files = [o.key for o in objs]
         print(f"Successfully connected to S3")
         # Get list of files that are not already downloaded
-        available_files = [x for x in available_files if x.split('_')[-1].split('.')[0] == data_folder.name.split('_')[0]]
-        new_files = [x for x in available_files if f"{x[:10]}.pkl" not in downloaded_files]
+        if uuid:
+            available_files = [x for x in available_files if x.split('_')[-1].split('.')[0] == uuid]
+        if date_range:
+            available_files = [x for x in available_files if dt.datetime.strptime(date_range[0],"%Y_%m_%d") <= dt.datetime.strptime(x[:10],"%Y_%m_%d") <= dt.datetime.strptime(date_range[1],"%Y_%m_%d")]
+        # Check which files are already downloaded
+        new_files = [x for x in available_files if x[:10] not in downloaded_files]
         print(f"Found {len(new_files)} new files to download out of {len(available_files)} files in the specified bucket")
         # Download all new files to same data folder
         for i, file_name in enumerate(new_files):
@@ -31,6 +36,8 @@ def download_new_s3_files(data_folder, bucket_name):
 
 if __name__ == "__main__":
     print(f"Downloading new files...")
+    download_new_s3_files(Path("./data/kcm_realtime/"), "gtfsrt-collection-kcm", date_range=('2024_04_07', '2024_04_20'))
+    download_new_s3_files(Path("./data/atb_realtime/"), "gtfsrt-collection-atb", date_range=('2024_04_07', '2024_04_20'))
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
-        download_new_s3_files(Path('data', 'other_feeds', f"{row['uuid']}_realtime"), 'gtfsrt-collection-others')
+        download_new_s3_files(Path('data', 'other_feeds', f"{row['uuid']}_realtime"), 'gtfsrt-collection-others', uuid=row['uuid'], date_range=('2024_04_07', '2024_04_20'))
