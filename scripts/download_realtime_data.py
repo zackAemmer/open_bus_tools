@@ -31,7 +31,7 @@ def download_new_s3_files(data_folder, bucket_name, uuid=None, date_range=None):
             print(f"Downloading file {i} out of {len(new_files)}")
             bucket.download_file(file_name, Path(data_folder, f"{file_name[:10]}.pkl"))
     except ValueError:
-        print(f"Failure to access S3")
+        print(f"ERROR downloading {data_folder} files from S3 bucket {bucket_name}")
 
 
 if __name__ == "__main__":
