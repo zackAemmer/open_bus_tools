@@ -36,8 +36,8 @@ def download_new_s3_files(data_folder, bucket_name, uuid=None, date_range=None):
 
 if __name__ == "__main__":
     print(f"Downloading new files...")
-    download_new_s3_files(Path("./data/kcm_realtime/"), "gtfsrt-collection-kcm", date_range=('2024_04_07', '2024_04_20'))
-    download_new_s3_files(Path("./data/atb_realtime/"), "gtfsrt-collection-atb", date_range=('2024_04_07', '2024_04_20'))
+    download_new_s3_files(Path("./ExtremeSSD/data/kcm_realtime/"), "gtfsrt-collection-kcm", date_range=('2020_04_07', '2026_04_20'))
+    download_new_s3_files(Path("./ExtremeSSD/data/atb_realtime/"), "gtfsrt-collection-atb", date_range=('2020_04_07', '2026_04_20'))
     cleaned_sources = pd.read_csv(Path('data', 'cleaned_sources.csv'))
     for i, row in cleaned_sources.iterrows():
-        download_new_s3_files(Path('data', 'other_feeds', f"{row['uuid']}_realtime"), 'gtfsrt-collection-others', uuid=row['uuid'], date_range=('2024_04_07', '2024_04_20'))
+        download_new_s3_files(Path('ExtremeSSD', 'data', 'other_feeds', f"{row['uuid']}_realtime"), 'gtfsrt-collection-others', uuid=row['uuid'], date_range=('2020_04_07', '2026_04_20'))
