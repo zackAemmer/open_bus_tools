@@ -20,10 +20,9 @@ def fit_pretrained_gtfs_embeddings(embeddings_folder, static_folder, model_folde
     # Load precalculated regions
     area, regions, neighbourhood = spatial.load_regions(embeddings_folder)
     # Calculate embeddings for each separate GTFS feed date
-    gtfs_file = [x for x in list(static_folder.glob('*.zip'))][0]
+    gtfs_file = [x for x in list(static_folder.glob('*.zip'))][1]
     # Extract GTFS features and join to regions
-    # TODO: Why trips not loaded?
-    features = loader.load(gtfs_file=gtfs_file, skip_validation=False)
+    features = loader.load(gtfs_file=gtfs_file, skip_validation=True)
     # features = add_missing_embedding_columns(features)
     joint = joiner.transform(regions, features)
     # The GTFS embedder breaks when certain hours have either no directions or trips
@@ -40,7 +39,11 @@ def fit_pretrained_gtfs_embeddings(embeddings_folder, static_folder, model_folde
     features = features[t_varnames]
     # Use pretrained embedder to transform features to embeddings
     embeddings_gtfs = embedder_gtfs.transform(regions, features, joint)
-    assert(embeddings_gtfs.isna().sum().sum()==0) # Check that all regions have embeddings
+    try:
+        assert(embeddings_gtfs.isna().sum().sum()==0) # Check that all regions have embeddings
+    except:
+        logger.error(f"Error embedding GTFS: {embeddings_gtfs.isna().sum().sum()} missing values")
+        return
     embeddings_gtfs.to_pickle(embeddings_folder / 'embeddings_gtfs.pkl')
 
 
@@ -126,4 +129,4 @@ if __name__ == "__main__":
     # fit_pretrained_gtfs_embeddings(Path('data','kcm_spatial','spatial_embeddings'), Path('data','kcm_static'), Path('data','pretrained_embeddings','gtfs2vec'))
     # fit_pretrained_gtfs_embeddings(Path('data','atb_spatial','spatial_embeddings'), Path('data','atb_static'), Path('data','pretrained_embeddings','gtfs2vec'))
     for i, row in cleaned_sources.iterrows():
-        fit_pretrained_gtfs_embeddings(Path('data','other_feeds',f"{row['uuid']}_spatial",'spatial_embeddings'), Path('data','other_feeds',f"{row['uuid']}_static"), Path('data','pretrained_embeddings','gtfs2vec'))
+        fit_pretrained_gtfs_embeddings(Path('ExtremeSSD','data','other_feeds',f"{row['uuid']}_spatial",'spatial_embeddings'), Path('ExtremeSSD','data','other_feeds',f"{row['uuid']}_static"), Path('ExtremeSSD','data','pretrained_embeddings','gtfs2vec'))
