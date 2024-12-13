@@ -1,7 +1,7 @@
 # Open Bus Tools
 Tools for open bus data collection, travel time prediction, energy consumption and visualization.
 
-This is companion code for a dissertation in Civil and Environmental Engineering at the University of Washington. It will be distributed as a Python package when completed.
+This is companion code for a dissertation in Civil and Environmental Engineering at the University of Washington.
 
 If not installed as package, you may need to add [export PYTHONPATH="${PYTHONPATH}:/my/other/path/to/open_bus_tools"] to .bashrc to run the scripts.
 
@@ -17,12 +17,6 @@ The /webscraper folder has code used to gather GTFS and GTFS-RT feeds. These dat
 Standardized and open source bus data including static schedules and realtime positions have become widely available in public web APIs. Though these data primarily underly popular map-based trip planning applications, they also enable new analyses in understanding, forecasting and improving bus operations across agencies and cities. Due to their lower resolution and simpler, anonymized features, these data are more challenging to work with than those of the underlying sensors, making them unfavorable for direct operations analysis by transit agencies. However, the wide scale of these data and their open source nature make them a valuable resource for researchers and planners.
 
 This work develops and tests a set of tools for analyzing bus operations using open source data. Central to this endeavor is the ongoing collection of a multi-year dataset from the King County Metro transit network in Seattle, Washington, rapidly approaching one billion tracked bus locations. First, these data are used in basic roadway segment matching and aggregation to visualize the spatiotemporal dynamics of different types of delays in the transit system. The findings are used to identify locations in the network where targeted transit priority treatments can generate the greatest benefit. Then a set of deep learning models and baselines are developed to forecast bus travel times under different data availability scenarios. Their generalizability is tested across different cities and transit networks. Finally, these models are used to estimate the drive cycle energy demands of a system-wide bus electrification project, and are validated using results of a more traditional approach with direct sensor data.
-
-### Past Work
-This work will replace code in these repositories.
-* [ML-Based Bus Travel Time Models](https://github.com/zackAemmer/generalizable_travel_times)
-* [Bus Performance Visualization Tool](https://github.com/zackAemmer/transit_vis)
-* [TransitVis Web-App](https://www.transitvis.com)
 
 ### Data Sample
 The full dataset is stored on Amazon S3 and downloaded for local analysis as needed, please feel free to reach out if you would like a sample.
